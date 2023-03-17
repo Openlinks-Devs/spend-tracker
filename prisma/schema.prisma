@@ -10,14 +10,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model DebitAccount {
+enum AccountType {
+  CREDIT
+  DEBIT
+}
+
+model Account {
   id Int @default(autoincrement()) @id
   name String
+  debit DebitAccount?
+  credit CreditAccount?
+  transactions Transaction[]
+}
+
+model DebitAccount {
+  id Int @default(autoincrement()) @id
+  account Account @relation(fields: [accountId], references: [id])
+  accountId Int @unique
   balance Decimal
 }
 
-model CreditAccont {
+model CreditAccount {
+  id Int @default(autoincrement()) @id
+  account Account @relation(fields: [accountId], references: [id])
+  accountId Int @unique
+  creditLine Decimal
+  closingDay Int
+  lastPaymentDay Int
+}
+
+model Category {
   id Int @default(autoincrement()) @id
   name String
-  creditLine Decimal
+  emoji String
+  parent Category? @relation("Parent", fields: [parentId], references: [id])
+  children Category[] @relation("Parent")
+  parentId Int?
+  transactions Transaction[]
+}
+
+model Transaction {
+  id Int @default(autoincrement()) @id
+  amount Decimal
+  createdAt DateTime @default(now())
+  category Category @relation(fields: [categoryId], references: [id])
+  categoryId Int
+  account Account @relation(fields: [accountId], references: [id])
+  accountId Int
 }
