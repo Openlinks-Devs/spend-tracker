@@ -15,19 +15,33 @@ export class CategoryService {
     return category;
   }
 
-  findAll() {
-    return `This action returns all category`;
+  async findAll(): Promise<Category[]> {
+    const categories = await this.prisma.category.findMany();
+    return categories;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} category`;
+  async findOne(id: number): Promise<Category | null> {
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+    });
+    return category;
   }
 
-  update(id: number, updateCategoryDto: UpdateCategoryDto) {
-    return `This action updates a #${id} category`;
+  async update(
+    id: number,
+    updateCategoryDto: UpdateCategoryDto,
+  ): Promise<Category> {
+    const category = await this.prisma.category.update({
+      where: { id },
+      data: updateCategoryDto,
+    });
+    return category;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} category`;
+  async remove(id: number): Promise<Category> {
+    const category = await this.prisma.category.delete({
+      where: { id },
+    });
+    return category;
   }
 }
