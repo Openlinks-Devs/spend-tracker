@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { handleTelegramUpdate } from '../src/telegram/webhook.js'
 
 function deps(overrides: Record<string, unknown> = {}) {
-  const db = { query: vi.fn(async (sql: string) => {
+  const db = { query: vi.fn(async (sql: string, params?: unknown[]) => {
     if (/from categories/i.test(sql)) return { rows: [{ id: 'c1', name: 'Food', type: 'expense' }] }
     if (/unnest/i.test(sql)) return { rows: [{ tag: 'food' }] }
     return { rows: [] }
