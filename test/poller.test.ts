@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { pollOnce } from '../src/gmail/poller.js'
+import * as gmailClient from '../src/gmail/client.js'
 
 vi.mock('../src/gmail/client.js', () => ({
   getCurrentHistoryId: vi.fn().mockResolvedValue('100'),
@@ -46,5 +47,32 @@ describe('pollOnce', () => {
       expect.objectContaining({ messageId: 'm1', subject: 'S', text: 'hello' }),
     )
     expect(db.store['gmail_history_id']).toBe('101')
+  })
+
+  it('skips a failing message, delivers the other, and still advances the cursor', async () => {
+    vi.mocked(gmailClient.fetchNewMessageIds).mockResolvedValueOnce({
+      messageIds: ['bad-id', 'm1'],
+      newHistoryId: '102',
+    })
+    vi.mocked(gmailClient.fetchMessage).mockImplementation(async (_gmail, messageId) => {
+      if (messageId === 'bad-id') throw new Error('fetch failed')
+      return {
+        payload: {
+          headers: [{ name: 'Subject', value: 'S' }],
+          mimeType: 'text/plain',
+          body: { data: Buffer.from('hello').toString('base64url') },
+        },
+      }
+    })
+
+    const db = fakeDb({ gmail_history_id: '101' })
+    const onEmail = vi.fn()
+    await pollOnce({ gmail: {} as never, db, onEmail })
+
+    // The good message was delivered
+    expect(onEmail).toHaveBeenCalledTimes(1)
+    expect(onEmail).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'm1' }))
+    // The cursor advanced despite the failing message
+    expect(db.store['gmail_history_id']).toBe('102')
   })
 })

@@ -21,4 +21,16 @@ describe('sendMessage', () => {
     expect(body.parse_mode).toBe('HTML')
     expect(body.text).toBe('hello')
   })
+
+  it('includes reply_to_message_id in the POST body when replyToMessageId is provided', async () => {
+    await sendMessage('hello', { replyToMessageId: 5 })
+    const [, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    const body = JSON.parse((init as RequestInit).body as string)
+    expect(body.reply_to_message_id).toBe(5)
+  })
+
+  it('throws when the Telegram API returns a non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400 }))
+    await expect(sendMessage('hello')).rejects.toThrow('400')
+  })
 })

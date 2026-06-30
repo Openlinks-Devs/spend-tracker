@@ -50,4 +50,16 @@ describe('extractTransaction', () => {
     const result = await extractTransaction({ text: 'something', ...refs })
     expect(result).toBeNull()
   })
+
+  it('returns null when category_id is not a known category', async () => {
+    generateObject.mockResolvedValue({
+      object: {
+        description: 'x', amount: -1, currency: 'PEN',
+        account_id: 'a1', category_id: 'unknown-category', tags: ['a', 'b', 'c'],
+        created_at: '2026-06-29T20:55:00.000Z',
+      },
+    })
+    const result = await extractTransaction({ text: 'something', ...refs })
+    expect(result).toBeNull()
+  })
 })
