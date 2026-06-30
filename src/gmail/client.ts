@@ -15,7 +15,11 @@ export function createGmailClient(): gmail_v1.Gmail {
 
 export async function getCurrentHistoryId(gmail: gmail_v1.Gmail): Promise<string> {
   const profile = await gmail.users.getProfile({ userId: 'me' })
-  return String(profile.data.historyId)
+  const historyId = profile.data.historyId
+  if (!historyId) {
+    throw new Error('Gmail profile returned no historyId')
+  }
+  return String(historyId)
 }
 
 export async function fetchNewMessageIds(
