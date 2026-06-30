@@ -24,6 +24,5 @@ oauthRoute.get('/oauth/callback', async (context) => {
   if (!code) return context.text('Missing code', 400)
   const authClient = buildOAuthClient()
   const { tokens } = await authClient.getToken(code)
-  console.log('GOOGLE_REFRESH_TOKEN=', tokens.refresh_token)
   return context.text(`Refresh token (copy into env): ${tokens.refresh_token ?? 'none returned'}`)
 })
