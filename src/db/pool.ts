@@ -1,7 +1,9 @@
 import pg from 'pg'
 import { loadEnv } from '../config/env.js'
 
-export type Queryable = Pick<pg.Pool, 'query'>
+export interface Queryable {
+  query(text: string, params?: unknown[]): Promise<{ rows: any[] }>
+}
 
 let pool: pg.Pool | undefined
 
