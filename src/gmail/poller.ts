@@ -24,9 +24,13 @@ export async function pollOnce(deps: PollDeps): Promise<void> {
 
   const { messageIds, newHistoryId } = await fetchNewMessageIds(deps.gmail, cursor)
   for (const messageId of messageIds) {
-    const message = await fetchMessage(deps.gmail, messageId)
-    const parsed = parseMessage(message)
-    await deps.onEmail({ ...parsed, messageId })
+    try {
+      const message = await fetchMessage(deps.gmail, messageId)
+      const parsed = parseMessage(message)
+      await deps.onEmail({ ...parsed, messageId })
+    } catch (error) {
+      console.error(`Failed to process Gmail message ${messageId}:`, error)
+    }
   }
   await setState(deps.db, HISTORY_KEY, newHistoryId)
 }
