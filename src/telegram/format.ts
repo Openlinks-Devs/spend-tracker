@@ -1,3 +1,7 @@
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 export interface NewTransactionView {
   id: string
   description: string
@@ -13,12 +17,12 @@ export function formatNewTransaction(view: NewTransactionView): string {
   return [
     'Nueva transaccion creada en SpendTracker:',
     '',
-    `<strong>${view.description}</strong>`,
+    `<strong>${escapeHtml(view.description)}</strong>`,
     '',
     `<pre>ID: ${view.id}`,
-    `Account: ${view.accountName}`,
-    `Category: ${view.categoryName}`,
-    `Tags: ${view.tags.join(', ')}`,
+    `Account: ${escapeHtml(view.accountName)}`,
+    `Category: ${escapeHtml(view.categoryName)}`,
+    `Tags: ${view.tags.map(escapeHtml).join(', ')}`,
     '</pre>',
     `Amount: ${view.currency} ${view.amount}`,
     '',
@@ -36,11 +40,11 @@ export interface UpdatedTransactionView {
 export function formatUpdatedTransaction(view: UpdatedTransactionView): string {
   return [
     'Transaccion actualizada:',
-    `<strong>${view.description}</strong>`,
+    `<strong>${escapeHtml(view.description)}</strong>`,
     '',
     `<pre>ID: ${view.id}`,
-    `Category: ${view.categoryName}`,
-    `Tags: ${view.tags.join(', ')}`,
+    `Category: ${escapeHtml(view.categoryName)}`,
+    `Tags: ${view.tags.map(escapeHtml).join(', ')}`,
     '</pre>',
   ].join('\n')
 }
