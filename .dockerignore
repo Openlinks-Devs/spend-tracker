@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+.git
+**/.env
+coverage
+docs
+apps/backend/test
+apps/web
+apps/android
