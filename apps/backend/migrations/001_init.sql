@@ -39,7 +39,8 @@ WHERE NOT EXISTS (
   SELECT 1 FROM accounts existing WHERE existing.name = 'Cash'
 );
 
--- Seed a few default categories (guarded so re-running is safe).
+-- Seed a few default categories, including the fallback 'Uncategorized'
+-- (guarded so re-running is safe).
 INSERT INTO categories (name, type)
 SELECT seed.name, seed.type
 FROM (
@@ -47,8 +48,17 @@ FROM (
     ('Food', 'expense'),
     ('Transport', 'expense'),
     ('Utilities', 'expense'),
-    ('Salary', 'income')
+    ('Salary', 'income'),
+    ('Uncategorized', 'expense')
 ) AS seed(name, type)
 WHERE NOT EXISTS (
   SELECT 1 FROM categories existing WHERE existing.name = seed.name
 );
+
+-- Category is required. Backfill any legacy null category_id to 'Uncategorized',
+-- then enforce NOT NULL. Both steps are idempotent.
+UPDATE transactions
+SET category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' LIMIT 1)
+WHERE category_id IS NULL;
+
+ALTER TABLE transactions ALTER COLUMN category_id SET NOT NULL;
