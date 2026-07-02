@@ -80,7 +80,10 @@ export async function deleteAccount(db: Queryable, id: string): Promise<void> {
 
 export async function getTransactions(db: Queryable): Promise<Transaction[]> {
   const result = await db.query(
-    `SELECT id, description, amount, currency, account_id, category_id, tags, created_at, updated_at
+    // amount::float8 so node-postgres returns amount as a JS number (it returns
+    // NUMERIC as a string by default), scoped to this column instead of a
+    // process-global type parser.
+    `SELECT id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at
        FROM transactions
       ORDER BY created_at DESC`,
   )
@@ -89,7 +92,7 @@ export async function getTransactions(db: Queryable): Promise<Transaction[]> {
 
 export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
   const result = await db.query(
-    `SELECT id, description, amount, currency, account_id, category_id, tags, created_at, updated_at
+    `SELECT id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at
        FROM transactions
       WHERE id = $1`,
     [id],

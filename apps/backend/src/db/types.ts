@@ -41,7 +41,7 @@ export interface Transaction {
   amount: number
   currency: string
   account_id: string
-  category_id: string | null
+  category_id: string
   tags: string[]
   created_at: string
   updated_at: string | null
