@@ -1,43 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { categoriesApi } from '@/lib/api'
-import type { CategoryUpdate, NewCategory } from '@/types'
+import type { Category, CategoryUpdate, NewCategory } from '@/types'
+import { createResourceHooks } from './createResourceHooks'
 
-const categoriesKey = ['categories'] as const
+const categoryHooks = createResourceHooks<Category, NewCategory, CategoryUpdate>(
+  'categories',
+  categoriesApi,
+)
 
-export function useCategories() {
-  return useQuery({
-    queryKey: categoriesKey,
-    queryFn: categoriesApi.list,
-  })
-}
-
-export function useCreateCategory() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: NewCategory) => categoriesApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: categoriesKey })
-    },
-  })
-}
-
-export function useUpdateCategory() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ categoryId, payload }: { categoryId: string; payload: CategoryUpdate }) =>
-      categoriesApi.update(categoryId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: categoriesKey })
-    },
-  })
-}
-
-export function useDeleteCategory() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (categoryId: string) => categoriesApi.remove(categoryId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: categoriesKey })
-    },
-  })
-}
+export const useCategories = categoryHooks.useList
+export const useCreateCategory = categoryHooks.useCreate
+export const useUpdateCategory = categoryHooks.useUpdate
+export const useDeleteCategory = categoryHooks.useRemove

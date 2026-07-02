@@ -1,43 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { accountsApi } from '@/lib/api'
-import type { AccountUpdate, NewAccount } from '@/types'
+import type { Account, AccountUpdate, NewAccount } from '@/types'
+import { createResourceHooks } from './createResourceHooks'
 
-const accountsKey = ['accounts'] as const
+const accountHooks = createResourceHooks<Account, NewAccount, AccountUpdate>('accounts', accountsApi)
 
-export function useAccounts() {
-  return useQuery({
-    queryKey: accountsKey,
-    queryFn: accountsApi.list,
-  })
-}
-
-export function useCreateAccount() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: NewAccount) => accountsApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: accountsKey })
-    },
-  })
-}
-
-export function useUpdateAccount() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ accountId, payload }: { accountId: string; payload: AccountUpdate }) =>
-      accountsApi.update(accountId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: accountsKey })
-    },
-  })
-}
-
-export function useDeleteAccount() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (accountId: string) => accountsApi.remove(accountId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: accountsKey })
-    },
-  })
-}
+export const useAccounts = accountHooks.useList
+export const useCreateAccount = accountHooks.useCreate
+export const useUpdateAccount = accountHooks.useUpdate
+export const useDeleteAccount = accountHooks.useRemove

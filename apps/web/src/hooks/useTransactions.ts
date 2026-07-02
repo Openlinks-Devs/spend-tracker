@@ -1,43 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { transactionsApi } from '@/lib/api'
-import type { NewTransaction, TransactionUpdate } from '@/types'
+import type { NewTransaction, Transaction, TransactionUpdate } from '@/types'
+import { createResourceHooks } from './createResourceHooks'
 
-const transactionsKey = ['transactions'] as const
+const transactionHooks = createResourceHooks<Transaction, NewTransaction, TransactionUpdate>(
+  'transactions',
+  transactionsApi,
+)
 
-export function useTransactions() {
-  return useQuery({
-    queryKey: transactionsKey,
-    queryFn: transactionsApi.list,
-  })
-}
-
-export function useCreateTransaction() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: NewTransaction) => transactionsApi.create(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transactionsKey })
-    },
-  })
-}
-
-export function useUpdateTransaction() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ transactionId, payload }: { transactionId: string; payload: TransactionUpdate }) =>
-      transactionsApi.update(transactionId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transactionsKey })
-    },
-  })
-}
-
-export function useDeleteTransaction() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (transactionId: string) => transactionsApi.remove(transactionId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transactionsKey })
-    },
-  })
-}
+export const useTransactions = transactionHooks.useList
+export const useCreateTransaction = transactionHooks.useCreate
+export const useUpdateTransaction = transactionHooks.useUpdate
+export const useDeleteTransaction = transactionHooks.useRemove
