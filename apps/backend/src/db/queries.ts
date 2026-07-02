@@ -1,14 +1,100 @@
 import type { Queryable } from './pool.js'
-import type { Account, Category, NewTransaction, TransactionUpdate } from './types.js'
+import type {
+  Account,
+  AccountUpdate,
+  Category,
+  CategoryUpdate,
+  NewAccount,
+  NewCategory,
+  NewTransaction,
+  Transaction,
+  TransactionUpdate,
+} from './types.js'
 
 export async function getCategories(db: Queryable): Promise<Category[]> {
-  const result = await db.query('SELECT id, name, type FROM categories')
+  const result = await db.query('SELECT id, name, type FROM categories ORDER BY name')
   return result.rows as Category[]
 }
 
+export async function getCategoryById(db: Queryable, id: string): Promise<Category | null> {
+  const result = await db.query('SELECT id, name, type FROM categories WHERE id = $1', [id])
+  return result.rows.length ? (result.rows[0] as Category) : null
+}
+
+export async function insertCategory(
+  db: Queryable,
+  category: NewCategory,
+): Promise<{ id: string }> {
+  const result = await db.query(
+    'INSERT INTO categories (name, type) VALUES ($1, $2) RETURNING id',
+    [category.name, category.type],
+  )
+  return { id: result.rows[0].id as string }
+}
+
+export async function updateCategory(db: Queryable, update: CategoryUpdate): Promise<void> {
+  await db.query('UPDATE categories SET name = $2, type = $3 WHERE id = $1', [
+    update.id,
+    update.name,
+    update.type,
+  ])
+}
+
+export async function deleteCategory(db: Queryable, id: string): Promise<void> {
+  await db.query('DELETE FROM categories WHERE id = $1', [id])
+}
+
 export async function getAccounts(db: Queryable): Promise<Account[]> {
-  const result = await db.query('SELECT id, name, type, currency FROM accounts')
+  const result = await db.query('SELECT id, name, type, currency FROM accounts ORDER BY name')
   return result.rows as Account[]
+}
+
+export async function getAccountById(db: Queryable, id: string): Promise<Account | null> {
+  const result = await db.query(
+    'SELECT id, name, type, currency FROM accounts WHERE id = $1',
+    [id],
+  )
+  return result.rows.length ? (result.rows[0] as Account) : null
+}
+
+export async function insertAccount(db: Queryable, account: NewAccount): Promise<{ id: string }> {
+  const result = await db.query(
+    'INSERT INTO accounts (name, type, currency) VALUES ($1, $2, $3) RETURNING id',
+    [account.name, account.type, account.currency],
+  )
+  return { id: result.rows[0].id as string }
+}
+
+export async function updateAccount(db: Queryable, update: AccountUpdate): Promise<void> {
+  await db.query('UPDATE accounts SET name = $2, type = $3, currency = $4 WHERE id = $1', [
+    update.id,
+    update.name,
+    update.type,
+    update.currency,
+  ])
+}
+
+export async function deleteAccount(db: Queryable, id: string): Promise<void> {
+  await db.query('DELETE FROM accounts WHERE id = $1', [id])
+}
+
+export async function getTransactions(db: Queryable): Promise<Transaction[]> {
+  const result = await db.query(
+    `SELECT id, description, amount, currency, account_id, category_id, tags, created_at, updated_at
+       FROM transactions
+      ORDER BY created_at DESC`,
+  )
+  return result.rows as Transaction[]
+}
+
+export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
+  const result = await db.query(
+    `SELECT id, description, amount, currency, account_id, category_id, tags, created_at, updated_at
+       FROM transactions
+      WHERE id = $1`,
+    [id],
+  )
+  return result.rows.length ? (result.rows[0] as Transaction) : null
 }
 
 export async function getDistinctTags(db: Queryable): Promise<string[]> {
