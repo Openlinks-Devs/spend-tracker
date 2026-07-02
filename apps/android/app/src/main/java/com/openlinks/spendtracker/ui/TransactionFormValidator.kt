@@ -18,7 +18,7 @@ data class ValidatedTransaction(
     val amount: Double,
     val currency: String,
     val accountId: String,
-    val categoryId: String?,
+    val categoryId: String,
     val tags: List<String>,
 )
 
@@ -44,6 +44,9 @@ object TransactionFormValidator {
         val accountId = input.accountId?.takeIf { it.isNotBlank() }
         if (accountId == null) errors.add(StringKey.ValidationAccountRequired)
 
+        val categoryId = input.categoryId?.takeIf { it.isNotBlank() }
+        if (categoryId == null) errors.add(StringKey.ValidationCategoryRequired)
+
         if (errors.isNotEmpty()) return FormResult.Invalid(errors)
 
         val currency = input.currency.trim().ifEmpty { "USD" }
@@ -57,7 +60,7 @@ object TransactionFormValidator {
                 amount = amount!!,
                 currency = currency,
                 accountId = accountId!!,
-                categoryId = input.categoryId?.takeIf { it.isNotBlank() },
+                categoryId = categoryId!!,
                 tags = tags,
             ),
         )

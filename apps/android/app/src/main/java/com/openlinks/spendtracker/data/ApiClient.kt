@@ -56,12 +56,18 @@ class ApiClient(
         "Request failed with status $status"
     }
 
-    private inline fun <reified T> decodeBody(response: Response): T {
-        val body = response.body?.string().orEmpty()
+    // Single place for non-2xx handling so the body-decoding path and the
+    // no-content (DELETE) path stay in sync (401 clears the live session).
+    private fun checkSuccessful(response: Response, body: String) {
         if (!response.isSuccessful) {
             if (response.code == 401 && !useMockAuth) session.clear()
             throw ApiException(response.code, errorMessage(body, response.code))
         }
+    }
+
+    private inline fun <reified T> decodeBody(response: Response): T {
+        val body = response.body?.string().orEmpty()
+        checkSuccessful(response, body)
         return json.decodeFromString(json.serializersModule.serializer(), body)
     }
 
@@ -73,11 +79,7 @@ class ApiClient(
 
     private suspend fun execExpectingNoContent(request: Request) = withContext(Dispatchers.IO) {
         http.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                if (response.code == 401 && !useMockAuth) session.clear()
-                throw ApiException(response.code, errorMessage(body, response.code))
-            }
+            checkSuccessful(response, response.body?.string().orEmpty())
         }
     }
 

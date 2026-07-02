@@ -13,7 +13,7 @@ class SummaryCalculatorTest {
         amount = amount,
         currency = currency,
         accountId = "acc",
-        categoryId = null,
+        categoryId = "cat",
         tags = emptyList(),
         createdAt = "2026-07-02T00:00:00Z",
         updatedAt = null,

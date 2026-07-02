@@ -11,8 +11,11 @@ import com.openlinks.spendtracker.data.SessionStore
 import com.openlinks.spendtracker.data.SpendApi
 import com.openlinks.spendtracker.data.Transaction
 import com.openlinks.spendtracker.data.TransactionUpdate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,14 +33,21 @@ data class SpendUiState(
 ) {
     val summary: SummaryTotals get() = SummaryCalculator.compute(transactions)
 
+    // Built once per state snapshot so per-row name lookups are O(1), not a
+    // linear scan of accounts/categories for every rendered transaction row.
+    private val accountNameById: Map<String, String> by lazy {
+        accounts.associate { account -> account.id to account.name }
+    }
+    private val categoryNameById: Map<String, String> by lazy {
+        categories.associate { category -> category.id to category.name }
+    }
+
     fun transactionById(id: String): Transaction? =
         transactions.firstOrNull { transaction -> transaction.id == id }
 
-    fun accountName(accountId: String?): String? =
-        accounts.firstOrNull { account -> account.id == accountId }?.name
+    fun accountName(accountId: String?): String? = accountId?.let { id -> accountNameById[id] }
 
-    fun categoryName(categoryId: String?): String? =
-        categories.firstOrNull { category -> category.id == categoryId }?.name
+    fun categoryName(categoryId: String?): String? = categoryId?.let { id -> categoryNameById[id] }
 }
 
 /**
@@ -58,18 +68,31 @@ class SessionViewModel(
         viewModelScope.launch {
             mutableState.value = mutableState.value.copy(loading = true, error = null)
             try {
-                val transactions = withContext(dispatcher) { api.getTransactions() }
-                val accounts = withContext(dispatcher) { api.getAccounts() }
-                val categories = withContext(dispatcher) { api.getCategories() }
-                val tags = withContext(dispatcher) { runCatching { api.getTags() }.getOrDefault(emptyList()) }
-                mutableState.value = SpendUiState(
-                    loading = false,
-                    transactions = transactions,
-                    accounts = accounts,
-                    categories = categories,
-                    tags = tags,
-                    error = null,
-                )
+                // The four reads are independent; run them concurrently so a load
+                // costs one round-trip, not four.
+                val loaded = withContext(dispatcher) {
+                    coroutineScope {
+                        val transactionsDeferred = async { api.getTransactions() }
+                        val accountsDeferred = async { api.getAccounts() }
+                        val categoriesDeferred = async { api.getCategories() }
+                        val tagsDeferred = async {
+                            // Tags are optional, but never swallow cancellation.
+                            runCatching { api.getTags() }.getOrElse { error ->
+                                if (error is CancellationException) throw error
+                                emptyList()
+                            }
+                        }
+                        SpendUiState(
+                            loading = false,
+                            transactions = transactionsDeferred.await(),
+                            accounts = accountsDeferred.await(),
+                            categories = categoriesDeferred.await(),
+                            tags = tagsDeferred.await(),
+                            error = null,
+                        )
+                    }
+                }
+                mutableState.value = loaded
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(
                     loading = false,

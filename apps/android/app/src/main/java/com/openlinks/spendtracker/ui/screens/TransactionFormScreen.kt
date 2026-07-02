@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,9 +57,19 @@ fun TransactionFormScreen(
     var amount by remember { mutableStateOf(existing?.amount?.toString() ?: "") }
     var currency by remember { mutableStateOf(existing?.currency ?: "USD") }
     var accountId by remember { mutableStateOf(existing?.accountId ?: state.accounts.firstOrNull()?.id) }
-    var categoryId by remember { mutableStateOf(existing?.categoryId) }
+    var categoryId by remember { mutableStateOf(existing?.categoryId ?: state.categories.firstOrNull()?.id) }
     var tags by remember { mutableStateOf(existing?.tags?.joinToString(", ") ?: "") }
     var errors by remember { mutableStateOf<List<StringKey>>(emptyList()) }
+
+    // The form may compose before refresh() populates accounts/categories. remember
+    // captures defaults only once, so seed them when the data arrives, but only if
+    // the user has not already chosen (preserves in-progress edits).
+    LaunchedEffect(state.accounts) {
+        if (accountId == null) accountId = state.accounts.firstOrNull()?.id
+    }
+    LaunchedEffect(state.categories) {
+        if (categoryId == null) categoryId = state.categories.firstOrNull()?.id
+    }
 
     Column(
         modifier = modifier
@@ -162,7 +173,7 @@ fun TransactionFormScreen(
                                         amount = valid.amount,
                                         currency = valid.currency,
                                         accountId = valid.accountId,
-                                        categoryId = valid.categoryId ?: "",
+                                        categoryId = valid.categoryId,
                                         tags = valid.tags,
                                     ),
                                 )
@@ -194,12 +205,12 @@ private fun AccountPicker(
     enabled: Boolean,
     onSelect: (String) -> Unit,
 ) {
-    val selectedLabel = accounts.firstOrNull { it.id == selectedId }?.name ?: ""
+    val selectedLabel = accounts.firstOrNull { account -> account.id == selectedId }?.name ?: ""
     LabeledDropdown(
         label = Strings.get(StringKey.FieldAccount),
         selectedLabel = selectedLabel,
         enabled = enabled,
-        options = accounts.map { it.id to it.name },
+        options = accounts.map { account -> account.id to account.name },
         onSelect = onSelect,
     )
 }
@@ -208,19 +219,15 @@ private fun AccountPicker(
 private fun CategoryPicker(
     categories: List<Category>,
     selectedId: String?,
-    onSelect: (String?) -> Unit,
+    onSelect: (String) -> Unit,
 ) {
-    val selectedLabel = categories.firstOrNull { it.id == selectedId }?.name
-        ?: Strings.get(StringKey.FieldNone)
-    val options = buildList {
-        add(null to Strings.get(StringKey.FieldNone))
-        addAll(categories.map { it.id as String? to it.name })
-    }
-    LabeledDropdownNullable(
+    // Category is required, so no null "None" option.
+    val selectedLabel = categories.firstOrNull { category -> category.id == selectedId }?.name ?: ""
+    LabeledDropdown(
         label = Strings.get(StringKey.FieldCategory),
         selectedLabel = selectedLabel,
         enabled = true,
-        options = options,
+        options = categories.map { category -> category.id to category.name },
         onSelect = onSelect,
     )
 }
@@ -237,7 +244,7 @@ private fun LabeledDropdown(
         label = label,
         selectedLabel = selectedLabel,
         enabled = enabled,
-        options = options.map { it.first as String? to it.second },
+        options = options.map { option -> option.first as String? to option.second },
         onSelect = { id -> if (id != null) onSelect(id) },
     )
 }

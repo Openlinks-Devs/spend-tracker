@@ -40,6 +40,7 @@ enum class StringKey {
     ValidationDescriptionRequired,
     ValidationAmountInvalid,
     ValidationAccountRequired,
+    ValidationCategoryRequired,
     TagsHint,
 }
 
@@ -81,6 +82,7 @@ object Strings {
         StringKey.ValidationDescriptionRequired to "Description is required",
         StringKey.ValidationAmountInvalid to "Enter a valid amount",
         StringKey.ValidationAccountRequired to "Select an account",
+        StringKey.ValidationCategoryRequired to "Select a category",
         StringKey.TagsHint to "Comma-separated tags",
     )
 

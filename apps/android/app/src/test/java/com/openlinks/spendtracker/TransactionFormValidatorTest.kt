@@ -34,7 +34,7 @@ class TransactionFormValidatorTest {
     @Test
     fun blankCurrencyDefaultsToUsd() {
         val result = TransactionFormValidator.validate(
-            TransactionFormInput("t", "1", "", "acc-1", null, ""),
+            TransactionFormInput("t", "1", "", "acc-1", "cat-1", ""),
         )
         assertTrue(result is FormResult.Valid)
         assertEquals("USD", (result as FormResult.Valid).value.currency)
@@ -57,12 +57,13 @@ class TransactionFormValidatorTest {
         assertTrue(errors.contains(StringKey.ValidationDescriptionRequired))
         assertTrue(errors.contains(StringKey.ValidationAmountInvalid))
         assertTrue(errors.contains(StringKey.ValidationAccountRequired))
+        assertTrue(errors.contains(StringKey.ValidationCategoryRequired))
     }
 
     @Test
     fun amountWithThousandsSeparatorParses() {
         val result = TransactionFormValidator.validate(
-            TransactionFormInput("Rent", "1,200.00", "USD", "acc-1", null, ""),
+            TransactionFormInput("Rent", "1,200.00", "USD", "acc-1", "cat-1", ""),
         )
         assertTrue(result is FormResult.Valid)
         assertEquals(1200.0, (result as FormResult.Valid).value.amount, 0.0001)

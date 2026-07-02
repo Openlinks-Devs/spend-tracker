@@ -16,7 +16,7 @@ data class Transaction(
     val amount: Double,
     val currency: String,
     @SerialName("account_id") val accountId: String,
-    @SerialName("category_id") val categoryId: String? = null,
+    @SerialName("category_id") val categoryId: String,
     val tags: List<String> = emptyList(),
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String? = null,
