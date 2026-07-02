@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme. The actual Compose UI supplies Material3 colors; this only
+         provides a splash-safe parent so the activity can start. -->
+    <style name="Theme.SpendTracker" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

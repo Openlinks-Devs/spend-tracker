@@ -1,0 +1,17 @@
+# Built output
+/build
+/app/build
+.gradle
+
+# Local machine config (SDK path, secrets)
+local.properties
+
+# Android Studio / IDE
+.idea
+*.iml
+captures
+.externalNativeBuild
+.cxx
+
+# Gradle
+.gradletasknamecache
