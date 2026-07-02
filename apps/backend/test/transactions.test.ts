@@ -89,6 +89,25 @@ describe('transactions route', () => {
     expect(body.description).toBe('Tea')
   })
 
+  it('PATCH /api/transactions/:id preserves the existing category_id when the body omits it', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleTransaction] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
+    }
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions/tx1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'Tea' }),
+    })
+    expect(response.status).toBe(200)
+    const updateParams = db.query.mock.calls[1][1]
+    expect(updateParams[2]).toBe('c1')
+  })
+
   it('PATCH /api/transactions/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createTransactionsRoute(() => db)
