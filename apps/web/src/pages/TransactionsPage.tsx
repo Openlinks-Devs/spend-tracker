@@ -19,15 +19,9 @@ import {
 } from '@/hooks/useTransactions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import { ApiError } from '@/lib/api'
+import { formatCurrency, formatDate, toNameById } from '@/lib/utils'
+import { toErrorMessage } from '@/lib/api'
 import type { NewTransaction, Transaction, TransactionUpdate } from '@/types'
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message
-  if (error instanceof Error) return error.message
-  return 'Something went wrong'
-}
 
 export function TransactionsPage() {
   const transactionsQuery = useTransactions()
@@ -46,21 +40,9 @@ export function TransactionsPage() {
   const categories = categoriesQuery.data ?? []
   const transactions = transactionsQuery.data ?? []
 
-  const accountNameById = useMemo(() => {
-    const lookup = new Map<string, string>()
-    for (const account of accounts) {
-      lookup.set(account.id, account.name)
-    }
-    return lookup
-  }, [accounts])
+  const accountNameById = useMemo(() => toNameById(accounts), [accounts])
 
-  const categoryNameById = useMemo(() => {
-    const lookup = new Map<string, string>()
-    for (const category of categories) {
-      lookup.set(category.id, category.name)
-    }
-    return lookup
-  }, [categories])
+  const categoryNameById = useMemo(() => toNameById(categories), [categories])
 
   function openCreateDialog() {
     setEditingTransaction(null)
@@ -85,7 +67,7 @@ export function TransactionsPage() {
   function handleUpdate(transactionId: string, payload: TransactionUpdate) {
     setFormError(null)
     updateTransaction.mutate(
-      { transactionId, payload },
+      { id: transactionId, payload },
       {
         onSuccess: () => setIsDialogOpen(false),
         onError: (error) => setFormError(toErrorMessage(error)),
@@ -149,16 +131,14 @@ export function TransactionsPage() {
                       {accountNameById.get(transaction.account_id) ?? transaction.account_id}
                     </TableCell>
                     <TableCell>
-                      {transaction.category_id
-                        ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
-                        : 'Uncategorized'}
+                      {categoryNameById.get(transaction.category_id) ?? 'Uncategorized'}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {transaction.tags.length > 0 ? transaction.tags.join(', ') : '-'}
                     </TableCell>
                     <TableCell>{formatDate(transaction.created_at)}</TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(Number(transaction.amount) || 0, transaction.currency)}
+                      {formatCurrency(transaction.amount, transaction.currency)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">

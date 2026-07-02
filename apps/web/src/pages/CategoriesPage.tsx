@@ -33,14 +33,8 @@ import {
   useDeleteCategory,
   useUpdateCategory,
 } from '@/hooks/useCategories'
-import { ApiError } from '@/lib/api'
+import { toErrorMessage } from '@/lib/api'
 import type { Category } from '@/types'
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message
-  if (error instanceof Error) return error.message
-  return 'Something went wrong'
-}
 
 interface CategoryFormState {
   name: string
@@ -91,7 +85,7 @@ export function CategoriesPage() {
     setFormError(null)
     if (isEditing && editingCategory) {
       updateCategory.mutate(
-        { categoryId: editingCategory.id, payload: formState },
+        { id: editingCategory.id, payload: formState },
         {
           onSuccess: () => setIsDialogOpen(false),
           onError: (error) => setFormError(toErrorMessage(error)),

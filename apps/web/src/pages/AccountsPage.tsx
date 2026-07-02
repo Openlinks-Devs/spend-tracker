@@ -26,14 +26,8 @@ import {
   useDeleteAccount,
   useUpdateAccount,
 } from '@/hooks/useAccounts'
-import { ApiError } from '@/lib/api'
+import { toErrorMessage } from '@/lib/api'
 import type { Account } from '@/types'
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message
-  if (error instanceof Error) return error.message
-  return 'Something went wrong'
-}
 
 interface AccountFormState {
   name: string
@@ -87,7 +81,7 @@ export function AccountsPage() {
     setFormError(null)
     if (isEditing && editingAccount) {
       updateAccount.mutate(
-        { accountId: editingAccount.id, payload: formState },
+        { id: editingAccount.id, payload: formState },
         {
           onSuccess: () => setIsDialogOpen(false),
           onError: (error) => setFormError(toErrorMessage(error)),

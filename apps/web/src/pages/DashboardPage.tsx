@@ -12,7 +12,7 @@ import {
 import { useTransactions } from '@/hooks/useTransactions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, toNameById } from '@/lib/utils'
 import type { Transaction } from '@/types'
 
 function pickPrimaryCurrency(transactions: Transaction[]): string {
@@ -39,28 +39,19 @@ export function DashboardPage() {
 
   const transactions = useMemo(() => transactionsQuery.data ?? [], [transactionsQuery.data])
 
-  const accountNameById = useMemo(() => {
-    const lookup = new Map<string, string>()
-    for (const account of accountsQuery.data ?? []) {
-      lookup.set(account.id, account.name)
-    }
-    return lookup
-  }, [accountsQuery.data])
+  const accountNameById = useMemo(() => toNameById(accountsQuery.data), [accountsQuery.data])
 
-  const categoryNameById = useMemo(() => {
-    const lookup = new Map<string, string>()
-    for (const category of categoriesQuery.data ?? []) {
-      lookup.set(category.id, category.name)
-    }
-    return lookup
-  }, [categoriesQuery.data])
+  const categoryNameById = useMemo(
+    () => toNameById(categoriesQuery.data),
+    [categoriesQuery.data],
+  )
 
   const summary = useMemo(() => {
     const primaryCurrency = pickPrimaryCurrency(transactions)
     let netBalance = 0
     let totalSpend = 0
     for (const transaction of transactions) {
-      const amount = Number(transaction.amount) || 0
+      const amount = transaction.amount
       netBalance += amount
       if (amount < 0) {
         totalSpend += Math.abs(amount)
@@ -74,11 +65,9 @@ export function DashboardPage() {
   const spendingByCategory = useMemo(() => {
     const totals = new Map<string, number>()
     for (const transaction of transactions) {
-      const amount = Number(transaction.amount) || 0
+      const amount = transaction.amount
       if (amount >= 0) continue
-      const categoryName = transaction.category_id
-        ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
-        : 'Uncategorized'
+      const categoryName = categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
       totals.set(categoryName, (totals.get(categoryName) ?? 0) + Math.abs(amount))
     }
     return Array.from(totals.entries())
@@ -164,13 +153,11 @@ export function DashboardPage() {
                           {accountNameById.get(transaction.account_id) ?? transaction.account_id}
                         </TableCell>
                         <TableCell>
-                          {transaction.category_id
-                            ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
-                            : 'Uncategorized'}
+                          {categoryNameById.get(transaction.category_id) ?? 'Uncategorized'}
                         </TableCell>
                         <TableCell>{formatDate(transaction.created_at)}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(Number(transaction.amount) || 0, transaction.currency)}
+                          {formatCurrency(transaction.amount, transaction.currency)}
                         </TableCell>
                       </TableRow>
                     ))}
