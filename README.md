@@ -1,37 +1,19 @@
-# SpendTracker Agent
+# SpendTracker
 
-Autonomous agent that scans Gmail for bank transaction emails, records them in
-Postgres, and notifies over Telegram. Port of the original n8n flow.
+pnpm monorepo for SpendTracker.
 
-## Setup
+## Packages
 
-1. `cp .env.example .env` and fill in the values.
-2. Get a Gmail refresh token: run the app, open `/oauth/start`, complete the Google
-   consent screen, then copy the `GOOGLE_REFRESH_TOKEN` printed by `/oauth/callback`
-   into your `.env`.
-3. Register the Telegram webhook:
-   ```
-   npx tsx src/scripts/set-webhook.ts
-   ```
-4. Run locally:
-   ```
-   npm run dev
-   ```
-5. Build and start:
-   ```
-   npm run build
-   npm start
-   ```
+- `apps/backend` - Hono/TypeScript agent + REST CRUD API (Gmail -> Postgres -> Telegram). See `apps/backend/README.md`.
+- `apps/web` - Vite + React dashboard (added in a later step).
+- `apps/android` - Kotlin/Jetpack Compose app (standalone Gradle, not part of the pnpm workspace).
 
-## Docker
+## Getting started
 
 ```
-docker build -t spend-tracker .
-docker run --env-file .env -p 3000:3000 spend-tracker
+pnpm install
+pnpm -r typecheck
+pnpm -r test
 ```
 
-## Tests
-
-```
-npm test
-```
+Per-package commands use filters, for example `pnpm --filter backend dev`.
