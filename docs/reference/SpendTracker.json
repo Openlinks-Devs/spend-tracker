@@ -1,0 +1,1704 @@
+{
+  "name": "SpendTracker",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "d8c22a82-733c-4d9f-8340-986446574619",
+              "leftValue": "={{ $json.message.content.is_transaction_email }}",
+              "rightValue": "=true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "22a44813-adaf-4779-8967-a33723ef6123",
+      "name": "If is transaction",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        752,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "6b3c4f44-53d2-4d6f-9f79-33d0fdb64ddf",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -768,
+        544
+      ],
+      "webhookId": "8ddf3b82-7ee5-4755-ad74-502e114e6e19",
+      "credentials": {
+        "telegramApi": {
+          "id": "zr8NYfUafF2RQwNG",
+          "name": "Spend Tracker Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"text\": \"{{$json.message.text.replace(/\\n+/g, ' ')}}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -112,
+        384
+      ],
+      "id": "2557c5d7-50fb-4f21-8379-b8301d31ed3c",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "categories",
+          "mode": "list",
+          "cachedResultName": "categories"
+        },
+        "returnAll": true,
+        "options": {
+          "outputColumns": [
+            "id",
+            "name",
+            "type"
+          ]
+        }
+      },
+      "id": "c23bad2c-463a-4512-aebd-40d6cd8c58d9",
+      "name": "Get categories",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1200,
+        32
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT unnest(tags) AS tag FROM transactions;",
+        "options": {}
+      },
+      "id": "fb9b2d47-74aa-40ad-80ea-ef83d4a02012",
+      "name": "Get tags",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1200,
+        224
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "accounts",
+          "mode": "list",
+          "cachedResultName": "accounts"
+        },
+        "returnAll": true,
+        "options": {
+          "outputColumns": [
+            "id",
+            "name",
+            "type",
+            "currency"
+          ]
+        }
+      },
+      "id": "bd5c60f2-2e70-49a5-a67c-fe3e87beb797",
+      "name": "Get accounts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1200,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "categories",
+        "options": {}
+      },
+      "id": "a99a4c0f-d5e3-4d42-aa29-72553a9624d5",
+      "name": "Agg categories",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "tag",
+              "renameField": true,
+              "outputFieldName": "tags"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "52886832-8eff-4cfe-9ffb-3546ef2f4001",
+      "name": "Agg tags",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "accounts",
+        "options": {}
+      },
+      "id": "83c00b55-29fd-443e-a96a-bfb93f542888",
+      "name": "Agg accounts",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "440390695",
+        "text": "=Error creando la transacción en SpendTracker: \n\n{{ \n  $('When Executed by Another Workflow').item\n}}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "d1262ffc-3fa7-4d0f-8c31-64eba6206d0b",
+      "name": "Error Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        3088,
+        320
+      ],
+      "webhookId": "2c17d8e0-1e73-4f9c-a91a-0d0753b7c6a2",
+      "credentials": {
+        "telegramApi": {
+          "id": "zr8NYfUafF2RQwNG",
+          "name": "Spend Tracker Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "transactions",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "description": "={{ $json.output.description }}",
+            "amount": "={{ $json.output.amount }}",
+            "currency": "={{ $json.output.currency }}",
+            "account_id": "={{ $json.output.account_id }}",
+            "category_id": "={{ $json.output.category_id }}",
+            "tags": "={{ $json.output.tags }}",
+            "created_at": "={{ $json.output.created_at }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category_id",
+              "displayName": "category_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "tags",
+              "displayName": "tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "16a03cf9-187f-4fbb-9fd7-84519c97dfb6",
+      "name": "Save transaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2880,
+        128
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"category_id\": {\n      \"type\": \"string\",\n      \"description\": \"UUID v4 identificador de la categoría\",\n      \"pattern\": \"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$\"\n    },\n    \"tags\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"string\"\n      },\n      \"description\":  \"Una lista de mínimo 3 tags relevantes según el contenido, sugiere si es necesario basado en el comercio, primer nombre de persona, gasto, delivery, etc. LOWER CASE siempre, solo una palabra por tag.\"\n    },\n    \"account_id\": {\n      \"type\": \"string\",\n      \"description\": \"UUID v4 identificador de la cuenta\",\n      \"pattern\": \"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$\"\n    },\n    \"description\": {\n      \"type\": \"string\",\n      \"description\": \"Descripción de la transacción\"\n    },\n    \"amount\": {\n      \"type\": \"number\",\n      \"description\": \"Monto de la transacción. Negativo para egresos\"\n    },\n    \"created_at\": {\n      \"type\": \"string\",\n      \"format\": \"date-time\",\n      \"description\": \"Fecha y hora de la transacción en formato ISO 8601\"\n    },\n    \"currency\": {\n      \"type\": \"string\",\n      \"pattern\": \"^[A-Z]{3}$\",\n      \"description\": \"Código de moneda en formato ISO 4217 (ej. PEN, USD)\"\n    }\n  },\n  \"required\": [\n    \"category_id\",\n    \"tags\",\n    \"account_id\",\n    \"description\",\n    \"amount\",\n    \"created_at\",\n    \"currency\"\n  ],\n  \"additionalProperties\": false\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        2480,
+        448
+      ],
+      "id": "9137c913-440e-4536-9afc-8d8965d2713d",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "const merge = $('Merge').first().json\nconst text = $('If text').first().json.text\nconsole.log(text);\nreturn {\n  ...merge,\n  text,\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        224
+      ],
+      "id": "ee379b03-ad37-4017-91a4-4442a2ef8aca",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2240,
+        448
+      ],
+      "id": "4d4a6bc1-f21a-45a3-ab21-6287598a9064",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "Zaw7lklexGAhJVg9",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "12903924-1d7a-496f-b85f-e753b075c7a9",
+              "leftValue": "={{$json.text}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "add1e582-37ad-40b3-8a10-b47cad3dea2c",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        144,
+        224
+      ],
+      "id": "121d8d6b-0998-458b-8018-52e5e2db25ff",
+      "name": "If text"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5c5f12ac-60be-457d-8556-ae0dfa5f5deb",
+              "leftValue": "={{ $json.output.account_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2656,
+        224
+      ],
+      "id": "c4c4efb9-c7c9-400e-bf18-998a8ae2b5b6",
+      "name": "If has account id"
+    },
+    {
+      "parameters": {
+        "chatId": "440390695",
+        "text": "=Nueva transacción creada en SpendTracker:\n\n<strong>{{ $json.description }}</strong>\n\n<pre>ID: {{ $json.id }}\nAccount: {{ $('Agg accounts').item.json.accounts.find(account => account.id === $json.account_id).name }}\nCategory: {{ $('Agg categories').item.json.categories.find(category => category.id === $json.category_id).name }}\nTags: {{ $json.tags }}\n</pre>\nAmount: {{ $json.currency }} {{ $json.amount }}\n\nDatet/time: <code>{{ $json.created_at }}</code>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "bb1ff53e-cff9-450d-b19c-976466966a33",
+      "name": "Send notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        3088,
+        128
+      ],
+      "webhookId": "2c17d8e0-1e73-4f9c-a91a-0d0753b7c6a2",
+      "credentials": {
+        "telegramApi": {
+          "id": "zr8NYfUafF2RQwNG",
+          "name": "Spend Tracker Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Get pre defined values from database\n\nWe get from database the accounts, tags and categories for a correct classification.",
+        "height": 680,
+        "width": 1260,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -80
+      ],
+      "id": "a2f1b330-2627-40e8-b6b8-5d04fc727767",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Classify text\n\nWe don't want any text to be processed, so we are filtering it by pre classifying it as transaction or not.",
+        "height": 640,
+        "width": 980
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -48
+      ],
+      "id": "51afe284-ede7-4683-bc89-904e21dd664b",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Process information\n\nIt sends to LLM to extract transaction details from the text. ",
+        "height": 680,
+        "width": 740,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2064,
+        -80
+      ],
+      "id": "57179665-360c-452e-8587-950d25243ea1",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Notifications\n\nIt sends notifications using Telegram because this is what I use more often. ",
+        "height": 680,
+        "width": 424,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2864,
+        -80
+      ],
+      "id": "5916ea80-23e5-41ca-9897-c8623a4ffd5a",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {},
+        "options": {}
+      },
+      "id": "36bbf8dd-f323-47b0-84c1-c6082a9031ef",
+      "name": "Gmail incoming emails",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        224
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ht90HiafGqTYHwO4",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "transactions",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "description": "={{ $('Edit transaction keys').item.json.new_description }}",
+            "id": "={{ $('Edit transaction keys').item.json.transaction_id }}",
+            "tags": "={{ $json.message.content.tags }}",
+            "updated_at": "={{ new Date() }}",
+            "category_id": "={{ $json.message.content.category_id }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "currency",
+              "displayName": "currency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "account_id",
+              "displayName": "account_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "category_id",
+              "displayName": "category_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "tags",
+              "displayName": "tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "array",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1136,
+        1328
+      ],
+      "id": "da588c58-9d35-4f4c-ae0c-f214b5c3a059",
+      "name": "Update transaction description",
+      "notesInFlow": false,
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d49a2327-faba-4056-8b9e-488dabf5cc09",
+              "name": "transaction_id",
+              "value": "={{ $json.message.reply_to_message.text.match(/ID:\\s*(.+)/)[1] }}",
+              "type": "string"
+            },
+            {
+              "id": "48069465-fba3-4d72-9d78-c0ece64cbfef",
+              "name": "new_description",
+              "value": "={{ $json.message.text.split('\\n')[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "57cf765a-ef43-48ea-ae5d-54202b1f29aa",
+              "name": "new_tags",
+              "value": "={{ $json.message.text.match(/\\[([^\\]]+)\\]/)?.[1]?.split(',').map(t => t.trim()) || [] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        1328
+      ],
+      "id": "7c3dcde6-162f-4d65-ab49-30d833d81d58",
+      "name": "Edit transaction keys"
+    },
+    {
+      "parameters": {
+        "chatId": "440390695",
+        "text": "=Transacción actualizada:\n<strong>{{ $json.description }}</strong>\n\n<pre>ID: {{ $json.id }}\nCategory: {{ $('Merge1').item.json.categories.find(c => c.id === $json.category_id).name }}\nTags: {{ $json.tags }}\n</pre>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "8efda409-7a12-44d1-bc98-3107e60567c6",
+      "name": "Send update notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        1328
+      ],
+      "webhookId": "2c17d8e0-1e73-4f9c-a91a-0d0753b7c6a2",
+      "credentials": {
+        "telegramApi": {
+          "id": "zr8NYfUafF2RQwNG",
+          "name": "Spend Tracker Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Update transaction\n\nWhen the message is a reply, update this transaction. \n\n",
+        "height": 464,
+        "width": 1636,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        1152
+      ],
+      "id": "796b993c-1edf-4ca9-998d-b57a9c0fa051",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1744,
+        208
+      ],
+      "id": "ce129ccb-032c-41d4-b6e2-ffedf6d8012b",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "content": "## Delete transaction\nWhen the message includes \"/delete\", delete this transaction. \n\n",
+        "height": 352,
+        "width": 740,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        688
+      ],
+      "id": "d6f51d85-30e1-4651-b6f5-c6822ff06a51",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "operation": "deleteTable",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "transactions",
+          "mode": "list",
+          "cachedResultName": "transactions"
+        },
+        "deleteCommand": "delete",
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.transaction_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        256,
+        800
+      ],
+      "id": "a07dc90d-d8f0-458a-9ebf-4129072f1ff1",
+      "name": "Delete table or rows",
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "categories",
+          "mode": "list",
+          "cachedResultName": "categories"
+        },
+        "returnAll": true,
+        "options": {
+          "outputColumns": [
+            "id",
+            "name",
+            "type"
+          ]
+        }
+      },
+      "id": "b58f0d37-4ce1-45da-abdf-08d4b77b472b",
+      "name": "Get categories1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        224,
+        1408
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3f19a24c-7a44-494f-8d13-920b47784201",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/delete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -336,
+        720
+      ],
+      "id": "af648be1-19cf-4322-85ea-d1de7f0d64a8",
+      "name": "If delete"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3f19a24c-7a44-494f-8d13-920b47784201",
+              "leftValue": "={{ $json.message.reply_to_message.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        544
+      ],
+      "id": "7e85d7cd-9fde-46f6-8ec6-613f3dafa646",
+      "name": "If modification",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "GPT-3.5-TURBO"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Eres experto clasificando descripciones de movimientos y transacciones monetarias. Devuelve sólo el ID de la categoría y una lista de tags sugeridas. Usa estas categorías de referencia: {{ $json.categories.map(item => `${item.id}: (${item.type}) ${item.name}\\n`) }}\n\nY estas tags de referencia:\n{{ $json.tags.join('\\n') }}",
+              "role": "system"
+            },
+            {
+              "content": "=Cuál de los siguientes IDs es el que mejor calza con la descripción proporcionada: \n{{ $('Edit transaction keys').item.json.new_description }}\nY basado en las tags proporcionadas, cuál calza mejor?\n\nJSON schema:\n\n{\n\"category_id\": string (uuid),\n\"tags\": string[]\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "id": "d9442a85-4258-4b87-81d7-2e2bb07461a5",
+      "name": "Classify transaction",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.3,
+      "position": [
+        832,
+        1328
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "Zaw7lklexGAhJVg9",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=body:\n{{ $('If text').item.json.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=Tienes la siguiente información:\n\n1. **Categorías de consumo o ingreso y sus ID**:\n   {{ JSON.stringify($json.categories, null, 2) }}\n\n2. **Lista de posibles Tags**:\n   {{ JSON.stringify($json.tags, null, 2) }}\n\n3. **Cuentas bancarias o tarjetas de crédito y sus ID**:\n   {{ JSON.stringify($json.accounts, null, 2) }}\n\nIncluye el signo (-/+) para el monto. \nTu tarea es analizar el contenido del texto y devolver un JSON.\n\nSi no encuentras información suficiente en el correo para determinar algún campo, usa `null` en su lugar. El category_id Y account_id son diferentes.\nFecha y hora actual: {{ $now }}. Zona horaria: America/Lima. Si el usuario está usando fechas relativas, debes hacer el cálculo aproximado para determinar el created_at.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.8,
+      "position": [
+        2288,
+        224
+      ],
+      "id": "13168f04-7fca-40a1-ab94-c4d066e59587",
+      "name": "SpendTracker",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Eres un experto clasificando textos. Retorna \"true\" si y sólo si es una transacción monetaria, consumo con tarjeta de crédito, movimiento, transferencia bancaria, etc. No son válidos textos promocionales, publicitarios o de marketing. \n\nJSON schema:\n\n{\n\"is_transaction_email\": boolean }\n}",
+              "role": "system"
+            },
+            {
+              "content": "=Subject: {{ $json.subject || '' }}"
+            },
+            {
+              "content": "=Body: {{ $json.text }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "id": "6d59d7bb-5b24-439e-b793-2eaa5024c76b",
+      "name": "Transaction detector",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.3,
+      "position": [
+        368,
+        208
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "Zaw7lklexGAhJVg9",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "categories",
+        "options": {}
+      },
+      "id": "4afddc85-a970-42b8-8378-c9d64a179d68",
+      "name": "Agg accounts1",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        480,
+        1408
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "440390695",
+        "text": "=🗑️ Transacción eliminada",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "reply_to_message_id": "={{ $('If delete').item.json.message.reply_to_message.message_id }}"
+        }
+      },
+      "id": "dc44f167-1f80-4750-8a55-b0458691215a",
+      "name": "Send delete notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        800
+      ],
+      "webhookId": "2c17d8e0-1e73-4f9c-a91a-0d0753b7c6a2",
+      "credentials": {
+        "telegramApi": {
+          "id": "zr8NYfUafF2RQwNG",
+          "name": "Spend Tracker Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d49a2327-faba-4056-8b9e-488dabf5cc09",
+              "name": "transaction_id",
+              "value": "={{ $json.message.reply_to_message.text.match(/ID:\\s*(.+)/)[1] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        48,
+        800
+      ],
+      "id": "b69e0122-a56a-4068-bbd8-51912658bef6",
+      "name": "Extract transaction id"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT unnest(tags) AS tag FROM transactions;",
+        "options": {}
+      },
+      "id": "e4e8d647-b4cf-4c9d-919a-9a36f03d0617",
+      "name": "Get tags1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        224,
+        1264
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "MTsRmw8WuOJeB6os",
+          "name": "SpendTracker Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "tag",
+              "renameField": true,
+              "outputFieldName": "tags"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3343f85f-4805-4585-af05-c4d0c0ad34f9",
+      "name": "Agg tags1",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        480,
+        1264
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        656,
+        1328
+      ],
+      "id": "e737cbd1-13b5-46e6-9fd3-3f6f494a2252",
+      "name": "Merge1"
+    }
+  ],
+  "pinData": {
+    "Gmail incoming emails": [
+      {
+        "json": {
+          "id": "198a64a15154a043",
+          "threadId": "198a64a15154a043",
+          "labelIds": [
+            "UNREAD",
+            "CATEGORY_UPDATES",
+            "INBOX"
+          ],
+          "sizeEstimate": 22967,
+          "headers": {
+            "delivered-to": "Delivered-To: josemisaelabanto@gmail.com",
+            "received": "Received: from MjYzNTk1NTQ (unknown)\r\n\tby geopod-ismtpd-16 (SG) with HTTP\r\n\tid 2lhMPuDISNGR0PftFUXtFQ\r\n\tThu, 14 Aug 2025 01:55:28.211 +0000 (UTC)",
+            "x-google-smtp-source": "X-Google-Smtp-Source: AGHT+IH/rdtZdONkHY8Co3kCjchXJ8lLqBidXrp7xdz0utZQhUgyaLOsBg/5VCAlFhG+1muepFhQ",
+            "x-received": "X-Received: by 2002:a17:90b:28c7:b0:314:2cd2:595d with SMTP id 98e67ed59e1d1-32329a93c47mr1261008a91.8.1755136529445;\r\n        Wed, 13 Aug 2025 18:55:29 -0700 (PDT)",
+            "arc-seal": "ARC-Seal: i=1; a=rsa-sha256; t=1755136529; cv=none;\r\n        d=google.com; s=arc-20240605;\r\n        b=PUHsZgMR8Iy7dPrPduhCfhaEF7mwma7fmVxSKZ9USL1tSdMqqpwaA9ii21ujR2KuX1\r\n         F0Pim0zGiAFhNuecGeTIoBwxTYYjHI9eibe5ax3qWBLOYAsgmd9KTIaPsCAJV3TMBQm0\r\n         i0O/YSoZ0qo9L4u3bOlLvWBC+90oSu7d4Z8FNU+Unp4lb9xRh0kg1+6bDQzU3iOu09Ip\r\n         ToGfevn5JWOmZxF7L7zELi+b+9bwIU6Lmp4iLT3HR6bH4r86Az+9+5th4Jf3xz+gFcFv\r\n         YYlQ1nBwKB5Qt48b+xY9IQkwH0RoUJzpLwFp7oUoGxytNodRQ+mc+9cNOCfXplzWr8yq\r\n         rtuw==",
+            "arc-message-signature": "ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;\r\n        h=to:subject:message-id:mime-version:from:date\r\n         :content-transfer-encoding:dkim-signature:dkim-signature;\r\n        bh=ciZ+iy0UvCzjhBsutSjAnW3rI0toiOn4tndaGOSpa3s=;\r\n        fh=1X8xyg2Op7RoDbBC2+HrJhh7wiXWguvGqir6xDOhFCI=;\r\n        b=OJQs6qvS6yozolToHSHmtZDxlvxUNS0aVkkhZKPxF6HMXQLd/c39VDs8f8grxt8Q8Z\r\n         lWsb36ES2FJf1EE0Kuapg7K6tseLi/rXZ2WALZIJmWcwEfp2M5DyUMYTtZd3Fimjp12E\r\n         gN51NIfe0ACtwKntqidYtWKClFYFwos8yC1Klz6ShsNZ5gsg80Xp9DlMmf57gPfd0kbU\r\n         VcztiyDcTz1Hw9p1wPS0oGhWoTPBFmxJk35yW6RzuxpYE+TmOboP2aNDt1Aqk5qzfZ7O\r\n         +7gR8Gec2o9l/TMJSXecIQ3qyj5pf1QgBOZWIh7SvNmnc4UCtlRJmiErt1F0HOuvFb/I\r\n         YgrQ==;\r\n        dara=google.com",
+            "arc-authentication-results": "ARC-Authentication-Results: i=1; mx.google.com;\r\n       dkim=pass header.i=@notificacionesbcp.com.pe header.s=s1 header.b=pv4e7Z6N;\r\n       dkim=pass header.i=@sendgrid.info header.s=smtpapi header.b=ri3PKMjs;\r\n       spf=pass (google.com: domain of bounces+26359554-831d-josemisaelabanto=gmail.com@em4534.notificacionesbcp.com.pe designates 159.183.121.133 as permitted sender) smtp.mailfrom=\"bounces+26359554-831d-josemisaelabanto=gmail.com@em4534.notificacionesbcp.com.pe\";\r\n       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=notificacionesbcp.com.pe",
+            "return-path": "Return-Path: <bounces+26359554-831d-josemisaelabanto=gmail.com@em4534.notificacionesbcp.com.pe>",
+            "received-spf": "Received-SPF: pass (google.com: domain of bounces+26359554-831d-josemisaelabanto=gmail.com@em4534.notificacionesbcp.com.pe designates 159.183.121.133 as permitted sender) client-ip=159.183.121.133;",
+            "authentication-results": "Authentication-Results: mx.google.com;\r\n       dkim=pass header.i=@notificacionesbcp.com.pe header.s=s1 header.b=pv4e7Z6N;\r\n       dkim=pass header.i=@sendgrid.info header.s=smtpapi header.b=ri3PKMjs;\r\n       spf=pass (google.com: domain of bounces+26359554-831d-josemisaelabanto=gmail.com@em4534.notificacionesbcp.com.pe designates 159.183.121.133 as permitted sender) smtp.mailfrom=\"bounces+26359554-831d-josemisaelabanto=gmail.com@em4534.notificacionesbcp.com.pe\";\r\n       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=notificacionesbcp.com.pe",
+            "dkim-signature": "DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=sendgrid.info;\r\n\th=content-transfer-encoding:content-type:date:from:mime-version:subject:\r\n\tto:cc:content-type:date:feedback-id:from:subject:to;\r\n\ts=smtpapi; bh=ciZ+iy0UvCzjhBsutSjAnW3rI0toiOn4tndaGOSpa3s=;\r\n\tb=ri3PKMjsicyBuvGkz4ZWg/mx8URxfLEwv+/iHscm4mWm7bXpxBaOuy25V+SKQ6yDaiKH\r\n\tqyYJzEz5Jo/6cYdWUDRsyRSHuSQpNS05M8u9fNARzyIm6z0HFMmnLWRRrYuvZObH9bFHdP\r\n\t1lUc6KCoEKJisgpIpdH06T/vAn8UX3GBo=",
+            "content-transfer-encoding": "Content-Transfer-Encoding: quoted-printable",
+            "content-type": "Content-Type: text/html; charset=utf-8",
+            "date": "Date: Thu, 14 Aug 2025 01:55:28 +0000 (UTC)",
+            "from": "From: BCP Notificaciones <notificaciones@notificacionesbcp.com.pe>",
+            "mime-version": "Mime-Version: 1.0",
+            "message-id": "Message-ID: <2lhMPuDISNGR0PftFUXtFQ@geopod-ismtpd-16>",
+            "subject": "Subject: Realizaste un consumo con tu Tarjeta de =?UTF-8?B?RMOpYml0bw==?= BCP\r\n - Servicio de Notificaciones BCP",
+            "x-sg-eid": "X-SG-EID: \r\n =?us-ascii?Q?u001=2EHba91y4EfB5n=2F+FQQgG7FV=2FnqVs2lEQhKJM2wExe+AWJqartOkL9bFhup?=\r\n =?us-ascii?Q?ADfu0JOegqoR8y2AQk0SaKvC45marCutrE=2Fycow?=\r\n =?us-ascii?Q?e99DcbrFb3fQYI5afeNltT90Y6F7NrSMqIADExI?=\r\n =?us-ascii?Q?1vXljuLDMaPXLbbXJ5hvSOr5yPocDps5PcuFoac?=\r\n =?us-ascii?Q?ajxqNhCQvrSqgIOVGQf=2FBqdIC=2FHCb0NrGIimcQz?=\r\n =?us-ascii?Q?wt=2Fzq8TDHbZ+lxbwl7yiLEizQU5Vk=2FQv4YUK2Bo?=\r\n =?us-ascii?Q?TLtgHm5vmlqWzbnD=2Fy4gfBG6KI4rxeg2W2P2ZlZ?=\r\n =?us-ascii?Q?OsTgkX7M=3D?=",
+            "to": "To: josemisaelabanto@gmail.com",
+            "x-entity-id": "X-Entity-ID: u001.fkGy9tZVLIZGC2pX7b7KUA=="
+          },
+          "html": "\n<!DOCTYPE html>\n<html>\n <head>\n  <title></title>\n  <meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" />\n  <meta name=\"format-detection\" content=\"telephone=no\">\n  <style type=\"text/css\">\n\t\t\tbody {background:white; margin: 0; padding: 0;}\n\t\t\timg {height: auto;}\n\t\t\tu + #body a {color:inherit; cursor:text !important; text-decoration:none; font-size:inherit; font-family:inherit; font-weight:inherit; line-height:inherit;}\n\t\t\t.ExternalClass *{line-height:100%;}\n\t\t\ta {text-decoration: none; color: inherit;}\n\t\t\n</style>\n </head>\n <body id=\"body\" yahoo bgcolor=\"#ffffff\" leftmargin=\"0\" topmargin=\"0\" marginwidth=\"0\" marginheight=\"0\">\n  <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\">\n   <!-- ::::::::::::::::::::::::::::::::::-->\n   <!-- inicio.BODY ::::::::::::::::::::::-->\n   <!-- ::::::::::::::::::::::::::::::::::-->\n   <!-- inicio.header ::::::::::::::::::::::-->\n   <tr>\n    <td valign=\"top\" align=\"center\"><img src=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/header.png\" alt=\"\" width=\"600\"/></td>\n   </tr>\n   <!-- fin.header ::::::::::::::::::::::-->\n   <tr><td height=\"32px\"> </td></tr>\n   <!-- inicio.saludo ::::::::::::::::::::::-->\n   <tr>\n    <td>\n     <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; text-align:left; margin:0px 24px 0px 24px; color: #1c2e46\">Hola <b>Jose Misael,</b></p>\n     <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:24px; line-height:32px; text-align:left; margin: 24px 24px 0px 24px; color: #002B93\">Realizaste un consumo de <b>S/ 35.00</b> con tu <b>Tarjeta de Débito BCP</b> en <b>PLIN-MARISELA CALLE.</b></p>\n     <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; text-align:left; margin:24px 24px 0px 24px; color: #1c2e46\">Por tu seguridad, te enviamos los <b>datos de tu operación.</b></p>\n    </td>\n   </tr>\n   <!-- fin.saludo ::::::::::::::::::::::-->\n   <tr><td height=\"40px\"> </td></tr>\n   <!-- inicio.tabla_montos ::::::::::::::::::::::-->\n   <tr>\n    <td>\n     <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; text-align:left; margin:0px 24px 0px 24px; color: #002A8D\"><b>Monto</b></p>\n    </td>\n   </tr>\n   <tr><td height=\"16px\"> </td></tr>\n   <tr>\n    <td> \n     <table width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\">\n      <tr>\n       <td style=\"width:276px; -webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:left; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\" >Total del consumo</td>\n       <td style=\"-webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica;  font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:right; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\"><b>S/ 35.00</b></td>\n      </tr>\n     </table>\n    </td>\n   </tr>\n   <!-- fin.tabla_montos ::::::::::::::::::::::-->\n   <tr><td height=\"40px\"> </td></tr>\n   <!-- inicio.tabla_datos ::::::::::::::::::::::--> \n   <tr>\n    <td>\n     <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; text-align:left; margin:0px 24px 0px 24px; color: #002A8D\"><b>Datos de la operación</b></p>\n    </td>\n   </tr>\n   <tr><td height=\"16px\"> </td></tr>\n   <tr>\n    <td>\n     <table width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\">\n      <tr>\n       <td style=\"width:276px; -webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:left; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#FFFFFF\" valign=\"top\">Operación realizada</td>\n       <td style=\"-webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:right; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#FFFFFF\" valign=\"top\"><b>Consumo Tarjeta de Débito</b></td>\n      </tr>\n      <tr>\n       <td style=\"width:276px; -webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:left; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\">Fecha y hora</td>\n       <td style=\"-webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:right; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\"><b><a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#202E44 !important; cursor:text !important;\">13 de agosto de 2025 - 08:55 PM</a></b></td>\n      </tr>\n      <tr>\n       <td style=\"width:276px; -webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:left; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\">Número de Tarjeta de Débito</td>\n       <td style=\"-webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:right; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\"><b>************7554</b></td>\n      </tr>\n      <tr>\n       <td style=\"width:276px; -webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:left; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\">Empresa</td>\n       <td style=\"-webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:right; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\"><b>PLIN-MARISELA CALLE</b></td>\n      </tr>\n      <tr>\n       <td style=\"width:276px; -webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:left; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\">Número de operación</td>\n       <td style=\"-webkit-text-size-adjust:none; font-family: Arial, Tahoma, Helvetica; font-size:14px; line-height:24px; padding: 24px 0px 24px 0px; color:#202E44; text-align:right; border-bottom: 1px solid #EAEFF5\" bgcolor=\"#ffffff\" valign=\"top\"><b><a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#202E44 !important; cursor:text !important;\">501904</a></b></td>\n      </tr>\n     </table>\n    </td>\n   </tr>\n   <!-- fin.tabla_datos ::::::::::::::::::::::--> \n   <tr><td height=\"40px\"> </td></tr>\n   \n    <!-- inicio.banner_informativo ::::::::::::::::::::::-->\n   <tr>\n    <td>\n     <table style=\"background-color:#F5F8FF; border-radius: 0px; margin:0px 24px 0px 24px;\" width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\">\n      <tr>\n       <td valign=\"top\" align=\"right\" width=\"72\">\n        <img style=\"margin:37px 0px 24px 16px; display: block;\" src=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/icon1.png\" alt=\"\" width=\"72\"/>\n       </td>\n       <td valign=\"center\" align=\"center\" width=\"16\"><strong> </strong></td>\n       <td width=\"360\" valign=\"center\">\n        <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; color:#0A47F0; text-align:left; margin:32px 0px 16px 0px;\"><b>¿No reconoces esta operación?</b></p>\n        <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; color:#1c2e46; text-align:left; margin:0px 24px 0px 0px;\">Comunícate inmediatamente con nosotros al</p>\n        <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:24px; color:#1c2e46; text-align:left; margin:0px 24px 32px 0px;\"><a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#1c2e46 !important; cursor:text !important;\">(01) 311-9898</a> anexo *225 para ayudarte a verificarla.</p>\n       </td>\n      </tr>\n     </table>\n    </td>\n   </tr>\n   <!-- fin.banner_informativo ::::::::::::::::::::::-->\n   <tr><td height=\"40px\"> </td></tr>\n   <!-- inicio.mensaje_cierre ::::::::::::::::::::::--> \n   <tr>\n    <td>\n     <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:16px; line-height:32px; text-align:left; margin: 0px 24px 0px 24px; color: #002B93\"><b>¡Seguimos mejorando para ti!</b></p>\n    </td>\n   </tr>\n   <!-- fin.mensaje_cierre ::::::::::::::::::::::--> \n   <tr><td height=\"40px\"> </td></tr>\n   <!-- inicio.bannerBMO ::::::::::::::::::::::-->\n   <tr>\n    <td valign=\"center\" align=\"center\" width=\"600\">\n     <img src=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/banner-BMO.png\" alt=\"\" width=\"600\" style=\"display:block;\"/>\n    </td>\n   </tr>\n   <!-- fin.bannerBMO ::::::::::::::::::::::-->\n   \n   <!-- inicio.footer ::::::::::::::::::::::-->\n   <tr>\n    <td valign=\"center\" align=\"center\" width=\"600\">\n     <img src=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/cierre.png\" alt=\"\" width=\"600\" style=\"display:block;\"/>\n    </td>\n   </tr>\n   <!-- fin.footer ::::::::::::::::::::::-->\n   <tr><td height=\"24px\"> </td></tr>\n   <!-- inicio.legal ::::::::::::::::::::::-->  \n   <tr>\n    <td>\n     <table align=\"center\" width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">\n      <tr>\n       <td>\n        <table align=\"center\" width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">\n        <tr>\n         <td valign=\"top\" align=\"center\" width=\"78\">\n          <img style=\"margin:0px 0px 0px 0px; display: block;\" src=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/sello-compromiso.png\" alt=\"\" width=\"78\"/>\n         </td>\n         <td valign=\"center\" align=\"center\" width=\"24\"> \n         </td>\n         <td width=\"450\" valign=\"top\" style=\"font-family: Arial, Tahoma, Helvetica;  font-size:9px; line-height:16px; color:#002a8d; text-align:justify;\">\n          <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:9px; line-height:16px; text-align:justify; margin:0px 0px 0px 0px;\"><b>Juntos somos más seguros</b></p>\n          <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:9px; line-height:16px; text-align:justify; margin:0px 0px 0px 0px;\">El BCP nunca te solicitará datos confidenciales por correo, tales como tu clave secreta de cajero de 4 dígitos, clave de internet de 6 dígitos, número de tu tarjeta de débito o crédito, fecha de vencimiento, código CVV, código de validación OTP o clave Token, para resolver supuestos problemas con tus cuentas o para participar en sorteos o promociones.</p>\n         </td>\n        </tr>\n        </table>\n       </td>\n                    </tr>\n        <tr><td height=\"16px\"> </td></tr>\n      <tr>\n       <td width=\"552\" valign=\"top\" style=\"font-family: Arial, Tahoma, Helvetica;  font-size:9px; line-height:16px; color:#002a8d; text-align:justify;\">\n        <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:9px; line-height:16px; text-align:justify; margin:0px 0px 0px 0px;\">\n        Nuestros correos personalizados con botón o link, únicamente te dirigirán a <a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#002a8d !important; cursor:text !important;\">www.viabcp.com</a> o sus páginas internas, es decir, que contengan <a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#002B93 !important; cursor:text !important;\">.viabcp.com</a> en la dirección web. En caso tengas dudas sobre alguna comunicación del BCP puedes comunicarte con nosotros a través de nuestras redes sociales, al grupo de Facebook Alerta Fraude o llamando al <a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#002a8d !important; cursor:text !important;\">(01) 311-9898.</a></p>\n        <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:9px; line-height:16px; text-align:justify; margin:0px 0px 0px 0px;\">Nuestros e-mails no incluirán archivos adjuntos (a excepción del envío de los estados de cuenta u otros documentos solicitados y/o coordinados previamente con nosotros).</p>\n        <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:9px; line-height:16px; text-align:justify; margin:0px 0px 0px 0px;\">Para conocer más sobre las principales modalidades de fraude, aprender a reconocerlas y cómo protegerte, ingresa a <a href=\"https://u26359554.ct.sendgrid.net/ls/click?upn=u001.DtCEeoktqlDnDkwdvigZH4G-2Fp-2FgdvUvtYhHkWHsA5zjX0hSY8RSmSpGCWjNU8lhkjzZh_g3xO92tk5C2mUIxoA-2BfKip1EtrvmRpil2gzlcOreuMTyKZoeV2b8PhP2QIcnWTEx2493429veMbpt54QOgpx6Sr0EYrTe4xvLbLuHq9PIHKo499pv5FfvRKlyqS9hJT73g4-2BFCU-2Bjfs-2BrGcW-2BomVYcxI1fgoZ3K27vTsNu-2FXrEnAdsy6f-2BnJCRpfvj44Os4W3ifK41al-2Bh8Y7UdWadOxiDY3I0Oy29tkHeCjLsC-2FqQk-3D\" target=\"_blank\" style=\"text-decoration:none; white-space:nowrap; color:#002a8d !important; cursor:text !important;\">https://viabcp.com/seguridad</a> y mantente atento a las publicaciones periódicas que realizamos en nuestras redes sociales.\n        </p>\n       </td>\n      </tr>\n                 </table>\n             </td>\n          </tr>\n          <tr><td height=\"16px\"> </td></tr>\n          <tr>\n    <td>\n     <table align=\"center\" width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">\n      <tr>\n       <td>\n        <table width=\"552\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" align=\"center\">\n         <tr>\n          <td width=\"470\" valign=\"top\" style=\"font-family: Arial, Tahoma, Helvetica;  font-size:9px; line-height:16px; color:#1c2e46; text-align:justify;\">\n           <p style=\"font-family: Arial, Tahoma, Helvetica; font-size:9px; line-height:16px; text-align:justify; margin:0px 0px 0px 0px;\">Si deseas desafiliarte del Servicio de Notificaciones BCP, puedes realizarlo respondiendo al correo <b><a href=\"\" style=\"text-decoration:none; white-space:nowrap; color:#1c2e46 !important; cursor:text !important;\">notificacionescrm@bcp.com.pe</a></b> con el asunto <b>“REMOVER”.</b> Ten en cuenta que al elegir esta opción dejarás de recibir notificaciones por las operaciones que se realicen con todas tus Tarjetas BCP. Si este correo omite vocales, tildes, letras ñ o éstas son cambiadas por otros caracteres, no se debe a errores ortográficos del Banco de Crédito BCP. Esto puede originarse por la configuración del servidor de tu correo o la versión de tu navegador. El sistema de correo electrónico del BCP está destinado únicamente para fines de negocio, cualquier otro uso contraviene las políticas del Banco. Toda la información del negocio contenida en este mensaje es confidencial y de uso exclusivo del BCP. Su divulgación, copia y/o adulteración están prohibidas y solo debe ser conocida por la persona a quien se dirige este mensaje.</p>\n          </td>\n         </tr>\n        </table>\n       </td>\n      </tr>\n     </table>\n    </td>\n          </tr>\n   <!-- fin.legal ::::::::::::::::::::::-->  \n          <tr><td height=\"32px\"> </td></tr>\n       </table>\n    <img src=\"https://u26359554.ct.sendgrid.net/wf/open?upn=u001.4mv6xc4IiiEpmZZrpMJHYn-2Bvx70KCay1O1dOtPyfxt0VfO5FyWqlXHNyN0LIXxpvlRcMBCNV5KbvOz30tDVdDW4krYoZS91lFPfKeBWIp8Wx-2FXO6CRXHaGc7ubo9O56NuKeePFgPZBoD4cd0hOMum7aZD2jde-2FG9wL2ziI1rNQsPHNIML-2BJaBIRjsENsw7AMQfZv4RB4hAJ22qw43xf7TKLH3TQWvtHdKt2UoLEwwYQ-3D\" alt=\"\" width=\"1\" height=\"1\" border=\"0\" style=\"height:1px !important;width:1px !important;border-width:0 !important;margin-top:0 !important;margin-bottom:0 !important;margin-right:0 !important;margin-left:0 !important;padding-top:0 !important;padding-bottom:0 !important;padding-right:0 !important;padding-left:0 !important;\"/></body>\n</html>\n",
+          "text": "[https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/header.png]\n \n\nHola Jose Misael,\n\nRealizaste un consumo de S/ 35.00 con tu Tarjeta de Débito BCP en PLIN-MARISELA\nCALLE.\n\nPor tu seguridad, te enviamos los datos de tu operación.\n\n \n\nMonto\n\n \n\nTotal del consumo S/ 35.00\n\n \n\nDatos de la operación\n\n \n\nOperación realizada Consumo Tarjeta de Débito Fecha y hora 13 de agosto de 2025\n- 08:55 PM Número de Tarjeta de Débito ************7554 Empresa PLIN-MARISELA\nCALLE Número de operación 501904\n\n \n\n[https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/icon1.png]\n \n\n¿No reconoces esta operación?\n\nComunícate inmediatamente con nosotros al\n\n(01) 311-9898 anexo *225 para ayudarte a verificarla.\n\n \n\n¡Seguimos mejorando para ti!\n\n \n[https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/banner-BMO.png]\n[https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/cierre.png]\n \n\n[https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/sello-compromiso.png]\n \n\nJuntos somos más seguros\n\nEl BCP nunca te solicitará datos confidenciales por correo, tales como tu clave\nsecreta de cajero de 4 dígitos, clave de internet de 6 dígitos, número de tu\ntarjeta de débito o crédito, fecha de vencimiento, código CVV, código de\nvalidación OTP o clave Token, para resolver supuestos problemas con tus cuentas\no para participar en sorteos o promociones.\n\n \n\nNuestros correos personalizados con botón o link, únicamente te dirigirán a\nwww.viabcp.com o sus páginas internas, es decir, que contengan .viabcp.com en la\ndirección web. En caso tengas dudas sobre alguna comunicación del BCP puedes\ncomunicarte con nosotros a través de nuestras redes sociales, al grupo de\nFacebook Alerta Fraude o llamando al (01) 311-9898.\n\nNuestros e-mails no incluirán archivos adjuntos (a excepción del envío de los\nestados de cuenta u otros documentos solicitados y/o coordinados previamente con\nnosotros).\n\nPara conocer más sobre las principales modalidades de fraude, aprender a\nreconocerlas y cómo protegerte, ingresa a https://viabcp.com/seguridad\n[https://u26359554.ct.sendgrid.net/ls/click?upn=u001.DtCEeoktqlDnDkwdvigZH4G-2Fp-2FgdvUvtYhHkWHsA5zjX0hSY8RSmSpGCWjNU8lhkjzZh_g3xO92tk5C2mUIxoA-2BfKip1EtrvmRpil2gzlcOreuMTyKZoeV2b8PhP2QIcnWTEx2493429veMbpt54QOgpx6Sr0EYrTe4xvLbLuHq9PIHKo499pv5FfvRKlyqS9hJT73g4-2BFCU-2Bjfs-2BrGcW-2BomVYcxI1fgoZ3K27vTsNu-2FXrEnAdsy6f-2BnJCRpfvj44Os4W3ifK41al-2Bh8Y7UdWadOxiDY3I0Oy29tkHeCjLsC-2FqQk-3D]\ny mantente atento a las publicaciones periódicas que realizamos en nuestras\nredes sociales.\n\n \n\nSi deseas desafiliarte del Servicio de Notificaciones BCP, puedes realizarlo\nrespondiendo al correo notificacionescrm@bcp.com.pe con el asunto “REMOVER”. Ten\nen cuenta que al elegir esta opción dejarás de recibir notificaciones por las\noperaciones que se realicen con todas tus Tarjetas BCP. Si este correo omite\nvocales, tildes, letras ñ o éstas son cambiadas por otros caracteres, no se debe\na errores ortográficos del Banco de Crédito BCP. Esto puede originarse por la\nconfiguración del servidor de tu correo o la versión de tu navegador. El sistema\nde correo electrónico del BCP está destinado únicamente para fines de negocio,\ncualquier otro uso contraviene las políticas del Banco. Toda la información del\nnegocio contenida en este mensaje es confidencial y de uso exclusivo del BCP. Su\ndivulgación, copia y/o adulteración están prohibidas y solo debe ser conocida\npor la persona a quien se dirige este mensaje.\n\n \n\n[https://u26359554.ct.sendgrid.net/wf/open?upn=u001.4mv6xc4IiiEpmZZrpMJHYn-2Bvx70KCay1O1dOtPyfxt0VfO5FyWqlXHNyN0LIXxpvlRcMBCNV5KbvOz30tDVdDW4krYoZS91lFPfKeBWIp8Wx-2FXO6CRXHaGc7ubo9O56NuKeePFgPZBoD4cd0hOMum7aZD2jde-2FG9wL2ziI1rNQsPHNIML-2BJaBIRjsENsw7AMQfZv4RB4hAJ22qw43xf7TKLH3TQWvtHdKt2UoLEwwYQ-3D]",
+          "textAsHtml": "<p>[<a href=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/header.png\">https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/header.png</a>]<br/>&nbsp;</p><p>Hola Jose Misael,</p><p>Realizaste un consumo de S/ 35.00 con tu Tarjeta de D&eacute;bito BCP en PLIN-MARISELA<br/>CALLE.</p><p>Por tu seguridad, te enviamos los datos de tu operaci&oacute;n.</p><p>&nbsp;</p><p>Monto</p><p>&nbsp;</p><p>Total del consumo S/ 35.00</p><p>&nbsp;</p><p>Datos de la operaci&oacute;n</p><p>&nbsp;</p><p>Operaci&oacute;n realizada Consumo Tarjeta de D&eacute;bito Fecha y hora 13 de agosto de 2025<br/>- 08:55 PM N&uacute;mero de Tarjeta de D&eacute;bito ************7554 Empresa PLIN-MARISELA<br/>CALLE N&uacute;mero de operaci&oacute;n 501904</p><p>&nbsp;</p><p>[<a href=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/icon1.png\">https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/icon1.png</a>]<br/>&nbsp;</p><p>&iquest;No reconoces esta operaci&oacute;n?</p><p>Comun&iacute;cate inmediatamente con nosotros al</p><p>(01) 311-9898 anexo *225 para ayudarte a verificarla.</p><p>&nbsp;</p><p>&iexcl;Seguimos mejorando para ti!</p><p>&nbsp;<br/>[<a href=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/banner-BMO.png\">https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/banner-BMO.png</a>]<br/>[<a href=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/cierre.png\">https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/IdTemplate/ccm1_pos_001_001/cierre.png</a>]<br/>&nbsp;</p><p>[<a href=\"https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/sello-compromiso.png\">https://almacenbcp01.blob.core.windows.net/bcp/NOTIFICACIONES-TD-TC/CompraCanceladaTD/sello-compromiso.png</a>]<br/>&nbsp;</p><p>Juntos somos m&aacute;s seguros</p><p>El BCP nunca te solicitar&aacute; datos confidenciales por correo, tales como tu clave<br/>secreta de cajero de 4 d&iacute;gitos, clave de internet de 6 d&iacute;gitos, n&uacute;mero de tu<br/>tarjeta de d&eacute;bito o cr&eacute;dito, fecha de vencimiento, c&oacute;digo CVV, c&oacute;digo de<br/>validaci&oacute;n OTP o clave Token, para resolver supuestos problemas con tus cuentas<br/>o para participar en sorteos o promociones.</p><p>&nbsp;</p><p>Nuestros correos personalizados con bot&oacute;n o link, &uacute;nicamente te dirigir&aacute;n a<br/><a href=\"http://www.viabcp.com\">www.viabcp.com</a> o sus p&aacute;ginas internas, es decir, que contengan .viabcp.com en la<br/>direcci&oacute;n web. En caso tengas dudas sobre alguna comunicaci&oacute;n del BCP puedes<br/>comunicarte con nosotros a trav&eacute;s de nuestras redes sociales, al grupo de<br/>Facebook Alerta Fraude o llamando al (01) 311-9898.</p><p>Nuestros e-mails no incluir&aacute;n archivos adjuntos (a excepci&oacute;n del env&iacute;o de los<br/>estados de cuenta u otros documentos solicitados y/o coordinados previamente con<br/>nosotros).</p><p>Para conocer m&aacute;s sobre las principales modalidades de fraude, aprender a<br/>reconocerlas y c&oacute;mo protegerte, ingresa a <a href=\"https://viabcp.com/seguridad\">https://viabcp.com/seguridad</a><br/>[<a href=\"https://u26359554.ct.sendgrid.net/ls/click?upn=u001.DtCEeoktqlDnDkwdvigZH4G-2Fp-2FgdvUvtYhHkWHsA5zjX0hSY8RSmSpGCWjNU8lhkjzZh_g3xO92tk5C2mUIxoA-2BfKip1EtrvmRpil2gzlcOreuMTyKZoeV2b8PhP2QIcnWTEx2493429veMbpt54QOgpx6Sr0EYrTe4xvLbLuHq9PIHKo499pv5FfvRKlyqS9hJT73g4-2BFCU-2Bjfs-2BrGcW-2BomVYcxI1fgoZ3K27vTsNu-2FXrEnAdsy6f-2BnJCRpfvj44Os4W3ifK41al-2Bh8Y7UdWadOxiDY3I0Oy29tkHeCjLsC-2FqQk-3D\">https://u26359554.ct.sendgrid.net/ls/click?upn=u001.DtCEeoktqlDnDkwdvigZH4G-2Fp-2FgdvUvtYhHkWHsA5zjX0hSY8RSmSpGCWjNU8lhkjzZh_g3xO92tk5C2mUIxoA-2BfKip1EtrvmRpil2gzlcOreuMTyKZoeV2b8PhP2QIcnWTEx2493429veMbpt54QOgpx6Sr0EYrTe4xvLbLuHq9PIHKo499pv5FfvRKlyqS9hJT73g4-2BFCU-2Bjfs-2BrGcW-2BomVYcxI1fgoZ3K27vTsNu-2FXrEnAdsy6f-2BnJCRpfvj44Os4W3ifK41al-2Bh8Y7UdWadOxiDY3I0Oy29tkHeCjLsC-2FqQk-3D</a>]<br/>y mantente atento a las publicaciones peri&oacute;dicas que realizamos en nuestras<br/>redes sociales.</p><p>&nbsp;</p><p>Si deseas desafiliarte del Servicio de Notificaciones BCP, puedes realizarlo<br/>respondiendo al correo <a href=\"mailto:notificacionescrm@bcp.com.pe\">notificacionescrm@bcp.com.pe</a> con el asunto &ldquo;REMOVER&rdquo;. Ten<br/>en cuenta que al elegir esta opci&oacute;n dejar&aacute;s de recibir notificaciones por las<br/>operaciones que se realicen con todas tus Tarjetas BCP. Si este correo omite<br/>vocales, tildes, letras &ntilde; o &eacute;stas son cambiadas por otros caracteres, no se debe<br/>a errores ortogr&aacute;ficos del Banco de Cr&eacute;dito BCP. Esto puede originarse por la<br/>configuraci&oacute;n del servidor de tu correo o la versi&oacute;n de tu navegador. El sistema<br/>de correo electr&oacute;nico del BCP est&aacute; destinado &uacute;nicamente para fines de negocio,<br/>cualquier otro uso contraviene las pol&iacute;ticas del Banco. Toda la informaci&oacute;n del<br/>negocio contenida en este mensaje es confidencial y de uso exclusivo del BCP. Su<br/>divulgaci&oacute;n, copia y/o adulteraci&oacute;n est&aacute;n prohibidas y solo debe ser conocida<br/>por la persona a quien se dirige este mensaje.</p><p>&nbsp;</p><p>[<a href=\"https://u26359554.ct.sendgrid.net/wf/open?upn=u001.4mv6xc4IiiEpmZZrpMJHYn-2Bvx70KCay1O1dOtPyfxt0VfO5FyWqlXHNyN0LIXxpvlRcMBCNV5KbvOz30tDVdDW4krYoZS91lFPfKeBWIp8Wx-2FXO6CRXHaGc7ubo9O56NuKeePFgPZBoD4cd0hOMum7aZD2jde-2FG9wL2ziI1rNQsPHNIML-2BJaBIRjsENsw7AMQfZv4RB4hAJ22qw43xf7TKLH3TQWvtHdKt2UoLEwwYQ-3D\">https://u26359554.ct.sendgrid.net/wf/open?upn=u001.4mv6xc4IiiEpmZZrpMJHYn-2Bvx70KCay1O1dOtPyfxt0VfO5FyWqlXHNyN0LIXxpvlRcMBCNV5KbvOz30tDVdDW4krYoZS91lFPfKeBWIp8Wx-2FXO6CRXHaGc7ubo9O56NuKeePFgPZBoD4cd0hOMum7aZD2jde-2FG9wL2ziI1rNQsPHNIML-2BJaBIRjsENsw7AMQfZv4RB4hAJ22qw43xf7TKLH3TQWvtHdKt2UoLEwwYQ-3D</a>]</p>",
+          "subject": "Realizaste un consumo con tu Tarjeta de Débito BCP - Servicio de Notificaciones BCP",
+          "date": "2025-08-14T01:55:28.000Z",
+          "to": {
+            "value": [
+              {
+                "address": "josemisaelabanto@gmail.com",
+                "name": ""
+              }
+            ],
+            "html": "<span class=\"mp_address_group\"><a href=\"mailto:josemisaelabanto@gmail.com\" class=\"mp_address_email\">josemisaelabanto@gmail.com</a></span>",
+            "text": "josemisaelabanto@gmail.com"
+          },
+          "from": {
+            "value": [
+              {
+                "address": "notificaciones@notificacionesbcp.com.pe",
+                "name": "BCP Notificaciones"
+              }
+            ],
+            "html": "<span class=\"mp_address_group\"><span class=\"mp_address_name\">BCP Notificaciones</span> &lt;<a href=\"mailto:notificaciones@notificacionesbcp.com.pe\" class=\"mp_address_email\">notificaciones@notificacionesbcp.com.pe</a>&gt;</span>",
+            "text": "\"BCP Notificaciones\" <notificaciones@notificacionesbcp.com.pe>"
+          },
+          "messageId": "<2lhMPuDISNGR0PftFUXtFQ@geopod-ismtpd-16>"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "If is transaction": {
+      "main": [
+        [
+          {
+            "node": "Get categories",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get tags",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "If modification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "If text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get categories": {
+      "main": [
+        [
+          {
+            "node": "Agg categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get tags": {
+      "main": [
+        [
+          {
+            "node": "Agg tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get accounts": {
+      "main": [
+        [
+          {
+            "node": "Agg accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agg categories": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agg tags": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Agg accounts": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Save transaction": {
+      "main": [
+        [
+          {
+            "node": "Send notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "SpendTracker",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "SpendTracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "SpendTracker",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If text": {
+      "main": [
+        [
+          {
+            "node": "Transaction detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If has account id": {
+      "main": [
+        [
+          {
+            "node": "Save transaction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail incoming emails": {
+      "main": [
+        [
+          {
+            "node": "If text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit transaction keys": {
+      "main": [
+        [
+          {
+            "node": "Get categories1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get tags1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update transaction description": {
+      "main": [
+        [
+          {
+            "node": "Send update notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get categories1": {
+      "main": [
+        [
+          {
+            "node": "Agg accounts1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If delete": {
+      "main": [
+        [
+          {
+            "node": "Extract transaction id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit transaction keys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If modification": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If delete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify transaction": {
+      "main": [
+        [
+          {
+            "node": "Update transaction description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SpendTracker": {
+      "main": [
+        [
+          {
+            "node": "If has account id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transaction detector": {
+      "main": [
+        [
+          {
+            "node": "If is transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agg accounts1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Delete table or rows": {
+      "main": [
+        [
+          {
+            "node": "Send delete notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract transaction id": {
+      "main": [
+        [
+          {
+            "node": "Delete table or rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get tags1": {
+      "main": [
+        [
+          {
+            "node": "Agg tags1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agg tags1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Classify transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ac469cc5-4637-481c-8dd5-db9903f38b74",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "094e390ef22a21802b648108d4c0197187f2224b8fbae8a141b1c1e0efb8bd5c"
+  },
+  "id": "sOMvr3HabcnxjTSz",
+  "tags": [
+    {
+      "updatedAt": "2025-04-08T21:23:35.657Z",
+      "createdAt": "2025-04-08T21:23:35.657Z",
+      "id": "6NfkIgZLM8jKwBSD",
+      "name": "spendtracker"
+    }
+  ]
+}
