@@ -53,63 +53,42 @@ async function request<TResponse>(path: string, init?: RequestInit): Promise<TRe
   return (await response.json()) as TResponse
 }
 
-export const transactionsApi = {
-  list: () => request<Transaction[]>('/transactions'),
-  get: (transactionId: string) => request<Transaction>(`/transactions/${transactionId}`),
-  create: (payload: NewTransaction) =>
-    request<Transaction>('/transactions', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  update: (transactionId: string, payload: TransactionUpdate) =>
-    request<Transaction>(`/transactions/${transactionId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  remove: (transactionId: string) =>
-    request<{ success: boolean }>(`/transactions/${transactionId}`, {
-      method: 'DELETE',
-    }),
+export interface ResourceApi<Entity, NewEntity, UpdateEntity> {
+  list: () => Promise<Entity[]>
+  get: (id: string) => Promise<Entity>
+  create: (payload: NewEntity) => Promise<Entity>
+  update: (id: string, payload: UpdateEntity) => Promise<Entity>
+  remove: (id: string) => Promise<{ success: boolean }>
 }
 
-export const accountsApi = {
-  list: () => request<Account[]>('/accounts'),
-  get: (accountId: string) => request<Account>(`/accounts/${accountId}`),
-  create: (payload: NewAccount) =>
-    request<Account>('/accounts', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  update: (accountId: string, payload: AccountUpdate) =>
-    request<Account>(`/accounts/${accountId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  remove: (accountId: string) =>
-    request<{ success: boolean }>(`/accounts/${accountId}`, {
-      method: 'DELETE',
-    }),
+// All three CRUD resources share the same REST shape; only the path segment and
+// types differ. One factory keeps them in sync.
+function createResourceApi<Entity, NewEntity, UpdateEntity>(
+  path: string,
+): ResourceApi<Entity, NewEntity, UpdateEntity> {
+  return {
+    list: () => request<Entity[]>(`/${path}`),
+    get: (id) => request<Entity>(`/${path}/${id}`),
+    create: (payload) =>
+      request<Entity>(`/${path}`, { method: 'POST', body: JSON.stringify(payload) }),
+    update: (id, payload) =>
+      request<Entity>(`/${path}/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    remove: (id) => request<{ success: boolean }>(`/${path}/${id}`, { method: 'DELETE' }),
+  }
 }
 
-export const categoriesApi = {
-  list: () => request<Category[]>('/categories'),
-  get: (categoryId: string) => request<Category>(`/categories/${categoryId}`),
-  create: (payload: NewCategory) =>
-    request<Category>('/categories', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  update: (categoryId: string, payload: CategoryUpdate) =>
-    request<Category>(`/categories/${categoryId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    }),
-  remove: (categoryId: string) =>
-    request<{ success: boolean }>(`/categories/${categoryId}`, {
-      method: 'DELETE',
-    }),
-}
+export const transactionsApi = createResourceApi<Transaction, NewTransaction, TransactionUpdate>(
+  'transactions',
+)
+export const accountsApi = createResourceApi<Account, NewAccount, AccountUpdate>('accounts')
+export const categoriesApi = createResourceApi<Category, NewCategory, CategoryUpdate>('categories')
 
 export const tagsApi = {
   list: () => request<string[]>('/tags'),
+}
+
+export function toErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message
+  if (error instanceof Error) return error.message
+  return 'Something went wrong'
 }
