@@ -78,7 +78,7 @@ export function TransactionFormDialog({
         amount: String(transaction.amount ?? ''),
         currency: transaction.currency,
         accountId: transaction.account_id,
-        categoryId: transaction.category_id ?? '',
+        categoryId: transaction.category_id,
         tags: transaction.tags.join(', '),
       })
     } else {
@@ -235,7 +235,14 @@ export function TransactionFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              disabled={
+                isSubmitting ||
+                !formState.categoryId ||
+                (!isEditing && !formState.accountId)
+              }
+            >
               {isSubmitting ? 'Saving...' : isEditing ? 'Save changes' : 'Create transaction'}
             </Button>
           </DialogFooter>
