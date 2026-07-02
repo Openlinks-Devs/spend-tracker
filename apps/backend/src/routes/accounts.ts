@@ -9,7 +9,7 @@ import {
   insertAccount,
   updateAccount,
 } from '../db/queries.js'
-import { zodErrorMessage } from './validation.js'
+import { parseJsonBody } from './validation.js'
 
 const newAccountSchema = z.object({
   name: z.string().min(1),
@@ -48,15 +48,9 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
   })
 
   route.post('/api/accounts', async (context) => {
-    let body: unknown
-    try {
-      body = await context.req.json()
-    } catch {
-      return context.json({ error: 'Invalid JSON body' }, 400)
-    }
-    const parsed = newAccountSchema.safeParse(body)
+    const parsed = await parseJsonBody(context, newAccountSchema)
     if (!parsed.success) {
-      return context.json({ error: zodErrorMessage(parsed.error) }, 400)
+      return context.json({ error: parsed.error }, 400)
     }
     try {
       const db = resolveDb()
@@ -71,15 +65,9 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
 
   route.patch('/api/accounts/:id', async (context) => {
     const id = context.req.param('id')
-    let body: unknown
-    try {
-      body = await context.req.json()
-    } catch {
-      return context.json({ error: 'Invalid JSON body' }, 400)
-    }
-    const parsed = accountUpdateSchema.safeParse(body)
+    const parsed = await parseJsonBody(context, accountUpdateSchema)
     if (!parsed.success) {
-      return context.json({ error: zodErrorMessage(parsed.error) }, 400)
+      return context.json({ error: parsed.error }, 400)
     }
     try {
       const db = resolveDb()

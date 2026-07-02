@@ -9,7 +9,7 @@ import {
   insertCategory,
   updateCategory,
 } from '../db/queries.js'
-import { zodErrorMessage } from './validation.js'
+import { parseJsonBody } from './validation.js'
 
 const newCategorySchema = z.object({
   name: z.string().min(1),
@@ -46,15 +46,9 @@ export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hon
   })
 
   route.post('/api/categories', async (context) => {
-    let body: unknown
-    try {
-      body = await context.req.json()
-    } catch {
-      return context.json({ error: 'Invalid JSON body' }, 400)
-    }
-    const parsed = newCategorySchema.safeParse(body)
+    const parsed = await parseJsonBody(context, newCategorySchema)
     if (!parsed.success) {
-      return context.json({ error: zodErrorMessage(parsed.error) }, 400)
+      return context.json({ error: parsed.error }, 400)
     }
     try {
       const db = resolveDb()
@@ -69,15 +63,9 @@ export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hon
 
   route.patch('/api/categories/:id', async (context) => {
     const id = context.req.param('id')
-    let body: unknown
-    try {
-      body = await context.req.json()
-    } catch {
-      return context.json({ error: 'Invalid JSON body' }, 400)
-    }
-    const parsed = categoryUpdateSchema.safeParse(body)
+    const parsed = await parseJsonBody(context, categoryUpdateSchema)
     if (!parsed.success) {
-      return context.json({ error: zodErrorMessage(parsed.error) }, 400)
+      return context.json({ error: parsed.error }, 400)
     }
     try {
       const db = resolveDb()

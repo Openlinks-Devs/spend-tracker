@@ -9,7 +9,7 @@ import {
   insertTransaction,
   updateTransaction,
 } from '../db/queries.js'
-import { zodErrorMessage } from './validation.js'
+import { parseJsonBody } from './validation.js'
 
 const newTransactionSchema = z.object({
   description: z.string().min(1),
@@ -52,15 +52,9 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
   })
 
   route.post('/api/transactions', async (context) => {
-    let body: unknown
-    try {
-      body = await context.req.json()
-    } catch {
-      return context.json({ error: 'Invalid JSON body' }, 400)
-    }
-    const parsed = newTransactionSchema.safeParse(body)
+    const parsed = await parseJsonBody(context, newTransactionSchema)
     if (!parsed.success) {
-      return context.json({ error: zodErrorMessage(parsed.error) }, 400)
+      return context.json({ error: parsed.error }, 400)
     }
     try {
       const db = resolveDb()
@@ -83,15 +77,9 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
 
   route.patch('/api/transactions/:id', async (context) => {
     const id = context.req.param('id')
-    let body: unknown
-    try {
-      body = await context.req.json()
-    } catch {
-      return context.json({ error: 'Invalid JSON body' }, 400)
-    }
-    const parsed = transactionUpdateSchema.safeParse(body)
+    const parsed = await parseJsonBody(context, transactionUpdateSchema)
     if (!parsed.success) {
-      return context.json({ error: zodErrorMessage(parsed.error) }, 400)
+      return context.json({ error: parsed.error }, 400)
     }
     try {
       const db = resolveDb()
@@ -100,7 +88,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       await updateTransaction(db, {
         id,
         description: parsed.data.description ?? existing.description,
-        category_id: parsed.data.category_id ?? existing.category_id ?? '',
+        category_id: parsed.data.category_id ?? existing.category_id,
         tags: parsed.data.tags ?? existing.tags,
       })
       const transaction = await getTransactionById(db, id)
