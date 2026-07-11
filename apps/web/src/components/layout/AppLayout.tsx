@@ -1,12 +1,12 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Receipt, Wallet, Tags } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router'
+import { IconLayoutDashboard, IconReceipt, IconWallet, IconTags } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 
 const navigationItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/transactions', label: 'Transactions', icon: Receipt, end: false },
-  { to: '/accounts', label: 'Accounts', icon: Wallet, end: false },
-  { to: '/categories', label: 'Categories', icon: Tags, end: false },
+  { to: '/', label: 'Dashboard', icon: IconLayoutDashboard, end: true },
+  { to: '/transactions', label: 'Transactions', icon: IconReceipt, end: false },
+  { to: '/accounts', label: 'Accounts', icon: IconWallet, end: false },
+  { to: '/categories', label: 'Categories', icon: IconTags, end: false },
 ]
 
 export function AppLayout() {
@@ -40,7 +40,7 @@ export function AppLayout() {
           })}
         </nav>
       </aside>
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center gap-4 border-b bg-background px-6 md:hidden">
           <span className="text-lg font-semibold">SpendTracker</span>
           <nav className="flex gap-2 overflow-x-auto">

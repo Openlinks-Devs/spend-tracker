@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -17,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toDatetimeLocalValue } from '@/lib/utils'
 import type { Account, Category, NewTransaction, Transaction, TransactionUpdate } from '@/types'
 
 interface TransactionFormDialogProps {
@@ -38,6 +40,7 @@ interface TransactionFormState {
   accountId: string
   categoryId: string
   tags: string
+  date: string
 }
 
 const emptyFormState: TransactionFormState = {
@@ -47,6 +50,7 @@ const emptyFormState: TransactionFormState = {
   accountId: '',
   categoryId: '',
   tags: '',
+  date: '',
 }
 
 function parseTags(rawTags: string): string[] {
@@ -80,6 +84,7 @@ export function TransactionFormDialog({
         accountId: transaction.account_id,
         categoryId: transaction.category_id,
         tags: transaction.tags.join(', '),
+        date: toDatetimeLocalValue(transaction.created_at),
       })
     } else {
       setFormState({
@@ -87,17 +92,23 @@ export function TransactionFormDialog({
         accountId: accounts[0]?.id ?? '',
         categoryId: categories[0]?.id ?? '',
         currency: accounts[0]?.currency ?? 'USD',
+        date: toDatetimeLocalValue(new Date()),
       })
     }
   }, [open, transaction, accounts, categories])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const createdAt = formState.date ? new Date(formState.date).toISOString() : undefined
     if (isEditing && transaction) {
       onUpdate(transaction.id, {
         description: formState.description,
+        amount: Number(formState.amount),
+        currency: formState.currency,
+        account_id: formState.accountId,
         category_id: formState.categoryId,
         tags: parseTags(formState.tags),
+        created_at: createdAt,
       })
       return
     }
@@ -108,6 +119,7 @@ export function TransactionFormDialog({
       account_id: formState.accountId,
       category_id: formState.categoryId,
       tags: parseTags(formState.tags),
+      created_at: createdAt,
     })
   }
 
@@ -118,7 +130,7 @@ export function TransactionFormDialog({
           <DialogTitle>{isEditing ? 'Edit transaction' : 'New transaction'}</DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Update the description, category, or tags for this transaction.'
+              ? 'Update any detail of this transaction.'
               : 'Record a new transaction with amount, account, and category.'}
           </DialogDescription>
         </DialogHeader>
@@ -146,8 +158,7 @@ export function TransactionFormDialog({
                 onChange={(event) =>
                   setFormState((current) => ({ ...current, amount: event.target.value }))
                 }
-                disabled={isEditing}
-                required={!isEditing}
+                required
               />
             </div>
             <div className="space-y-2">
@@ -161,8 +172,7 @@ export function TransactionFormDialog({
                     currency: event.target.value.toUpperCase(),
                   }))
                 }
-                disabled={isEditing}
-                required={!isEditing}
+                required
                 maxLength={3}
               />
             </div>
@@ -175,7 +185,6 @@ export function TransactionFormDialog({
               onValueChange={(value) =>
                 setFormState((current) => ({ ...current, accountId: value }))
               }
-              disabled={isEditing}
             >
               <SelectTrigger id="transaction-account">
                 <SelectValue placeholder="Select an account" />
@@ -212,6 +221,15 @@ export function TransactionFormDialog({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="transaction-date">Date</Label>
+            <DateTimePicker
+              id="transaction-date"
+              value={formState.date}
+              onChange={(date) => setFormState((current) => ({ ...current, date }))}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="transaction-tags">Tags</Label>
             <Input
               id="transaction-tags"
@@ -223,27 +241,23 @@ export function TransactionFormDialog({
             />
           </div>
 
-          {isEditing ? (
-            <p className="text-sm text-muted-foreground">
-              Amount, currency, and account cannot be changed after a transaction is created.
-            </p>
-          ) : null}
-
           {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={
-                isSubmitting ||
-                !formState.categoryId ||
-                (!isEditing && !formState.accountId)
-              }
+              loading={isSubmitting}
+              disabled={!formState.categoryId || !formState.accountId}
             >
-              {isSubmitting ? 'Saving...' : isEditing ? 'Save changes' : 'Create transaction'}
+              {isEditing ? 'Save changes' : 'Create transaction'}
             </Button>
           </DialogFooter>
         </form>
