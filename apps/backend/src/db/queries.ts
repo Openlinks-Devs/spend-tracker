@@ -130,9 +130,19 @@ export async function insertTransaction(
 export async function updateTransaction(db: Queryable, update: TransactionUpdate): Promise<void> {
   await db.query(
     `UPDATE transactions
-       SET description = $2, category_id = $3, tags = $4, updated_at = now()
+       SET description = $2, amount = $3, currency = $4, account_id = $5,
+           category_id = $6, tags = $7, created_at = $8, updated_at = now()
      WHERE id = $1`,
-    [update.id, update.description, update.category_id, update.tags],
+    [
+      update.id,
+      update.description,
+      update.amount,
+      update.currency,
+      update.account_id,
+      update.category_id,
+      update.tags,
+      update.created_at,
+    ],
   )
 }
 

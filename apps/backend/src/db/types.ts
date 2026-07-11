@@ -60,6 +60,10 @@ export interface NewTransaction {
 export interface TransactionUpdate {
   id: string
   description: string
+  amount: number
+  currency: string
+  account_id: string
   category_id: string
   tags: string[]
+  created_at: string
 }
