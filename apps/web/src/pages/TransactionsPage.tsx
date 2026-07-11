@@ -1,16 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { IconPlus } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { TransactionFormDialog } from '@/components/transactions/TransactionFormDialog'
+import { TransactionListItem } from '@/components/transactions/TransactionListItem'
 import {
   useCreateTransaction,
   useDeleteTransaction,
@@ -19,9 +13,49 @@ import {
 } from '@/hooks/useTransactions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
-import { formatCurrency, formatDate, toNameById } from '@/lib/utils'
+import { formatCurrency, formatDayLabel, toDayKey, toNameById } from '@/lib/utils'
 import { toErrorMessage } from '@/lib/api'
 import type { NewTransaction, Transaction, TransactionUpdate } from '@/types'
+
+interface DayGroup {
+  dayKey: string
+  dayLabel: string
+  netByCurrency: Map<string, number>
+  transactions: Transaction[]
+}
+
+function groupTransactionsByDay(transactions: Transaction[]): DayGroup[] {
+  const sorted = [...transactions].sort(
+    (first, second) =>
+      new Date(second.created_at).getTime() - new Date(first.created_at).getTime(),
+  )
+  const groups: DayGroup[] = []
+  for (const transaction of sorted) {
+    const dayKey = toDayKey(transaction.created_at)
+    let group = groups[groups.length - 1]
+    if (!group || group.dayKey !== dayKey) {
+      group = {
+        dayKey,
+        dayLabel: formatDayLabel(transaction.created_at),
+        netByCurrency: new Map(),
+        transactions: [],
+      }
+      groups.push(group)
+    }
+    group.transactions.push(transaction)
+    group.netByCurrency.set(
+      transaction.currency,
+      (group.netByCurrency.get(transaction.currency) ?? 0) + transaction.amount,
+    )
+  }
+  return groups
+}
+
+function formatDayNet(netByCurrency: Map<string, number>): string {
+  return Array.from(netByCurrency.entries())
+    .map(([currency, net]) => formatCurrency(net, currency))
+    .join(' · ')
+}
 
 export function TransactionsPage() {
   const transactionsQuery = useTransactions()
@@ -34,6 +68,8 @@ export function TransactionsPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   const accounts = accountsQuery.data ?? []
@@ -43,6 +79,8 @@ export function TransactionsPage() {
   const accountNameById = useMemo(() => toNameById(accounts), [accounts])
 
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
+
+  const dayGroups = useMemo(() => groupTransactionsByDay(transactions), [transactions])
 
   function openCreateDialog() {
     setEditingTransaction(null)
@@ -75,10 +113,18 @@ export function TransactionsPage() {
     )
   }
 
-  function handleDelete(transaction: Transaction) {
-    const confirmed = window.confirm(`Delete transaction "${transaction.description}"?`)
-    if (!confirmed) return
-    deleteTransaction.mutate(transaction.id)
+  function openDeleteDialog(transaction: Transaction) {
+    setDeleteError(null)
+    setDeletingTransaction(transaction)
+  }
+
+  function handleConfirmDelete() {
+    if (!deletingTransaction) return
+    setDeleteError(null)
+    deleteTransaction.mutate(deletingTransaction.id, {
+      onSuccess: () => setDeletingTransaction(null),
+      onError: (error) => setDeleteError(toErrorMessage(error)),
+    })
   }
 
   return (
@@ -89,7 +135,7 @@ export function TransactionsPage() {
           <p className="text-sm text-muted-foreground">Create, edit, and remove transactions</p>
         </div>
         <Button onClick={openCreateDialog} disabled={accounts.length === 0 || categories.length === 0}>
-          <Plus className="h-4 w-4" />
+          <IconPlus className="h-4 w-4" />
           New transaction
         </Button>
       </div>
@@ -111,62 +157,54 @@ export function TransactionsPage() {
           ) : transactions.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No transactions yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Tags</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell className="font-medium">{transaction.description}</TableCell>
-                    <TableCell>
-                      {accountNameById.get(transaction.account_id) ?? transaction.account_id}
-                    </TableCell>
-                    <TableCell>
-                      {categoryNameById.get(transaction.category_id) ?? 'Uncategorized'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {transaction.tags.length > 0 ? transaction.tags.join(', ') : '-'}
-                    </TableCell>
-                    <TableCell>{formatDate(transaction.created_at)}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(transaction.amount, transaction.currency)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(transaction)}
-                          aria-label="Edit transaction"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(transaction)}
-                          aria-label="Delete transaction"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div>
+              {dayGroups.map((dayGroup) => (
+                <section key={dayGroup.dayKey} className="border-b last:border-b-0">
+                  <header className="flex items-baseline justify-between gap-4 border-b bg-muted/40 px-6 py-2">
+                    <h2 className="text-sm font-medium">{dayGroup.dayLabel}</h2>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {formatDayNet(dayGroup.netByCurrency)}
+                    </span>
+                  </header>
+                  <ul className="divide-y">
+                    {dayGroup.transactions.map((transaction) => (
+                      <TransactionListItem
+                        key={transaction.id}
+                        transaction={transaction}
+                        accountName={
+                          accountNameById.get(transaction.account_id) ?? transaction.account_id
+                        }
+                        categoryName={
+                          categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
+                        }
+                        onEdit={openEditDialog}
+                        onDelete={openDeleteDialog}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deletingTransaction !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingTransaction(null)
+        }}
+        title="Delete transaction?"
+        description={
+          deletingTransaction
+            ? `"${deletingTransaction.description}" will be permanently removed.`
+            : ''
+        }
+        confirmLabel="Delete"
+        onConfirm={handleConfirmDelete}
+        isPending={deleteTransaction.isPending}
+        errorMessage={deleteError}
+      />
 
       <TransactionFormDialog
         open={isDialogOpen}

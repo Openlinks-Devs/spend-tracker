@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   Dialog,
   DialogContent,
@@ -12,14 +13,6 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import {
   useAccounts,
   useCreateAccount,
@@ -45,6 +38,8 @@ export function AccountsPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
+  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [formState, setFormState] = useState<AccountFormState>(emptyFormState)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -95,10 +90,18 @@ export function AccountsPage() {
     })
   }
 
-  function handleDelete(account: Account) {
-    const confirmed = window.confirm(`Delete account "${account.name}"?`)
-    if (!confirmed) return
-    deleteAccount.mutate(account.id)
+  function openDeleteDialog(account: Account) {
+    setDeleteError(null)
+    setDeletingAccount(account)
+  }
+
+  function handleConfirmDelete() {
+    if (!deletingAccount) return
+    setDeleteError(null)
+    deleteAccount.mutate(deletingAccount.id, {
+      onSuccess: () => setDeletingAccount(null),
+      onError: (error) => setDeleteError(toErrorMessage(error)),
+    })
   }
 
   return (
@@ -109,7 +112,7 @@ export function AccountsPage() {
           <p className="text-sm text-muted-foreground">Manage the accounts you track</p>
         </div>
         <Button onClick={openCreateDialog}>
-          <Plus className="h-4 w-4" />
+          <IconPlus className="h-4 w-4" />
           New account
         </Button>
       </div>
@@ -123,48 +126,56 @@ export function AccountsPage() {
           ) : accounts.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No accounts yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Currency</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {accounts.map((account) => (
-                  <TableRow key={account.id}>
-                    <TableCell className="font-medium">{account.name}</TableCell>
-                    <TableCell>{account.type}</TableCell>
-                    <TableCell>{account.currency}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(account)}
-                          aria-label="Edit account"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(account)}
-                          aria-label="Delete account"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <ul className="divide-y">
+              {accounts.map((account) => (
+                <li key={account.id} className="flex items-center justify-between gap-4 px-6 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{account.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {account.type} · {account.currency}
+                    </p>
+                  </div>
+                  <div className="-mr-2 flex shrink-0 gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEditDialog(account)}
+                      aria-label="Edit account"
+                    >
+                      <IconPencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => openDeleteDialog(account)}
+                      aria-label="Delete account"
+                    >
+                      <IconTrash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deletingAccount !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingAccount(null)
+        }}
+        title="Delete account?"
+        description={
+          deletingAccount ? `"${deletingAccount.name}" will be permanently removed.` : ''
+        }
+        confirmLabel="Delete"
+        onConfirm={handleConfirmDelete}
+        isPending={deleteAccount.isPending}
+        errorMessage={deleteError}
+      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
@@ -216,15 +227,16 @@ export function AccountsPage() {
             </div>
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={createAccount.isPending || updateAccount.isPending}
+                onClick={() => setIsDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createAccount.isPending || updateAccount.isPending}>
-                {createAccount.isPending || updateAccount.isPending
-                  ? 'Saving...'
-                  : isEditing
-                    ? 'Save changes'
-                    : 'Create account'}
+              <Button type="submit" loading={createAccount.isPending || updateAccount.isPending}>
+                {isEditing ? 'Save changes' : 'Create account'}
               </Button>
             </DialogFooter>
           </form>

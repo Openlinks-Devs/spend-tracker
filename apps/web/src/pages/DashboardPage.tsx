@@ -1,18 +1,11 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { TransactionListItem } from '@/components/transactions/TransactionListItem'
 import { useTransactions } from '@/hooks/useTransactions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
-import { formatCurrency, formatDate, toNameById } from '@/lib/utils'
+import { formatCurrency, toNameById } from '@/lib/utils'
 import type { Transaction } from '@/types'
 
 function pickPrimaryCurrency(transactions: Transaction[]): string {
@@ -135,58 +128,50 @@ export function DashboardPage() {
               ) : recentTransactions.length === 0 ? (
                 <p className="py-6 text-sm text-muted-foreground">No transactions yet.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Account</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentTransactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell className="font-medium">{transaction.description}</TableCell>
-                        <TableCell>
-                          {accountNameById.get(transaction.account_id) ?? transaction.account_id}
-                        </TableCell>
-                        <TableCell>
-                          {categoryNameById.get(transaction.category_id) ?? 'Uncategorized'}
-                        </TableCell>
-                        <TableCell>{formatDate(transaction.created_at)}</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(transaction.amount, transaction.currency)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <ul className="-mx-6 divide-y">
+                  {recentTransactions.map((transaction) => (
+                    <TransactionListItem
+                      key={transaction.id}
+                      transaction={transaction}
+                      accountName={
+                        accountNameById.get(transaction.account_id) ?? transaction.account_id
+                      }
+                      categoryName={
+                        categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
+                      }
+                      showDate
+                    />
+                  ))}
+                </ul>
               )}
             </TabsContent>
             <TabsContent value="categories">
               {spendingByCategory.length === 0 ? (
                 <p className="py-6 text-sm text-muted-foreground">No spending recorded yet.</p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Spend</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {spendingByCategory.map((categorySpend) => (
-                      <TableRow key={categorySpend.categoryName}>
-                        <TableCell className="font-medium">{categorySpend.categoryName}</TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(categorySpend.total, summary.primaryCurrency)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <ul className="space-y-4 py-4">
+                  {spendingByCategory.map((categorySpend) => {
+                    const largestTotal = spendingByCategory[0].total
+                    const shareOfLargest =
+                      largestTotal > 0 ? (categorySpend.total / largestTotal) * 100 : 0
+                    return (
+                      <li key={categorySpend.categoryName}>
+                        <div className="flex items-baseline justify-between gap-4 text-sm">
+                          <span className="truncate font-medium">{categorySpend.categoryName}</span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {formatCurrency(categorySpend.total, summary.primaryCurrency)}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${shareOfLargest}%` }}
+                          />
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
             </TabsContent>
           </Tabs>
