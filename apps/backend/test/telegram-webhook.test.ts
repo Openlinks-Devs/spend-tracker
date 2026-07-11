@@ -5,6 +5,12 @@ function deps(overrides: Record<string, unknown> = {}) {
   const db = { query: vi.fn(async (sql: string, params?: unknown[]) => {
     if (/from categories/i.test(sql)) return { rows: [{ id: 'c1', name: 'Food', type: 'expense' }] }
     if (/unnest/i.test(sql)) return { rows: [{ tag: 'food' }] }
+    if (/select[\s\S]*from transactions/i.test(sql))
+      return { rows: [{
+        id: 'tx-1', description: 'Almuerzo viejo', amount: -25, currency: 'PEN',
+        account_id: 'a1', category_id: 'c1', tags: ['food'],
+        created_at: '2026-06-30T10:00:00.000Z', updated_at: null,
+      }] }
     return { rows: [] }
   }) }
   return {

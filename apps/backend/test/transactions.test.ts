@@ -105,7 +105,77 @@ describe('transactions route', () => {
     })
     expect(response.status).toBe(200)
     const updateParams = db.query.mock.calls[1][1]
-    expect(updateParams[2]).toBe('c1')
+    expect(updateParams[5]).toBe('c1')
+  })
+
+  it('PATCH /api/transactions/:id updates amount, currency, account, and date', async () => {
+    const updatedTransaction = {
+      ...sampleTransaction,
+      amount: -99.9,
+      currency: 'USD',
+      account_id: 'a2',
+      created_at: '2026-07-01T08:30:00.000Z',
+    }
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleTransaction] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [updatedTransaction] }),
+    }
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions/tx1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        amount: -99.9,
+        currency: 'USD',
+        account_id: 'a2',
+        created_at: '2026-07-01T08:30:00.000Z',
+      }),
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.amount).toBe(-99.9)
+    const updateParams = db.query.mock.calls[1][1]
+    expect(updateParams).toEqual([
+      'tx1',
+      'Coffee',
+      -99.9,
+      'USD',
+      'a2',
+      'c1',
+      ['food'],
+      '2026-07-01T08:30:00.000Z',
+    ])
+  })
+
+  it('PATCH /api/transactions/:id preserves amount, currency, account, and date when omitted', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleTransaction] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
+    }
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions/tx1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ description: 'Tea' }),
+    })
+    expect(response.status).toBe(200)
+    const updateParams = db.query.mock.calls[1][1]
+    expect(updateParams).toEqual([
+      'tx1',
+      'Tea',
+      -12.5,
+      'PEN',
+      'a1',
+      'c1',
+      ['food'],
+      '2026-06-30T10:00:00.000Z',
+    ])
   })
 
   it('PATCH /api/transactions/:id returns 404 when missing', async () => {
