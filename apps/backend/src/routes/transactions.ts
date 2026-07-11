@@ -23,8 +23,12 @@ const newTransactionSchema = z.object({
 
 const transactionUpdateSchema = z.object({
   description: z.string().min(1).optional(),
+  amount: z.number().optional(),
+  currency: z.string().min(1).optional(),
+  account_id: z.string().min(1).optional(),
   category_id: z.string().min(1).optional(),
   tags: z.array(z.string()).optional(),
+  created_at: z.string().min(1).optional(),
 })
 
 export function createTransactionsRoute(resolveDb: () => Queryable = getPool): Hono {
@@ -88,8 +92,12 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       await updateTransaction(db, {
         id,
         description: parsed.data.description ?? existing.description,
+        amount: parsed.data.amount ?? existing.amount,
+        currency: parsed.data.currency ?? existing.currency,
+        account_id: parsed.data.account_id ?? existing.account_id,
         category_id: parsed.data.category_id ?? existing.category_id,
         tags: parsed.data.tags ?? existing.tags,
+        created_at: parsed.data.created_at ?? existing.created_at,
       })
       const transaction = await getTransactionById(db, id)
       return context.json(transaction)
