@@ -1,7 +1,13 @@
 import { Hono } from 'hono'
 import type { Queryable } from '../db/pool.js'
 import { getPool } from '../db/pool.js'
-import { getCategories, getDistinctTags, deleteTransaction, updateTransaction } from '../db/queries.js'
+import {
+  getCategories,
+  getDistinctTags,
+  getTransactionById,
+  deleteTransaction,
+  updateTransaction,
+} from '../db/queries.js'
 import { classifyEdit } from '../ai/classify.js'
 import { sendMessage } from '../telegram/client.js'
 import { formatDeleted, formatUpdatedTransaction } from '../telegram/format.js'
@@ -36,17 +42,23 @@ export async function handleTelegramUpdate(update: TelegramUpdate, deps: Webhook
   }
 
   const edit = parseEdit(message.text)
-  const [categories, tags] = await Promise.all([
+  const [existing, categories, tags] = await Promise.all([
+    getTransactionById(deps.db, transactionId),
     getCategories(deps.db),
     getDistinctTags(deps.db),
   ])
+  if (!existing) return
   const classified = await deps.classify({ description: edit.description, categories, tags })
   const finalTags = edit.tags.length ? edit.tags : classified.tags
   await updateTransaction(deps.db, {
     id: transactionId,
     description: edit.description,
+    amount: existing.amount,
+    currency: existing.currency,
+    account_id: existing.account_id,
     category_id: classified.category_id,
     tags: finalTags,
+    created_at: existing.created_at,
   })
   const category = categories.find((candidate) => candidate.id === classified.category_id)
   await deps.notify(
