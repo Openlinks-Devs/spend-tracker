@@ -57,6 +57,10 @@ export interface NewTransaction {
 
 export interface TransactionUpdate {
   description?: string
+  amount?: number
+  currency?: string
+  account_id?: string
   category_id?: string
   tags?: string[]
+  created_at?: string
 }
