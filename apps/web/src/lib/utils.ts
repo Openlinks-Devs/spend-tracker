@@ -25,6 +25,32 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 })
 
+const timeFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
+const dayLabelFormatter = new Intl.DateTimeFormat('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+})
+
+const dayLabelWithYearFormatter = new Intl.DateTimeFormat('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+})
+
+function isSameDay(first: Date, second: Date): boolean {
+  return (
+    first.getFullYear() === second.getFullYear() &&
+    first.getMonth() === second.getMonth() &&
+    first.getDate() === second.getDate()
+  )
+}
+
 export function formatCurrency(amount: number, currency: string): string {
   const safeAmount = Number.isFinite(amount) ? amount : 0
   const currencyCode = currency || 'USD'
@@ -40,6 +66,41 @@ export function formatDate(value: string | null | undefined): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
   return dateFormatter.format(parsed)
+}
+
+export function formatTime(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return timeFormatter.format(parsed)
+}
+
+export function formatDayLabel(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  const today = new Date()
+  if (isSameDay(parsed, today)) return 'Today'
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  if (isSameDay(parsed, yesterday)) return 'Yesterday'
+  const formatter =
+    parsed.getFullYear() === today.getFullYear() ? dayLabelFormatter : dayLabelWithYearFormatter
+  return formatter.format(parsed)
+}
+
+// Converts an ISO timestamp to the local "YYYY-MM-DDTHH:mm" value that
+// datetime-local inputs require.
+export function toDatetimeLocalValue(value: string | Date): string {
+  const parsed = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+}
+
+// Local-date key ("2026-7-9") used to group ledger entries by calendar day.
+export function toDayKey(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return `${parsed.getFullYear()}-${parsed.getMonth() + 1}-${parsed.getDate()}`
 }
 
 // Builds an id -> name lookup shared by the dashboard and transactions tables.
