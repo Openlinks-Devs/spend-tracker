@@ -1,3 +1,15 @@
+import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach } from 'vitest'
+
+// Testing Library does not auto-register its DOM cleanup unless `afterEach`
+// is a global, and this project does not enable Vitest's `globals` option.
+// Without this, elements from one test's render (and their pointer-events
+// lock on <body> from Radix dialogs) leak into the next test.
+afterEach(() => {
+  cleanup()
+})
+
 // jsdom lacks several DOM APIs that Radix UI (Select, Popover, Dialog) relies on.
 class ResizeObserverStub {
   observe() {}
