@@ -1,12 +1,16 @@
-import { IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconArrowsExchange, IconPencil, IconTrash } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
-import { cn, formatCurrency, formatDate, formatTime } from '@/lib/utils'
+import { cn, formatDate, formatTime } from '@/lib/utils'
+import { formatTransactionAmount, formatTransferRoute } from '@/lib/transactionAmount'
 import type { Transaction } from '@/types'
 
 interface TransactionListItemProps {
   transaction: Transaction
   accountName: string
   categoryName: string
+  baseCurrencyCode: string
+  /** Destination account name, used only for transfer rows. */
+  toAccountName?: string
   /** Show the calendar date instead of the time of day (for ungrouped lists). */
   showDate?: boolean
   onEdit?: (transaction: Transaction) => void
@@ -17,23 +21,43 @@ export function TransactionListItem({
   transaction,
   accountName,
   categoryName,
+  baseCurrencyCode,
+  toAccountName,
   showDate = false,
   onEdit,
   onDelete,
 }: TransactionListItemProps) {
-  const isIncome = transaction.amount > 0
+  const isTransfer = transaction.type === 'transfer'
+  const isIncome = transaction.type === 'income'
   const whenLabel = showDate
-    ? formatDate(transaction.created_at)
-    : formatTime(transaction.created_at)
+    ? formatDate(transaction.occurred_at)
+    : formatTime(transaction.occurred_at)
   const hasActions = Boolean(onEdit || onDelete)
+
+  const detailLine = isTransfer
+    ? formatTransferRoute(accountName, toAccountName ?? transaction.to_account_id ?? '')
+    : `${categoryName} · ${accountName}`
+
+  const amountLabel = formatTransactionAmount(
+    transaction.amount,
+    transaction.currency,
+    transaction.base_amount,
+    baseCurrencyCode,
+  )
 
   return (
     <li className="flex items-start justify-between gap-4 px-6 py-3">
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{transaction.description}</p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-          {whenLabel} · {categoryName} · {accountName}
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+          {isTransfer ? <IconArrowsExchange className="h-4 w-4 text-muted-foreground" /> : null}
+          {transaction.description}
         </p>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+          {whenLabel} · {detailLine}
+        </p>
+        {transaction.payee ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground/80">{transaction.payee}</p>
+        ) : null}
         {transaction.tags.length > 0 ? (
           <p className="mt-1 truncate text-xs text-muted-foreground/80">
             {transaction.tags.map((tag) => `#${tag}`).join(' ')}
@@ -44,11 +68,12 @@ export function TransactionListItem({
         <span
           className={cn(
             'text-sm font-medium tabular-nums',
+            isTransfer && 'text-muted-foreground',
             isIncome && 'text-emerald-600 dark:text-emerald-400',
           )}
         >
-          {isIncome ? '+' : ''}
-          {formatCurrency(transaction.amount, transaction.currency)}
+          {isTransfer ? '' : isIncome ? '+' : '-'}
+          {amountLabel}
         </span>
         {hasActions ? (
           <div className="-mr-2 flex gap-0.5">
