@@ -4,9 +4,12 @@ import type {
   AccountUpdate,
   Category,
   CategoryUpdate,
+  Currency,
+  ExchangeRate,
   NewAccount,
   NewCategory,
   NewTransaction,
+  Settings,
   Transaction,
   TransactionUpdate,
 } from './types.js'
@@ -165,4 +168,78 @@ export async function setState(db: Queryable, key: string, value: string): Promi
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
     [key, value],
   )
+}
+
+export async function getCurrencies(db: Queryable): Promise<Currency[]> {
+  const result = await db.query(
+    'SELECT code, name, symbol, decimal_places FROM currencies ORDER BY code',
+  )
+  return result.rows as Currency[]
+}
+
+export async function getSettings(db: Queryable): Promise<Settings> {
+  const result = await db.query('SELECT id, base_currency_code FROM settings WHERE id = 1')
+  return result.rows.length ? (result.rows[0] as Settings) : { id: 1, base_currency_code: 'PEN' }
+}
+
+export async function updateSettings(
+  db: Queryable,
+  baseCurrencyCode: string,
+): Promise<Settings> {
+  const result = await db.query(
+    `INSERT INTO settings (id, base_currency_code) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE
+       SET base_currency_code = EXCLUDED.base_currency_code, updated_at = now()
+     RETURNING id, base_currency_code`,
+    [baseCurrencyCode],
+  )
+  return result.rows[0] as Settings
+}
+
+export async function currencyExists(db: Queryable, code: string): Promise<boolean> {
+  const result = await db.query('SELECT code FROM currencies WHERE code = $1', [code])
+  return result.rows.length > 0
+}
+
+export async function getExchangeRates(
+  db: Queryable,
+  filters: { quote?: string; from?: string; to?: string },
+): Promise<ExchangeRate[]> {
+  const conditions = ["base_code = 'USD'"]
+  const params: unknown[] = []
+  if (filters.quote) {
+    params.push(filters.quote)
+    conditions.push(`quote_code = $${params.length}`)
+  }
+  if (filters.from) {
+    params.push(filters.from)
+    conditions.push(`date >= $${params.length}`)
+  }
+  if (filters.to) {
+    params.push(filters.to)
+    conditions.push(`date <= $${params.length}`)
+  }
+  const result = await db.query(
+    `SELECT base_code, quote_code, date::text AS date, rate::float8 AS rate, source
+       FROM exchange_rates
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY date DESC, quote_code`,
+    params,
+  )
+  return result.rows as ExchangeRate[]
+}
+
+export async function upsertManualRate(
+  db: Queryable,
+  manualRate: { base_code: string; quote_code: string; date: string; rate: number },
+): Promise<ExchangeRate> {
+  const result = await db.query(
+    `INSERT INTO exchange_rates (base_code, quote_code, date, rate, source)
+     VALUES ($1, $2, $3, $4, 'manual')
+     ON CONFLICT (base_code, quote_code, date) DO UPDATE
+       SET rate = EXCLUDED.rate, source = 'manual', updated_at = now()
+     RETURNING base_code, quote_code, date::text AS date, rate::float8 AS rate, source`,
+    [manualRate.base_code, manualRate.quote_code, manualRate.date, manualRate.rate],
+  )
+  return result.rows[0] as ExchangeRate
 }
