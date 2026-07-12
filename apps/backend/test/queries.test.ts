@@ -10,6 +10,8 @@ import {
   getAccountById,
   insertAccount,
   insertCategory,
+  getTransactionByExternalId,
+  getCurrencyByCode,
 } from '../src/db/queries.js'
 
 function fakeDb(rows: unknown[]) {
@@ -129,5 +131,33 @@ describe('queries', () => {
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/insert into categories/i)
     expect(params).toEqual(['Transport', 'expense'])
+  })
+
+  it('getTransactionByExternalId looks up by external_id', async () => {
+    const db = fakeDb([{ id: 'tx1', external_id: 'gmail-123' }])
+    const transaction = await getTransactionByExternalId(db, 'gmail-123')
+    expect(transaction?.id).toBe('tx1')
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/where external_id = \$1/i)
+    expect(params).toEqual(['gmail-123'])
+  })
+
+  it('getTransactionByExternalId returns null when absent', async () => {
+    const db = fakeDb([])
+    expect(await getTransactionByExternalId(db, 'gmail-404')).toBeNull()
+  })
+
+  it('getCurrencyByCode looks up a currency', async () => {
+    const db = fakeDb([{ code: 'PEN', name: 'Peruvian Sol', symbol: 'S/', decimal_places: 2 }])
+    const currency = await getCurrencyByCode(db, 'PEN')
+    expect(currency?.decimal_places).toBe(2)
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/from currencies/i)
+    expect(params).toEqual(['PEN'])
+  })
+
+  it('getCurrencyByCode returns null for an unknown code', async () => {
+    const db = fakeDb([])
+    expect(await getCurrencyByCode(db, 'XYZ')).toBeNull()
   })
 })

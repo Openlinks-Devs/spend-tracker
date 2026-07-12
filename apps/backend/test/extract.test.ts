@@ -19,12 +19,14 @@ describe('extractTransaction', () => {
       object: {
         description: 'PLIN-MARISELA CALLE', amount: -35, currency: 'PEN',
         account_id: 'a1', category_id: 'c1', tags: ['food', 'plin', 'transfer'],
-        created_at: '2026-06-29T20:55:00.000Z',
+        payee: 'Marisela Calle', occurred_at: '2026-06-29T20:55:00.000Z',
       },
     })
     const result = await extractTransaction({ text: 'Consumo S/ 35.00', ...refs })
     expect(result?.account_id).toBe('a1')
     expect(result?.amount).toBe(-35)
+    expect(result?.payee).toBe('Marisela Calle')
+    expect(result?.occurred_at).toBe('2026-06-29T20:55:00.000Z')
   })
 
   it('returns null when account_id is missing', async () => {
@@ -32,7 +34,7 @@ describe('extractTransaction', () => {
       object: {
         description: 'x', amount: -1, currency: 'PEN',
         account_id: null, category_id: 'c1', tags: ['a', 'b', 'c'],
-        created_at: '2026-06-29T20:55:00.000Z',
+        payee: null, occurred_at: '2026-06-29T20:55:00.000Z',
       },
     })
     const result = await extractTransaction({ text: 'something', ...refs })
@@ -44,7 +46,7 @@ describe('extractTransaction', () => {
       object: {
         description: 'x', amount: -1, currency: 'PEN',
         account_id: 'unknown', category_id: 'c1', tags: ['a', 'b', 'c'],
-        created_at: '2026-06-29T20:55:00.000Z',
+        payee: null, occurred_at: '2026-06-29T20:55:00.000Z',
       },
     })
     const result = await extractTransaction({ text: 'something', ...refs })
@@ -56,10 +58,25 @@ describe('extractTransaction', () => {
       object: {
         description: 'x', amount: -1, currency: 'PEN',
         account_id: 'a1', category_id: 'unknown-category', tags: ['a', 'b', 'c'],
-        created_at: '2026-06-29T20:55:00.000Z',
+        payee: null, occurred_at: '2026-06-29T20:55:00.000Z',
       },
     })
     const result = await extractTransaction({ text: 'something', ...refs })
     expect(result).toBeNull()
+  })
+
+  it('instructs the model to use ISO 4217 codes, payee, and occurred_at', async () => {
+    generateObject.mockResolvedValue({
+      object: {
+        description: 'x', amount: -1, currency: 'PEN',
+        account_id: 'a1', category_id: 'c1', tags: ['a', 'b', 'c'],
+        payee: null, occurred_at: '2026-06-29T20:55:00.000Z',
+      },
+    })
+    await extractTransaction({ text: 'something', ...refs })
+    const callOptions = generateObject.mock.calls[0][0] as { system: string }
+    expect(callOptions.system).toMatch(/ISO 4217/)
+    expect(callOptions.system).toMatch(/payee/)
+    expect(callOptions.system).toMatch(/occurred_at/)
   })
 })
