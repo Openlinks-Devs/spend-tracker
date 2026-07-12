@@ -9,6 +9,7 @@ const schema = z.object({
   GOOGLE_REDIRECT_URI: z.string().min(1),
   GOOGLE_REFRESH_TOKEN: z.string().min(1),
   GMAIL_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
+  EXCHANGERATE_HOST_KEY: z.string().optional(),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_CHAT_ID: z.string().min(1),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1),
