@@ -175,7 +175,9 @@ export function TransactionsPage() {
                           accountNameById.get(transaction.account_id) ?? transaction.account_id
                         }
                         categoryName={
-                          categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
+                          transaction.category_id
+                            ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
+                            : 'Uncategorized'
                         }
                         onEdit={openEditDialog}
                         onDelete={openDeleteDialog}
