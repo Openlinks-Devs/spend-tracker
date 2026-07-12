@@ -89,13 +89,24 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       const db = resolveDb()
       const existing = await getTransactionById(db, id)
       if (!existing) return context.json({ error: 'Transaction not found' }, 404)
+      // category_id is nullable on Transaction as of the multicurrency migration
+      // (transfers have no category), but this legacy route only ever creates
+      // expense/income rows, so a null category here means the existing record
+      // is a transfer this endpoint does not know how to edit yet.
+      const categoryId = parsed.data.category_id ?? existing.category_id
+      if (categoryId === null) {
+        return context.json(
+          { error: 'This transaction has no category to preserve; provide category_id' },
+          400,
+        )
+      }
       await updateTransaction(db, {
         id,
         description: parsed.data.description ?? existing.description,
         amount: parsed.data.amount ?? existing.amount,
         currency: parsed.data.currency ?? existing.currency,
         account_id: parsed.data.account_id ?? existing.account_id,
-        category_id: parsed.data.category_id ?? existing.category_id,
+        category_id: categoryId,
         tags: parsed.data.tags ?? existing.tags,
         created_at: parsed.data.created_at ?? existing.created_at,
       })
