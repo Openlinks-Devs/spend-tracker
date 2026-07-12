@@ -80,6 +80,27 @@ export function TransactionsPage() {
 
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
 
+  const existingPayees = useMemo(() => {
+    const seen = new Set<string>()
+    for (const transaction of transactions) {
+      if (transaction.payee) seen.add(transaction.payee)
+    }
+    return Array.from(seen).sort()
+  }, [transactions])
+
+  // Most recent transaction per payee wins: transactions are already
+  // ordered newest first, so the first category_id seen for a payee is
+  // kept and later, older duplicates are skipped.
+  const payeeCategoryHistory = useMemo(() => {
+    const history: Record<string, string> = {}
+    for (const transaction of transactions) {
+      if (transaction.payee && transaction.category_id && !(transaction.payee in history)) {
+        history[transaction.payee] = transaction.category_id
+      }
+    }
+    return history
+  }, [transactions])
+
   const dayGroups = useMemo(() => groupTransactionsByDay(transactions), [transactions])
 
   function openCreateDialog() {
@@ -213,6 +234,8 @@ export function TransactionsPage() {
         onOpenChange={setIsDialogOpen}
         accounts={accounts}
         categories={categories}
+        existingPayees={existingPayees}
+        payeeCategoryHistory={payeeCategoryHistory}
         transaction={editingTransaction}
         isSubmitting={createTransaction.isPending || updateTransaction.isPending}
         errorMessage={formError}
