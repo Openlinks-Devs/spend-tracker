@@ -19,7 +19,8 @@ import { useCategories } from '@/hooks/useCategories'
 import { useCurrencies } from '@/hooks/useCurrencies'
 import { useSettings } from '@/hooks/useSettings'
 import { filtersToSearchParams, searchParamsToFilters } from '@/lib/filterParams'
-import { formatDayLabel, toDayKey, toNameById } from '@/lib/utils'
+import { toNameById } from '@/lib/utils'
+import { groupTransactionsByDay } from '@/lib/groupTransactions'
 import { toErrorMessage } from '@/lib/api'
 import type { NewTransaction, Transaction, TransactionFilters, TransactionUpdate } from '@/types'
 
@@ -82,20 +83,7 @@ export function TransactionsPage() {
     return history
   }, [items])
 
-  // Interim grouping on occurred_at; Task 12 extracts and tests a pure module.
-  const dayGroups = useMemo(() => {
-    const groups: { dayKey: string; dayLabel: string; transactions: Transaction[] }[] = []
-    for (const transaction of items) {
-      const dayKey = toDayKey(transaction.occurred_at)
-      let group = groups[groups.length - 1]
-      if (!group || group.dayKey !== dayKey) {
-        group = { dayKey, dayLabel: formatDayLabel(transaction.occurred_at), transactions: [] }
-        groups.push(group)
-      }
-      group.transactions.push(transaction)
-    }
-    return groups
-  }, [items])
+  const dayGroups = useMemo(() => groupTransactionsByDay(items), [items])
 
   function openCreateDialog() {
     setEditingTransaction(null)
@@ -195,6 +183,12 @@ export function TransactionsPage() {
                             ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
                             : 'Uncategorized'
                         }
+                        baseCurrencyCode={baseCurrencyCode}
+                        toAccountName={
+                          transaction.to_account_id
+                            ? accountNameById.get(transaction.to_account_id) ?? transaction.to_account_id
+                            : undefined
+                        }
                         onEdit={openEditDialog}
                         onDelete={openDeleteDialog}
                       />
@@ -202,6 +196,18 @@ export function TransactionsPage() {
                   </ul>
                 </section>
               ))}
+              {transactionsQuery.hasNextPage ? (
+                <div className="flex justify-center p-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={transactionsQuery.isFetchingNextPage}
+                    onClick={() => transactionsQuery.fetchNextPage()}
+                  >
+                    Load more
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </CardContent>

@@ -122,6 +122,7 @@ export function DashboardPage() {
                           ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
                           : 'Uncategorized'
                       }
+                      baseCurrencyCode="PEN"
                       showDate
                     />
                   ))}
