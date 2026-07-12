@@ -267,6 +267,24 @@ export async function getCurrencyByCode(db: Queryable, code: string): Promise<Cu
   return result.rows.length ? (result.rows[0] as Currency) : null
 }
 
+export async function accountHasTransactions(db: Queryable, accountId: string): Promise<boolean> {
+  const result = await db.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM transactions WHERE account_id = $1 OR to_account_id = $1
+     ) AS referenced`,
+    [accountId],
+  )
+  return Boolean(result.rows[0]?.referenced)
+}
+
+export async function categoryHasTransactions(db: Queryable, categoryId: string): Promise<boolean> {
+  const result = await db.query(
+    'SELECT EXISTS (SELECT 1 FROM transactions WHERE category_id = $1) AS referenced',
+    [categoryId],
+  )
+  return Boolean(result.rows[0]?.referenced)
+}
+
 export async function upsertManualRate(
   db: Queryable,
   manualRate: { base_code: string; quote_code: string; date: string; rate: number },
