@@ -23,7 +23,7 @@ startPolling(
     db,
     onEmail: (email) =>
       processEmail(
-        { subject: email.subject, text: email.text },
+        { subject: email.subject, text: email.text, messageId: email.messageId },
         { db, ...defaultProcessDeps },
       ).catch((error) => console.error('processEmail failed:', error)),
   },
