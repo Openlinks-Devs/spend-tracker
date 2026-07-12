@@ -10,6 +10,7 @@ import {
   insertAccount,
   updateAccount,
 } from '../db/queries.js'
+import { resolveCurrencyCode } from './currencyValidation.js'
 import { isUuid, parseJsonBody } from './validation.js'
 
 const newAccountSchema = z.object({
@@ -57,7 +58,11 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
     }
     try {
       const db = resolveDb()
-      const { id } = await insertAccount(db, parsed.data)
+      const currencyResolution = await resolveCurrencyCode(db, parsed.data.currency)
+      if (!currencyResolution.success) {
+        return context.json({ error: currencyResolution.failure.error }, currencyResolution.failure.status)
+      }
+      const { id } = await insertAccount(db, { ...parsed.data, currency: currencyResolution.code })
       const account = await getAccountById(db, id)
       return context.json(account, 201)
     } catch (error) {
@@ -77,11 +82,19 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
       const db = resolveDb()
       const existing = await getAccountById(db, id)
       if (!existing) return context.json({ error: 'Account not found' }, 404)
+      let currency = existing.currency
+      if (parsed.data.currency !== undefined) {
+        const currencyResolution = await resolveCurrencyCode(db, parsed.data.currency)
+        if (!currencyResolution.success) {
+          return context.json({ error: currencyResolution.failure.error }, currencyResolution.failure.status)
+        }
+        currency = currencyResolution.code
+      }
       await updateAccount(db, {
         id,
         name: parsed.data.name ?? existing.name,
         type: parsed.data.type ?? existing.type,
-        currency: parsed.data.currency ?? existing.currency,
+        currency,
       })
       const account = await getAccountById(db, id)
       return context.json(account)

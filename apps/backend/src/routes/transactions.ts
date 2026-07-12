@@ -11,7 +11,7 @@ import {
   insertTransaction,
   updateTransaction,
 } from '../db/queries.js'
-import type { Transaction } from '../db/types.js'
+import type { Account, Transaction } from '../db/types.js'
 import {
   buildTransactionListQuery,
   decodeCursor,
@@ -21,6 +21,7 @@ import {
   type TransactionListFilters,
 } from '../db/transactionFilters.js'
 import { convertAmount, getBaseCurrencyCode } from '../currency/rates.js'
+import { resolveCurrencyCode, roundToDecimalPlaces } from './currencyValidation.js'
 import { isUuid, parseJsonBody } from './validation.js'
 
 const transactionTypeSchema = z.enum(['expense', 'income', 'transfer'])
@@ -75,77 +76,88 @@ interface TransactionShape {
   to_amount: number | null
 }
 
+interface TransactionShapeValidation {
+  failure: ValidationFailure | null
+  // Populated when the shape is a valid transfer, so the caller can round
+  // to_amount to the destination account's currency without a second lookup.
+  destinationAccount: Account | null
+}
+
 async function validateTransactionShape(
   db: Queryable,
   shape: TransactionShape,
-): Promise<ValidationFailure | null> {
+): Promise<TransactionShapeValidation> {
+  const invalid = (failure: ValidationFailure): TransactionShapeValidation => ({
+    failure,
+    destinationAccount: null,
+  })
+
   if (!isUuid(shape.account_id)) {
-    return { status: 400, error: 'account_id is not a valid uuid' }
+    return invalid({ status: 400, error: 'account_id is not a valid uuid' })
   }
   if (shape.category_id !== null && !isUuid(shape.category_id)) {
-    return { status: 400, error: 'category_id is not a valid uuid' }
+    return invalid({ status: 400, error: 'category_id is not a valid uuid' })
   }
   if (shape.to_account_id !== null && !isUuid(shape.to_account_id)) {
-    return { status: 400, error: 'to_account_id is not a valid uuid' }
+    return invalid({ status: 400, error: 'to_account_id is not a valid uuid' })
   }
 
   if (shape.type === 'transfer') {
     if (shape.to_account_id === null || shape.to_amount === null) {
-      return { status: 422, error: 'Transfers require to_account_id and to_amount' }
+      return invalid({ status: 422, error: 'Transfers require to_account_id and to_amount' })
     }
     if (shape.category_id !== null) {
-      return { status: 422, error: 'Transfers must not carry a category_id' }
+      return invalid({ status: 422, error: 'Transfers must not carry a category_id' })
     }
     if (shape.to_account_id === shape.account_id) {
-      return { status: 422, error: 'Transfer destination must differ from the source account' }
+      return invalid({ status: 422, error: 'Transfer destination must differ from the source account' })
     }
   } else {
     if (shape.to_account_id !== null || shape.to_amount !== null) {
-      return { status: 422, error: 'to_account_id and to_amount are only valid for transfers' }
+      return invalid({ status: 422, error: 'to_account_id and to_amount are only valid for transfers' })
     }
     if (shape.category_id === null) {
-      return { status: 422, error: 'category_id is required for expense and income transactions' }
+      return invalid({ status: 422, error: 'category_id is required for expense and income transactions' })
     }
   }
 
   const account = await getAccountById(db, shape.account_id)
-  if (!account) return { status: 404, error: 'Account not found' }
+  if (!account) return invalid({ status: 404, error: 'Account not found' })
 
   if (shape.type === 'transfer') {
     const destinationAccount = await getAccountById(db, shape.to_account_id as string)
-    if (!destinationAccount) return { status: 404, error: 'Destination account not found' }
-  } else {
-    const category = await getCategoryById(db, shape.category_id as string)
-    if (!category) return { status: 404, error: 'Category not found' }
-    if (category.type !== shape.type) {
-      return {
-        status: 422,
-        error: `Category type "${category.type}" does not match transaction type "${shape.type}"`,
-      }
-    }
+    if (!destinationAccount) return invalid({ status: 404, error: 'Destination account not found' })
+    return { failure: null, destinationAccount }
   }
-  return null
-}
 
-type CurrencyResolution =
-  | { success: true; code: string }
-  | { success: false; failure: ValidationFailure }
-
-// Mirrors the pipeline's normalization (src/pipeline/processEmail.ts) so the
-// same "PEN"/"pen "/" Pen" input resolves to the same currencies row, and
-// reports an unknown code as a 400 instead of letting it fall through to the
-// transactions_currency_fkey constraint and surface as a generic 500.
-async function resolveCurrencyCode(db: Queryable, rawCurrency: string): Promise<CurrencyResolution> {
-  const currencyCode = rawCurrency.trim().toUpperCase()
-  const currency = await getCurrencyByCode(db, currencyCode)
-  if (!currency) {
-    return { success: false, failure: { status: 400, error: `Unknown currency code: ${currencyCode}` } }
+  const category = await getCategoryById(db, shape.category_id as string)
+  if (!category) return invalid({ status: 404, error: 'Category not found' })
+  if (category.type !== shape.type) {
+    return invalid({
+      status: 422,
+      error: `Category type "${category.type}" does not match transaction type "${shape.type}"`,
+    })
   }
-  return { success: true, code: currencyCode }
+  return { failure: null, destinationAccount: null }
 }
 
 function signAmount(type: TransactionType, magnitude: number): number {
   return type === 'income' ? Math.abs(magnitude) : -Math.abs(magnitude)
+}
+
+// Rounds a transfer's to_amount to the destination account's currency
+// decimal_places (e.g. 100.5 into a JPY account -> 101). Falls back to the
+// raw amount when there is no destination account (non-transfers) or amount
+// to round.
+async function resolveToAmount(
+  db: Queryable,
+  toAmount: number | null,
+  destinationAccount: Account | null,
+): Promise<number | null> {
+  if (toAmount === null || !destinationAccount) return toAmount
+  const destinationCurrency = await getCurrencyByCode(db, destinationAccount.currency)
+  if (!destinationCurrency) return toAmount
+  return roundToDecimalPlaces(toAmount, destinationCurrency.decimal_places)
 }
 
 // A derived rate_used comes from dividing two user-entered decimals (e.g.
@@ -166,8 +178,11 @@ async function resolveBaseAmount(
   override: { base_amount?: number; rate_used?: number },
 ): Promise<{ base_amount: number | null; rate_used: number | null }> {
   if (override.base_amount !== undefined) {
-    const signedBaseAmount = Math.sign(signedAmount) * Math.abs(override.base_amount)
-    const rateUsed = override.rate_used ?? deriveRateUsed(override.base_amount, signedAmount)
+    const baseCurrencyCode = await getBaseCurrencyCode(db)
+    const baseCurrency = await getCurrencyByCode(db, baseCurrencyCode)
+    const roundedOverride = roundToDecimalPlaces(override.base_amount, baseCurrency?.decimal_places ?? 2)
+    const signedBaseAmount = Math.sign(signedAmount) * Math.abs(roundedOverride)
+    const rateUsed = override.rate_used ?? deriveRateUsed(roundedOverride, signedAmount)
     return { base_amount: signedBaseAmount, rate_used: rateUsed }
   }
   const baseCurrencyCode = await getBaseCurrencyCode(db)
@@ -316,23 +331,31 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
     const body = parsed.data
     try {
       const db = resolveDb()
-      const failure = await validateTransactionShape(db, {
+      const shapeValidation = await validateTransactionShape(db, {
         type: body.type,
         account_id: body.account_id,
         category_id: body.category_id ?? null,
         to_account_id: body.to_account_id ?? null,
         to_amount: body.to_amount ?? null,
       })
-      if (failure) return context.json({ error: failure.error }, failure.status)
+      if (shapeValidation.failure) {
+        return context.json({ error: shapeValidation.failure.error }, shapeValidation.failure.status)
+      }
 
       const currencyResolution = await resolveCurrencyCode(db, body.currency)
       if (!currencyResolution.success) {
         return context.json({ error: currencyResolution.failure.error }, currencyResolution.failure.status)
       }
       const currencyCode = currencyResolution.code
+      const roundedAmount = roundToDecimalPlaces(body.amount, currencyResolution.decimalPlaces)
+      const roundedToAmount = await resolveToAmount(
+        db,
+        body.to_amount ?? null,
+        shapeValidation.destinationAccount,
+      )
 
       const occurredAt = body.occurred_at ?? new Date().toISOString()
-      const signedAmount = signAmount(body.type, body.amount)
+      const signedAmount = signAmount(body.type, roundedAmount)
       const { base_amount, rate_used } = await resolveBaseAmount(
         db,
         signedAmount,
@@ -355,7 +378,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
         base_amount,
         rate_used,
         to_account_id: body.to_account_id ?? null,
-        to_amount: body.to_amount ?? null,
+        to_amount: roundedToAmount,
         external_id: body.external_id ?? null,
       })
       const transaction = await getTransactionById(db, id)
@@ -403,14 +426,16 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
             ? null
             : existing.to_amount
 
-      const failure = await validateTransactionShape(db, {
+      const shapeValidation = await validateTransactionShape(db, {
         type: mergedType,
         account_id: mergedAccountId,
         category_id: mergedCategoryId,
         to_account_id: mergedToAccountId,
         to_amount: mergedToAmount,
       })
-      if (failure) return context.json({ error: failure.error }, failure.status)
+      if (shapeValidation.failure) {
+        return context.json({ error: shapeValidation.failure.error }, shapeValidation.failure.status)
+      }
 
       let mergedCurrency = body.currency ?? existing.currency
       if (body.currency !== undefined) {
@@ -421,14 +446,31 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
         mergedCurrency = currencyResolution.code
       }
       const mergedOccurredAt = body.occurred_at ?? existing.occurred_at
-      const amountMagnitude = body.amount ?? Math.abs(existing.amount)
+
+      // Only a freshly submitted amount or to_amount needs rounding: a stored
+      // value was already rounded on the way in.
+      let amountMagnitude = body.amount ?? Math.abs(existing.amount)
+      if (body.amount !== undefined) {
+        const amountCurrency = await resolveCurrencyCode(db, mergedCurrency)
+        if (amountCurrency.success) {
+          amountMagnitude = roundToDecimalPlaces(amountMagnitude, amountCurrency.decimalPlaces)
+        }
+      }
+      const roundedToAmount =
+        body.to_amount !== undefined
+          ? await resolveToAmount(db, mergedToAmount, shapeValidation.destinationAccount)
+          : mergedToAmount
       const signedAmount = signAmount(mergedType, amountMagnitude)
 
       let baseAmount = existing.base_amount
       let rateUsed = existing.rate_used
       if (body.base_amount !== undefined) {
-        baseAmount = Math.sign(signedAmount) * Math.abs(body.base_amount)
-        rateUsed = body.rate_used ?? deriveRateUsed(body.base_amount, signedAmount)
+        const resolved = await resolveBaseAmount(db, signedAmount, mergedCurrency, mergedOccurredAt, {
+          base_amount: body.base_amount,
+          rate_used: body.rate_used,
+        })
+        baseAmount = resolved.base_amount
+        rateUsed = resolved.rate_used
       } else if (
         body.amount !== undefined ||
         body.currency !== undefined ||
@@ -458,7 +500,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
         base_amount: baseAmount,
         rate_used: rateUsed,
         to_account_id: mergedToAccountId,
-        to_amount: mergedToAmount,
+        to_amount: roundedToAmount,
         external_id: body.external_id !== undefined ? body.external_id : existing.external_id,
       })
       const transaction = await getTransactionById(db, id)
