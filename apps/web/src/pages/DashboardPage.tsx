@@ -26,6 +26,11 @@ export function DashboardPage() {
   const baseCurrencyCode = settingsQuery.data?.base_currency_code ?? 'PEN'
 
   const accountNameById = useMemo(() => toNameById(accountsQuery.data), [accountsQuery.data])
+  const accountCurrencyById = useMemo(() => {
+    const lookup = new Map<string, string>()
+    for (const account of accountsQuery.data ?? []) lookup.set(account.id, account.currency)
+    return lookup
+  }, [accountsQuery.data])
   const categoryNameById = useMemo(() => toNameById(categoriesQuery.data), [categoriesQuery.data])
 
   const summary = useMemo(
@@ -120,6 +125,11 @@ export function DashboardPage() {
                           ? accountNameById.get(transaction.to_account_id) ??
                             transaction.to_account_id
                           : undefined
+                      }
+                      toAccountCurrency={
+                        transaction.to_account_id
+                          ? accountCurrencyById.get(transaction.to_account_id) ?? null
+                          : null
                       }
                       showDate
                     />
