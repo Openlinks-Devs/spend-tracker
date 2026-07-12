@@ -1,7 +1,11 @@
 import { IconArrowsExchange, IconPencil, IconTrash } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { cn, formatDate, formatTime } from '@/lib/utils'
-import { formatTransactionAmount, formatTransferRoute } from '@/lib/transactionAmount'
+import {
+  formatTransactionAmount,
+  formatTransferAmount,
+  formatTransferRoute,
+} from '@/lib/transactionAmount'
 import type { Transaction } from '@/types'
 
 interface TransactionListItemProps {
@@ -11,6 +15,8 @@ interface TransactionListItemProps {
   baseCurrencyCode: string
   /** Destination account name, used only for transfer rows. */
   toAccountName?: string
+  /** Destination account currency, used only for transfer rows. */
+  toAccountCurrency?: string | null
   /** Show the calendar date instead of the time of day (for ungrouped lists). */
   showDate?: boolean
   onEdit?: (transaction: Transaction) => void
@@ -23,6 +29,7 @@ export function TransactionListItem({
   categoryName,
   baseCurrencyCode,
   toAccountName,
+  toAccountCurrency,
   showDate = false,
   onEdit,
   onDelete,
@@ -38,12 +45,19 @@ export function TransactionListItem({
     ? formatTransferRoute(accountName, toAccountName ?? transaction.to_account_id ?? '')
     : `${categoryName} · ${accountName}`
 
-  const amountLabel = formatTransactionAmount(
-    transaction.amount,
-    transaction.currency,
-    transaction.base_amount,
-    baseCurrencyCode,
-  )
+  const amountLabel = isTransfer
+    ? formatTransferAmount(
+        transaction.amount,
+        transaction.currency,
+        transaction.to_amount,
+        toAccountCurrency ?? null,
+      )
+    : formatTransactionAmount(
+        transaction.amount,
+        transaction.currency,
+        transaction.base_amount,
+        baseCurrencyCode,
+      )
 
   return (
     <li className="flex items-start justify-between gap-4 px-6 py-3">
