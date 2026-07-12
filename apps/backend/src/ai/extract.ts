@@ -10,7 +10,8 @@ const schema = z.object({
   account_id: z.string().nullable(),
   category_id: z.string().nullable(),
   tags: z.array(z.string()),
-  created_at: z.string(),
+  payee: z.string().nullable(),
+  occurred_at: z.string(),
 })
 
 export interface ExtractedTransaction {
@@ -20,7 +21,8 @@ export interface ExtractedTransaction {
   account_id: string
   category_id: string
   tags: string[]
-  created_at: string
+  payee: string | null
+  occurred_at: string
 }
 
 export interface ExtractInput {
@@ -46,11 +48,14 @@ function buildSystemPrompt(input: ExtractInput): string {
     '',
     'Analiza el contenido del correo y devuelve los campos de la transaccion.',
     'Incluye el signo (-/+) en el monto: negativo para egresos.',
+    'currency: codigo ISO 4217 en mayusculas (PEN, USD, EUR, ...).',
+    'payee: nombre del comercio o de la persona que recibe o envia el dinero; null si no se puede determinar.',
     'category_id y account_id son distintos y deben venir de las listas dadas.',
     'Si no hay informacion suficiente para un campo usa null.',
     'tags: minimo 3, en minusculas, una sola palabra por tag.',
     `Fecha y hora actual: ${input.now}. Zona horaria: America/Lima.`,
-    'Si el correo usa fechas relativas, calcula created_at en formato ISO 8601.',
+    'occurred_at: fecha y hora de la transaccion segun el correo, en formato ISO 8601.',
+    'Si el correo usa fechas relativas, calcula occurred_at; si no indica fecha, usa la fecha del correo.',
   ].join('\n')
 }
 
@@ -76,6 +81,7 @@ export async function extractTransaction(input: ExtractInput): Promise<Extracted
     account_id: account.id,
     category_id: category.id,
     tags: object.tags,
-    created_at: object.created_at,
+    payee: object.payee,
+    occurred_at: object.occurred_at,
   }
 }
