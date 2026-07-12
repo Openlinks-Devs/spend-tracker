@@ -246,6 +246,27 @@ export async function getExchangeRates(
   return result.rows as ExchangeRate[]
 }
 
+export async function getTransactionByExternalId(
+  db: Queryable,
+  externalId: string,
+): Promise<Transaction | null> {
+  const result = await db.query(
+    `SELECT ${transactionColumns}
+       FROM transactions
+      WHERE external_id = $1`,
+    [externalId],
+  )
+  return result.rows.length ? (result.rows[0] as Transaction) : null
+}
+
+export async function getCurrencyByCode(db: Queryable, code: string): Promise<Currency | null> {
+  const result = await db.query(
+    'SELECT code, name, symbol, decimal_places FROM currencies WHERE code = $1',
+    [code],
+  )
+  return result.rows.length ? (result.rows[0] as Currency) : null
+}
+
 export async function upsertManualRate(
   db: Queryable,
   manualRate: { base_code: string; quote_code: string; date: string; rate: number },
