@@ -5,6 +5,7 @@ const accountId = '11111111-1111-4111-8111-111111111111'
 const missingId = '99999999-9999-4999-8999-999999999999'
 
 const sampleAccount = { id: accountId, name: 'Cash', type: 'cash', currency: 'PEN' }
+const sampleCurrency = { code: 'USD', name: 'US Dollar', symbol: '$', decimal_places: 2 }
 
 describe('accounts route', () => {
   it('GET /api/accounts returns the list', async () => {
@@ -26,6 +27,7 @@ describe('accounts route', () => {
     const db = {
       query: vi
         .fn()
+        .mockResolvedValueOnce({ rows: [sampleCurrency] })
         .mockResolvedValueOnce({ rows: [{ id: 'a-new' }] })
         .mockResolvedValueOnce({ rows: [{ ...sampleAccount, id: 'a-new' }] }),
     }
@@ -37,7 +39,7 @@ describe('accounts route', () => {
     })
     expect(response.status).toBe(201)
     expect((await response.json()).id).toBe('a-new')
-    expect(db.query.mock.calls[0][0]).toMatch(/insert into accounts/i)
+    expect(db.query.mock.calls[1][0]).toMatch(/insert into accounts/i)
   })
 
   it('POST /api/accounts returns 400 on invalid body', async () => {
@@ -50,6 +52,19 @@ describe('accounts route', () => {
     })
     expect(response.status).toBe(400)
     expect(db.query).not.toHaveBeenCalled()
+  })
+
+  it('POST /api/accounts returns 400 for an unknown currency code', async () => {
+    const db = { query: vi.fn().mockResolvedValueOnce({ rows: [] }) }
+    const route = createAccountsRoute(() => db)
+    const response = await route.request('/api/accounts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Savings', type: 'bank', currency: 'XXX' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Unknown currency code: XXX' })
+    expect(db.query).toHaveBeenCalledTimes(1)
   })
 
   it('PATCH /api/accounts/:id merges existing fields', async () => {
@@ -70,6 +85,44 @@ describe('accounts route', () => {
     expect((await response.json()).name).toBe('Wallet')
     const [, updateParams] = db.query.mock.calls[1]
     expect(updateParams).toEqual([accountId, 'Wallet', 'cash', 'PEN'])
+  })
+
+  it('PATCH /api/accounts/:id validates a changed currency', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleAccount] })
+        .mockResolvedValueOnce({ rows: [sampleCurrency] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ ...sampleAccount, currency: 'USD' }] }),
+    }
+    const route = createAccountsRoute(() => db)
+    const response = await route.request(`/api/accounts/${accountId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ currency: 'USD' }),
+    })
+    expect(response.status).toBe(200)
+    const [, updateParams] = db.query.mock.calls[2]
+    expect(updateParams).toEqual([accountId, 'Cash', 'cash', 'USD'])
+  })
+
+  it('PATCH /api/accounts/:id returns 400 when changing currency to an unknown code', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleAccount] })
+        .mockResolvedValueOnce({ rows: [] }),
+    }
+    const route = createAccountsRoute(() => db)
+    const response = await route.request(`/api/accounts/${accountId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ currency: 'XXX' }),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Unknown currency code: XXX' })
+    expect(db.query).toHaveBeenCalledTimes(2)
   })
 
   it('DELETE /api/accounts/:id returns 404 when missing', async () => {

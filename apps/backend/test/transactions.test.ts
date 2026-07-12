@@ -59,6 +59,8 @@ const defaultCategories = {
 const defaultCurrencies = {
   PEN: { code: 'PEN', name: 'Peruvian Sol', symbol: 'S/', decimal_places: 2 },
   USD: { code: 'USD', name: 'US Dollar', symbol: '$', decimal_places: 2 },
+  JPY: { code: 'JPY', name: 'Japanese Yen', symbol: '¥', decimal_places: 0 },
+  BHD: { code: 'BHD', name: 'Bahraini Dinar', symbol: 'BD', decimal_places: 3 },
 }
 
 function defaultTransactions(): Record<string, unknown> {
@@ -603,6 +605,101 @@ describe('POST /api/transactions', () => {
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'Unknown currency code: XXX' })
     expect(findParams(db, /insert into transactions/i)).toBeUndefined()
+  })
+
+  it('rounds a JPY amount to an integer (0 decimal places)', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: -370, rateUsed: 3.68 })
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Ramen',
+      amount: 100.5,
+      currency: 'JPY',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[1]).toBe(-101)
+  })
+
+  it('keeps three decimals for a BHD amount', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: -1.2, rateUsed: 1 })
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Groceries',
+      amount: 1.2345,
+      currency: 'BHD',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[1]).toBe(-1.235)
+  })
+
+  it('keeps two decimals for a PEN amount', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.345,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[1]).toBe(-12.35)
+  })
+
+  it('rounds to_amount to the destination account currency decimal places', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: -100, rateUsed: 1 })
+    const jpyDestinationId = '66666666-6666-4666-8666-666666666666'
+    const db = createDb({
+      accounts: {
+        ...defaultAccounts,
+        [jpyDestinationId]: { id: jpyDestinationId, name: 'Japan Cash', type: 'cash', currency: 'JPY' },
+      },
+    })
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'To JPY account',
+      amount: 100,
+      currency: 'PEN',
+      account_id: accountId,
+      type: 'transfer',
+      to_account_id: jpyDestinationId,
+      to_amount: 3700.5,
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[13]).toBe(3701)
+  })
+
+  it('rounds a base_amount override to the base currency decimal places', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await postTransaction(route, {
+      description: 'Import',
+      amount: 20,
+      currency: 'USD',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      base_amount: 74.805,
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[10]).toBe(-74.81)
   })
 })
 

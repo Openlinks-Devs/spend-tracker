@@ -116,6 +116,22 @@ describe('buildTransactionListQuery: individual filters', () => {
     expect(built.listSql).toMatch(/unnest\(tags\) AS tag WHERE tag ILIKE \$1/)
     expect(built.listParams[0]).toBe('%cafe%')
   })
+
+  it('a numeric search also matches the absolute amount', () => {
+    const built = buildTransactionListQuery({ search: '24.99' })
+    expect(built.listSql).toMatch(/abs\(amount\) = \$2/)
+    expect(built.listParams.slice(0, 2)).toEqual(['%24.99%', 24.99])
+  })
+
+  it('a non-numeric search does not add an amount condition', () => {
+    const built = buildTransactionListQuery({ search: 'cafe' })
+    expect(built.listSql).not.toMatch(/abs\(amount\) =/)
+  })
+
+  it('a negative numeric search does not add an amount condition', () => {
+    const built = buildTransactionListQuery({ search: '-5' })
+    expect(built.listSql).not.toMatch(/abs\(amount\) =/)
+  })
 })
 
 describe('buildTransactionListQuery: sort, order, cursor', () => {

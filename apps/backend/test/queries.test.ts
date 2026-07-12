@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   getCategories,
   getDistinctTags,
+  getPayees,
   insertTransaction,
   updateTransaction,
   deleteTransaction,
@@ -32,6 +33,16 @@ describe('queries', () => {
     const db = fakeDb([{ tag: 'food' }, { tag: 'delivery' }])
     const tags = await getDistinctTags(db)
     expect(tags).toEqual(['food', 'delivery'])
+  })
+
+  it('getPayees selects distinct payees ordered by their most recent non-transfer transaction', async () => {
+    const db = fakeDb([{ payee: 'La Lucha', last_category_id: 'c1' }])
+    const payees = await getPayees(db)
+    expect(payees).toEqual([{ payee: 'La Lucha', last_category_id: 'c1' }])
+    const [sql] = db.query.mock.calls[0]
+    expect(sql).toMatch(/distinct on \(payee\)/i)
+    expect(sql).toMatch(/type <> 'transfer'/i)
+    expect(sql).toMatch(/order by payee, occurred_at desc/i)
   })
 
   it('insertTransaction passes params and returns id', async () => {
