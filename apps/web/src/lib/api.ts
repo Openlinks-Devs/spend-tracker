@@ -8,6 +8,7 @@ import type {
   NewAccount,
   NewCategory,
   NewTransaction,
+  Payee,
   Settings,
   Transaction,
   TransactionFilters,
@@ -120,6 +121,10 @@ export const categoriesApi = createResourceApi<Category, NewCategory, CategoryUp
 
 export const tagsApi = {
   list: () => request<string[]>('/tags'),
+}
+
+export const payeesApi = {
+  list: () => request<Payee[]>('/payees'),
 }
 
 export function toErrorMessage(error: unknown): string {
