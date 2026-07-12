@@ -4,32 +4,157 @@ import type { Queryable } from '../db/pool.js'
 import { getPool } from '../db/pool.js'
 import {
   deleteTransaction,
+  getAccountById,
+  getCategoryById,
   getTransactionById,
   getTransactions,
   insertTransaction,
   updateTransaction,
 } from '../db/queries.js'
-import { parseJsonBody } from './validation.js'
+import { convertAmount, getBaseCurrencyCode } from '../currency/rates.js'
+import { isUuid, parseJsonBody } from './validation.js'
+
+const transactionTypeSchema = z.enum(['expense', 'income', 'transfer'])
+type TransactionType = z.infer<typeof transactionTypeSchema>
 
 const newTransactionSchema = z.object({
   description: z.string().min(1),
-  amount: z.number(),
+  amount: z.number().positive(),
   currency: z.string().min(1),
   account_id: z.string().min(1),
-  category_id: z.string().min(1),
+  category_id: z.string().min(1).optional(),
   tags: z.array(z.string()).default([]),
-  created_at: z.string().min(1).optional(),
+  type: transactionTypeSchema,
+  payee: z.string().min(1).optional(),
+  notes: z.string().min(1).optional(),
+  occurred_at: z.string().min(1).optional(),
+  base_amount: z.number().positive().optional(),
+  rate_used: z.number().positive().optional(),
+  to_account_id: z.string().min(1).optional(),
+  to_amount: z.number().positive().optional(),
+  external_id: z.string().min(1).optional(),
 })
 
 const transactionUpdateSchema = z.object({
   description: z.string().min(1).optional(),
-  amount: z.number().optional(),
+  amount: z.number().positive().optional(),
   currency: z.string().min(1).optional(),
   account_id: z.string().min(1).optional(),
-  category_id: z.string().min(1).optional(),
+  category_id: z.string().min(1).nullable().optional(),
   tags: z.array(z.string()).optional(),
-  created_at: z.string().min(1).optional(),
+  type: transactionTypeSchema.optional(),
+  payee: z.string().min(1).nullable().optional(),
+  notes: z.string().min(1).nullable().optional(),
+  occurred_at: z.string().min(1).optional(),
+  base_amount: z.number().positive().optional(),
+  rate_used: z.number().positive().optional(),
+  to_account_id: z.string().min(1).nullable().optional(),
+  to_amount: z.number().positive().nullable().optional(),
+  external_id: z.string().min(1).nullable().optional(),
 })
+
+interface ValidationFailure {
+  status: 400 | 404 | 422
+  error: string
+}
+
+interface TransactionShape {
+  type: TransactionType
+  account_id: string
+  category_id: string | null
+  to_account_id: string | null
+  to_amount: number | null
+}
+
+async function validateTransactionShape(
+  db: Queryable,
+  shape: TransactionShape,
+): Promise<ValidationFailure | null> {
+  if (!isUuid(shape.account_id)) {
+    return { status: 400, error: 'account_id is not a valid uuid' }
+  }
+  if (shape.category_id !== null && !isUuid(shape.category_id)) {
+    return { status: 400, error: 'category_id is not a valid uuid' }
+  }
+  if (shape.to_account_id !== null && !isUuid(shape.to_account_id)) {
+    return { status: 400, error: 'to_account_id is not a valid uuid' }
+  }
+
+  if (shape.type === 'transfer') {
+    if (shape.to_account_id === null || shape.to_amount === null) {
+      return { status: 422, error: 'Transfers require to_account_id and to_amount' }
+    }
+    if (shape.category_id !== null) {
+      return { status: 422, error: 'Transfers must not carry a category_id' }
+    }
+    if (shape.to_account_id === shape.account_id) {
+      return { status: 422, error: 'Transfer destination must differ from the source account' }
+    }
+  } else {
+    if (shape.to_account_id !== null || shape.to_amount !== null) {
+      return { status: 422, error: 'to_account_id and to_amount are only valid for transfers' }
+    }
+    if (shape.category_id === null) {
+      return { status: 422, error: 'category_id is required for expense and income transactions' }
+    }
+  }
+
+  const account = await getAccountById(db, shape.account_id)
+  if (!account) return { status: 404, error: 'Account not found' }
+
+  if (shape.type === 'transfer') {
+    const destinationAccount = await getAccountById(db, shape.to_account_id as string)
+    if (!destinationAccount) return { status: 404, error: 'Destination account not found' }
+  } else {
+    const category = await getCategoryById(db, shape.category_id as string)
+    if (!category) return { status: 404, error: 'Category not found' }
+    if (category.type !== shape.type) {
+      return {
+        status: 422,
+        error: `Category type "${category.type}" does not match transaction type "${shape.type}"`,
+      }
+    }
+  }
+  return null
+}
+
+function signAmount(type: TransactionType, magnitude: number): number {
+  return type === 'income' ? Math.abs(magnitude) : -Math.abs(magnitude)
+}
+
+// A derived rate_used comes from dividing two user-entered decimals (e.g.
+// 74.8 / 20), which lands on floating-point tails like 3.7399999999999998
+// instead of 3.74. Rates do not need more than 6 decimal places of
+// precision, so round away the tail.
+function deriveRateUsed(baseAmount: number, signedAmount: number): number {
+  return Math.round(Math.abs(baseAmount / signedAmount) * 1_000_000) / 1_000_000
+}
+
+// User-entered base_amount beats any computed one. When nothing is provided
+// and no rate exists, both fields stay null: never a silent rate of 1.
+async function resolveBaseAmount(
+  db: Queryable,
+  signedAmount: number,
+  currency: string,
+  occurredAt: string,
+  override: { base_amount?: number; rate_used?: number },
+): Promise<{ base_amount: number | null; rate_used: number | null }> {
+  if (override.base_amount !== undefined) {
+    const signedBaseAmount = Math.sign(signedAmount) * Math.abs(override.base_amount)
+    const rateUsed = override.rate_used ?? deriveRateUsed(override.base_amount, signedAmount)
+    return { base_amount: signedBaseAmount, rate_used: rateUsed }
+  }
+  const baseCurrencyCode = await getBaseCurrencyCode(db)
+  const conversion = await convertAmount(
+    db,
+    signedAmount,
+    currency,
+    baseCurrencyCode,
+    occurredAt.slice(0, 10),
+  )
+  if (!conversion) return { base_amount: null, rate_used: null }
+  return { base_amount: conversion.convertedAmount, rate_used: conversion.rateUsed }
+}
 
 export function createTransactionsRoute(resolveDb: () => Queryable = getPool): Hono {
   const route = new Hono()
@@ -60,16 +185,44 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
     if (!parsed.success) {
       return context.json({ error: parsed.error }, 400)
     }
+    const body = parsed.data
     try {
       const db = resolveDb()
+      const failure = await validateTransactionShape(db, {
+        type: body.type,
+        account_id: body.account_id,
+        category_id: body.category_id ?? null,
+        to_account_id: body.to_account_id ?? null,
+        to_amount: body.to_amount ?? null,
+      })
+      if (failure) return context.json({ error: failure.error }, failure.status)
+
+      const occurredAt = body.occurred_at ?? new Date().toISOString()
+      const signedAmount = signAmount(body.type, body.amount)
+      const { base_amount, rate_used } = await resolveBaseAmount(
+        db,
+        signedAmount,
+        body.currency,
+        occurredAt,
+        body,
+      )
+
       const { id } = await insertTransaction(db, {
-        description: parsed.data.description,
-        amount: parsed.data.amount,
-        currency: parsed.data.currency,
-        account_id: parsed.data.account_id,
-        category_id: parsed.data.category_id,
-        tags: parsed.data.tags,
-        created_at: parsed.data.created_at ?? new Date().toISOString(),
+        description: body.description,
+        amount: signedAmount,
+        currency: body.currency,
+        account_id: body.account_id,
+        category_id: body.type === 'transfer' ? null : (body.category_id as string),
+        tags: body.tags,
+        type: body.type,
+        payee: body.payee ?? null,
+        notes: body.notes ?? null,
+        occurred_at: occurredAt,
+        base_amount,
+        rate_used,
+        to_account_id: body.to_account_id ?? null,
+        to_amount: body.to_amount ?? null,
+        external_id: body.external_id ?? null,
       })
       const transaction = await getTransactionById(db, id)
       return context.json(transaction, 201)
@@ -85,30 +238,86 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
     if (!parsed.success) {
       return context.json({ error: parsed.error }, 400)
     }
+    const body = parsed.data
     try {
       const db = resolveDb()
       const existing = await getTransactionById(db, id)
       if (!existing) return context.json({ error: 'Transaction not found' }, 404)
-      // category_id is nullable on Transaction as of the multicurrency migration
-      // (transfers have no category), but this legacy route only ever creates
-      // expense/income rows, so a null category here means the existing record
-      // is a transfer this endpoint does not know how to edit yet.
-      const categoryId = parsed.data.category_id ?? existing.category_id
-      if (categoryId === null) {
-        return context.json(
-          { error: 'This transaction has no category to preserve; provide category_id' },
-          400,
-        )
+
+      const mergedType = body.type ?? existing.type
+      const typeChanged = mergedType !== existing.type
+      const mergedAccountId = body.account_id ?? existing.account_id
+      // When the type changes, drop the fields the new type forbids unless the
+      // body sets them explicitly; the shape validation then demands the rest.
+      const mergedCategoryId =
+        body.category_id !== undefined
+          ? body.category_id
+          : typeChanged && mergedType === 'transfer'
+            ? null
+            : existing.category_id
+      const mergedToAccountId =
+        body.to_account_id !== undefined
+          ? body.to_account_id
+          : typeChanged && mergedType !== 'transfer'
+            ? null
+            : existing.to_account_id
+      const mergedToAmount =
+        body.to_amount !== undefined
+          ? body.to_amount
+          : typeChanged && mergedType !== 'transfer'
+            ? null
+            : existing.to_amount
+
+      const failure = await validateTransactionShape(db, {
+        type: mergedType,
+        account_id: mergedAccountId,
+        category_id: mergedCategoryId,
+        to_account_id: mergedToAccountId,
+        to_amount: mergedToAmount,
+      })
+      if (failure) return context.json({ error: failure.error }, failure.status)
+
+      const mergedCurrency = body.currency ?? existing.currency
+      const mergedOccurredAt = body.occurred_at ?? existing.occurred_at
+      const amountMagnitude = body.amount ?? Math.abs(existing.amount)
+      const signedAmount = signAmount(mergedType, amountMagnitude)
+
+      let baseAmount = existing.base_amount
+      let rateUsed = existing.rate_used
+      if (body.base_amount !== undefined) {
+        baseAmount = Math.sign(signedAmount) * Math.abs(body.base_amount)
+        rateUsed = body.rate_used ?? deriveRateUsed(body.base_amount, signedAmount)
+      } else if (
+        body.amount !== undefined ||
+        body.currency !== undefined ||
+        body.occurred_at !== undefined
+      ) {
+        const resolved = await resolveBaseAmount(db, signedAmount, mergedCurrency, mergedOccurredAt, {})
+        baseAmount = resolved.base_amount
+        rateUsed = resolved.rate_used
+      } else if (baseAmount !== null) {
+        // Only the type (and so the sign) may have changed: keep the frozen
+        // magnitude but follow the sign of the stored amount.
+        baseAmount = Math.sign(signedAmount) * Math.abs(baseAmount)
       }
+
       await updateTransaction(db, {
         id,
-        description: parsed.data.description ?? existing.description,
-        amount: parsed.data.amount ?? existing.amount,
-        currency: parsed.data.currency ?? existing.currency,
-        account_id: parsed.data.account_id ?? existing.account_id,
-        category_id: categoryId,
-        tags: parsed.data.tags ?? existing.tags,
-        created_at: parsed.data.created_at ?? existing.created_at,
+        description: body.description ?? existing.description,
+        amount: signedAmount,
+        currency: mergedCurrency,
+        account_id: mergedAccountId,
+        category_id: mergedCategoryId,
+        tags: body.tags ?? existing.tags,
+        type: mergedType,
+        payee: body.payee !== undefined ? body.payee : existing.payee,
+        notes: body.notes !== undefined ? body.notes : existing.notes,
+        occurred_at: mergedOccurredAt,
+        base_amount: baseAmount,
+        rate_used: rateUsed,
+        to_account_id: mergedToAccountId,
+        to_amount: mergedToAmount,
+        external_id: body.external_id !== undefined ? body.external_id : existing.external_id,
       })
       const transaction = await getTransactionById(db, id)
       return context.json(transaction)
