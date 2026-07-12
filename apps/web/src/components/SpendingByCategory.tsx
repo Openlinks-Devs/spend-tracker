@@ -7,13 +7,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { summarizeCategorySpend } from '@/lib/dashboardSummary'
 import { formatCurrency } from '@/lib/utils'
 import type { EChartsCoreOption } from 'echarts/core'
 import type { Transaction } from '@/types'
 
 // Validated categorical palette from the dataviz reference (light mode, 8 slots).
-// Slice labels are always shown, which is the required relief for the three
-// hues that sit below 3:1 contrast on a light surface.
 const categoricalPalette = [
   '#2a78d6',
   '#1baf7a',
@@ -37,14 +36,10 @@ const periodOptions = [
 
 type Period = (typeof periodOptions)[number]['value']
 
-interface CategorySpend {
-  categoryName: string
-  total: number
-}
-
 interface SpendingByCategoryProps {
   transactions: Transaction[]
   categoryNameById: Map<string, string>
+  baseCurrencyCode: string
 }
 
 function getPeriodRange(period: Period): { start: Date | null; end: Date | null } {
@@ -66,60 +61,39 @@ function getPeriodRange(period: Period): { start: Date | null; end: Date | null 
   }
 }
 
-export function SpendingByCategory({ transactions, categoryNameById }: SpendingByCategoryProps) {
+export function SpendingByCategory({
+  transactions,
+  categoryNameById,
+  baseCurrencyCode,
+}: SpendingByCategoryProps) {
   const [period, setPeriod] = useState<Period>('this-month')
-  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null)
 
-  const expenses = useMemo(
-    () => transactions.filter((transaction) => transaction.amount < 0),
-    [transactions],
-  )
-
-  // Currencies ordered by all-time spend so the selector is stable across periods.
-  const currencies = useMemo(() => {
-    const totals = new Map<string, number>()
-    for (const expense of expenses) {
-      const currency = expense.currency || 'USD'
-      totals.set(currency, (totals.get(currency) ?? 0) + Math.abs(expense.amount))
-    }
-    return Array.from(totals.entries())
-      .sort((first, second) => second[1] - first[1])
-      .map(([currency]) => currency)
-  }, [expenses])
-
-  const currency = selectedCurrency ?? currencies[0] ?? 'USD'
-
-  // Colors follow the category across every filter change, so a category never
-  // gets repainted when the period or currency selection shrinks the set.
+  // Colors follow the category across every period change, ranked by all-time
+  // base spend so a category never gets repainted when the period shrinks the set.
   const colorByCategory = useMemo(() => {
-    const totals = new Map<string, number>()
-    for (const expense of expenses) {
-      const categoryName = categoryNameById.get(expense.category_id ?? '') ?? 'Uncategorized'
-      totals.set(categoryName, (totals.get(categoryName) ?? 0) + Math.abs(expense.amount))
-    }
-    const ranked = Array.from(totals.entries()).sort((first, second) => second[1] - first[1])
+    const ranked = summarizeCategorySpend(transactions, categoryNameById, {
+      start: null,
+      end: null,
+    })
     const colors = new Map<string, string>()
-    ranked.forEach(([categoryName], index) => {
-      colors.set(categoryName, categoricalPalette[index] ?? overflowSliceColor)
+    ranked.forEach((categorySpend, index) => {
+      colors.set(categorySpend.categoryName, categoricalPalette[index] ?? overflowSliceColor)
     })
     return colors
-  }, [expenses, categoryNameById])
+  }, [transactions, categoryNameById])
 
-  const categorySpends = useMemo<CategorySpend[]>(() => {
-    const { start, end } = getPeriodRange(period)
-    const totals = new Map<string, number>()
-    for (const expense of expenses) {
-      if ((expense.currency || 'USD') !== currency) continue
-      const createdAt = new Date(expense.created_at)
-      if (start && createdAt < start) continue
-      if (end && createdAt >= end) continue
-      const categoryName = categoryNameById.get(expense.category_id ?? '') ?? 'Uncategorized'
-      totals.set(categoryName, (totals.get(categoryName) ?? 0) + Math.abs(expense.amount))
-    }
-    return Array.from(totals.entries())
-      .map(([categoryName, total]) => ({ categoryName, total }))
-      .sort((first, second) => second.total - first.total)
-  }, [expenses, categoryNameById, period, currency])
+  const categorySpends = useMemo(
+    () => summarizeCategorySpend(transactions, categoryNameById, getPeriodRange(period)),
+    [transactions, categoryNameById, period],
+  )
+
+  const hasIncompleteRates = useMemo(
+    () =>
+      transactions.some(
+        (transaction) => transaction.type === 'expense' && transaction.base_amount === null,
+      ),
+    [transactions],
+  )
 
   const chartOption = useMemo<EChartsCoreOption>(() => {
     const topCategories = categorySpends.slice(0, categoricalPalette.length)
@@ -138,17 +112,14 @@ export function SpendingByCategory({ transactions, categoryNameById }: SpendingB
         itemStyle: { color: overflowSliceColor },
       })
     }
-    const periodTotal = categorySpends.reduce(
-      (sum, categorySpend) => sum + categorySpend.total,
-      0,
-    )
+    const periodTotal = categorySpends.reduce((sum, categorySpend) => sum + categorySpend.total, 0)
     return {
       tooltip: {
         trigger: 'item',
-        valueFormatter: (value: unknown) => formatCurrency(Number(value), currency),
+        valueFormatter: (value: unknown) => formatCurrency(Number(value), baseCurrencyCode),
       },
       title: {
-        text: formatCurrency(periodTotal, currency),
+        text: formatCurrency(periodTotal, baseCurrencyCode),
         subtext: 'total spend',
         left: 'center',
         top: '42%',
@@ -159,18 +130,17 @@ export function SpendingByCategory({ transactions, categoryNameById }: SpendingB
         {
           type: 'pie',
           radius: ['45%', '68%'],
-          // 2px surface gap between slices, per mark spec.
           itemStyle: { borderColor: '#ffffff', borderWidth: 2, borderRadius: 4 },
           label: { formatter: '{b}  {d}%', color: chartInk },
           data: slices,
         },
       ],
     }
-  }, [categorySpends, colorByCategory, currency])
+  }, [categorySpends, colorByCategory, baseCurrencyCode])
 
   return (
     <div className="space-y-4 py-4">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
           <SelectTrigger className="w-40" aria-label="Period">
             <SelectValue />
@@ -183,23 +153,14 @@ export function SpendingByCategory({ transactions, categoryNameById }: SpendingB
             ))}
           </SelectContent>
         </Select>
-        <Select value={currency} onValueChange={setSelectedCurrency}>
-          <SelectTrigger className="w-28" aria-label="Currency">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {currencies.map((currencyOption) => (
-              <SelectItem key={currencyOption} value={currencyOption}>
-                {currencyOption}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {hasIncompleteRates ? (
+          <span className="text-xs text-muted-foreground">
+            Some expenses are missing rates and are excluded from these totals.
+          </span>
+        ) : null}
       </div>
       {categorySpends.length === 0 ? (
-        <p className="py-6 text-sm text-muted-foreground">
-          No expenses in {currency} for this period.
-        </p>
+        <p className="py-6 text-sm text-muted-foreground">No spending in {baseCurrencyCode} for this period.</p>
       ) : (
         <EChart option={chartOption} height={420} />
       )}
