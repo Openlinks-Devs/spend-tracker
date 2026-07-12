@@ -7,6 +7,9 @@ import { createTransactionsRoute } from './routes/transactions.js'
 import { createAccountsRoute } from './routes/accounts.js'
 import { createCategoriesRoute } from './routes/categories.js'
 import { createTagsRoute } from './routes/tags.js'
+import { createCurrenciesRoute } from './routes/currencies.js'
+import { createSettingsRoute } from './routes/settings.js'
+import { createRatesRoute } from './routes/rates.js'
 
 export function buildApp(): Hono {
   const app = new Hono()
@@ -16,7 +19,7 @@ export function buildApp(): Hono {
     '/api/*',
     cors({
       origin: webOrigin ?? '*',
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type'],
     }),
   )
@@ -28,5 +31,8 @@ export function buildApp(): Hono {
   app.route('/', createAccountsRoute())
   app.route('/', createCategoriesRoute())
   app.route('/', createTagsRoute())
+  app.route('/', createCurrenciesRoute())
+  app.route('/', createSettingsRoute())
+  app.route('/', createRatesRoute())
   return app
 }
