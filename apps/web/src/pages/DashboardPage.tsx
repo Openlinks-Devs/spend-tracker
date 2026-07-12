@@ -5,8 +5,9 @@ import { TransactionListItem } from '@/components/transactions/TransactionListIt
 import { useTransactions } from '@/hooks/useTransactions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
+import { useSettings } from '@/hooks/useSettings'
+import { summarizeTransactions } from '@/lib/dashboardSummary'
 import { formatCurrency, toNameById } from '@/lib/utils'
-import type { Transaction } from '@/types'
 
 // echarts is heavy; load it only when the categories tab first renders.
 const SpendingByCategory = lazy(() =>
@@ -15,48 +16,22 @@ const SpendingByCategory = lazy(() =>
   })),
 )
 
-interface CurrencySummary {
-  currency: string
-  netBalance: number
-  totalSpend: number
-}
-
-function summarizeByCurrency(transactions: Transaction[]): CurrencySummary[] {
-  const byCurrency = new Map<string, { netBalance: number; totalSpend: number }>()
-  for (const transaction of transactions) {
-    const currency = transaction.currency || 'USD'
-    const summary = byCurrency.get(currency) ?? { netBalance: 0, totalSpend: 0 }
-    summary.netBalance += transaction.amount
-    if (transaction.amount < 0) {
-      summary.totalSpend += Math.abs(transaction.amount)
-    }
-    byCurrency.set(currency, summary)
-  }
-  return Array.from(byCurrency.entries())
-    .map(([currency, sums]) => ({ currency, ...sums }))
-    .sort((first, second) => second.totalSpend - first.totalSpend)
-}
-
 export function DashboardPage() {
   const transactionsQuery = useTransactions()
   const accountsQuery = useAccounts()
   const categoriesQuery = useCategories()
+  const settingsQuery = useSettings()
 
   const transactions = useMemo(() => transactionsQuery.data ?? [], [transactionsQuery.data])
+  const baseCurrencyCode = settingsQuery.data?.base_currency_code ?? 'PEN'
 
   const accountNameById = useMemo(() => toNameById(accountsQuery.data), [accountsQuery.data])
-  const accountCurrencyById = useMemo(() => {
-    const lookup = new Map<string, string>()
-    for (const account of accountsQuery.data ?? []) lookup.set(account.id, account.currency)
-    return lookup
-  }, [accountsQuery.data])
+  const categoryNameById = useMemo(() => toNameById(categoriesQuery.data), [categoriesQuery.data])
 
-  const categoryNameById = useMemo(
-    () => toNameById(categoriesQuery.data),
-    [categoriesQuery.data],
+  const summary = useMemo(
+    () => summarizeTransactions(transactions, baseCurrencyCode),
+    [transactions, baseCurrencyCode],
   )
-
-  const currencySummaries = useMemo(() => summarizeByCurrency(transactions), [transactions])
 
   const recentTransactions = useMemo(() => transactions.slice(0, 8), [transactions])
 
@@ -70,30 +45,42 @@ export function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Net balance
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Net balance</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            {currencySummaries.map((summary) => (
-              <div key={summary.currency} className="text-2xl font-semibold tabular-nums">
-                {formatCurrency(summary.netBalance, summary.currency)}
+            <div className="text-2xl font-semibold tabular-nums">
+              {formatCurrency(summary.baseNetBalance, baseCurrencyCode)}
+            </div>
+            {summary.byCurrency.map((breakdown) => (
+              <div key={breakdown.currency} className="text-xs tabular-nums text-muted-foreground">
+                {formatCurrency(breakdown.netBalance, breakdown.currency)}
               </div>
             ))}
+            {summary.hasIncompleteRates ? (
+              <p className="text-xs text-muted-foreground">
+                {baseCurrencyCode} total is partial: some rows are missing rates.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total spend
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total spend</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            {currencySummaries.map((summary) => (
-              <div key={summary.currency} className="text-2xl font-semibold tabular-nums">
-                {formatCurrency(summary.totalSpend, summary.currency)}
+            <div className="text-2xl font-semibold tabular-nums">
+              {formatCurrency(summary.baseTotalSpend, baseCurrencyCode)}
+            </div>
+            {summary.byCurrency.map((breakdown) => (
+              <div key={breakdown.currency} className="text-xs tabular-nums text-muted-foreground">
+                {formatCurrency(breakdown.totalSpend, breakdown.currency)}
               </div>
             ))}
+            {summary.hasIncompleteRates ? (
+              <p className="text-xs text-muted-foreground">
+                {baseCurrencyCode} total is partial: some rows are missing rates.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -127,16 +114,12 @@ export function DashboardPage() {
                           ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
                           : 'Uncategorized'
                       }
-                      baseCurrencyCode="PEN"
+                      baseCurrencyCode={baseCurrencyCode}
                       toAccountName={
                         transaction.to_account_id
-                          ? accountNameById.get(transaction.to_account_id) ?? transaction.to_account_id
+                          ? accountNameById.get(transaction.to_account_id) ??
+                            transaction.to_account_id
                           : undefined
-                      }
-                      toAccountCurrency={
-                        transaction.to_account_id
-                          ? accountCurrencyById.get(transaction.to_account_id) ?? null
-                          : null
                       }
                       showDate
                     />
@@ -149,11 +132,14 @@ export function DashboardPage() {
                 <p className="py-6 text-sm text-muted-foreground">No spending recorded yet.</p>
               ) : (
                 <Suspense
-                  fallback={<p className="py-6 text-sm text-muted-foreground">Loading charts...</p>}
+                  fallback={
+                    <p className="py-6 text-sm text-muted-foreground">Loading charts...</p>
+                  }
                 >
                   <SpendingByCategory
                     transactions={transactions}
                     categoryNameById={categoryNameById}
+                    baseCurrencyCode={baseCurrencyCode}
                   />
                 </Suspense>
               )}
