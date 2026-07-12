@@ -89,15 +89,6 @@ export const transactionColumns = `id, description, amount::float8 AS amount, cu
        base_amount::float8 AS base_amount, rate_used::float8 AS rate_used,
        to_account_id, to_amount::float8 AS to_amount, external_id, created_at, updated_at`
 
-export async function getTransactions(db: Queryable): Promise<Transaction[]> {
-  const result = await db.query(
-    `SELECT ${transactionColumns}
-       FROM transactions
-      ORDER BY occurred_at DESC, id DESC`,
-  )
-  return result.rows as Transaction[]
-}
-
 export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
   const result = await db.query(
     `SELECT ${transactionColumns}
