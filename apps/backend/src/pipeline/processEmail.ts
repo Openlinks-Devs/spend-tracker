@@ -46,7 +46,23 @@ export async function processEmail(
     return
   }
 
-  const { id } = await insertTransaction(deps.db, extracted)
+  const { id } = await insertTransaction(deps.db, {
+    description: extracted.description,
+    amount: extracted.amount,
+    currency: extracted.currency,
+    account_id: extracted.account_id,
+    category_id: extracted.category_id,
+    tags: extracted.tags,
+    type: extracted.amount < 0 ? 'expense' : 'income',
+    payee: null,
+    notes: null,
+    occurred_at: extracted.created_at,
+    base_amount: null,
+    rate_used: null,
+    to_account_id: null,
+    to_amount: null,
+    external_id: null,
+  })
   const account = accounts.find((candidate) => candidate.id === extracted.account_id)
   const category = categories.find((candidate) => candidate.id === extracted.category_id)
   await deps.notify(
