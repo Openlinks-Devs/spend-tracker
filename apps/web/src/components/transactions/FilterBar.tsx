@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { IconX } from '@tabler/icons-react'
+import { IconSortAscending, IconSortDescending, IconX } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,6 +38,11 @@ const tagModeOptions: { value: 'any' | 'all' | 'none'; label: string }[] = [
   { value: 'any', label: 'Any tag' },
   { value: 'all', label: 'All tags' },
   { value: 'none', label: 'No tags' },
+]
+
+const sortFieldOptions: { value: 'occurred_at' | 'amount'; label: string }[] = [
+  { value: 'occurred_at', label: 'Date' },
+  { value: 'amount', label: 'Amount' },
 ]
 
 interface FilterMultiSelectProps {
@@ -102,6 +107,8 @@ export function FilterBar({ filters, onChange, accounts, categories, currencies 
   }
 
   const currentPreset = detectPreset({ from: filters.from, to: filters.to })
+  const sortField = filters.sort ?? 'occurred_at'
+  const sortOrder = filters.order ?? 'desc'
   const categoryNameById = useMemo(
     () => new Map(categories.map((category) => [category.id, category.name])),
     [categories],
@@ -200,6 +207,16 @@ export function FilterBar({ filters, onChange, accounts, categories, currencies 
       key: 'search',
       label: `Search: ${filters.search}`,
       onRemove: () => clearKeys(['search']),
+    })
+  }
+  if (sortField !== 'occurred_at' || sortOrder !== 'desc') {
+    const sortFieldLabel =
+      sortFieldOptions.find((option) => option.value === sortField)?.label ?? sortField
+    const sortOrderLabel = sortOrder === 'asc' ? 'ascending' : 'descending'
+    chips.push({
+      key: 'sort',
+      label: `Sort: ${sortFieldLabel}, ${sortOrderLabel}`,
+      onRemove: () => clearKeys(['sort', 'order']),
     })
   }
 
@@ -408,6 +425,47 @@ export function FilterBar({ filters, onChange, accounts, categories, currencies 
             value={searchDraft}
             onChange={(event) => setSearchDraft(event.target.value)}
           />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Sort by</Label>
+          <div className="flex items-center gap-1">
+            <Select
+              value={sortField}
+              onValueChange={(value) => {
+                if (value === 'occurred_at') clearKeys(['sort'])
+                else patch({ sort: value as 'amount' })
+              }}
+            >
+              <SelectTrigger className="w-28" aria-label="Sort by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sortFieldOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={sortOrder === 'desc' ? 'Sort descending' : 'Sort ascending'}
+              title={sortOrder === 'desc' ? 'Descending (click for ascending)' : 'Ascending (click for descending)'}
+              onClick={() => {
+                if (sortOrder === 'desc') patch({ order: 'asc' })
+                else clearKeys(['order'])
+              }}
+            >
+              {sortOrder === 'desc' ? (
+                <IconSortDescending className="h-4 w-4" />
+              ) : (
+                <IconSortAscending className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 

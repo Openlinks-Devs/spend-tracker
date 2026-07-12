@@ -49,4 +49,46 @@ describe('FilterBar', () => {
     await user.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(onChange).toHaveBeenCalledWith({})
   })
+
+  describe('sort control', () => {
+    it('emits sort=amount when Amount is picked', async () => {
+      const user = userEvent.setup()
+      const { onChange } = renderFilterBar({})
+      await user.click(screen.getByRole('combobox', { name: 'Sort by' }))
+      await user.click(screen.getByRole('option', { name: 'Amount' }))
+      expect(onChange).toHaveBeenCalledWith({ sort: 'amount' })
+    })
+
+    it('emits order=asc when the direction toggle is flipped from the default', async () => {
+      const user = userEvent.setup()
+      const { onChange } = renderFilterBar({})
+      await user.click(screen.getByRole('button', { name: 'Sort descending' }))
+      expect(onChange).toHaveBeenCalledWith({ order: 'asc' })
+    })
+
+    it('removes the order key when toggled back from ascending', async () => {
+      const user = userEvent.setup()
+      const { onChange } = renderFilterBar({ order: 'asc' })
+      await user.click(screen.getByRole('button', { name: 'Sort ascending' }))
+      expect(onChange).toHaveBeenCalledWith({})
+    })
+
+    it('shows no sort chip for the default occurred_at desc sort', () => {
+      renderFilterBar({})
+      expect(screen.queryByText(/^Sort:/)).not.toBeInTheDocument()
+    })
+
+    it('shows a sort chip for a non-default sort and clears both keys on remove', async () => {
+      const user = userEvent.setup()
+      const { onChange } = renderFilterBar({ sort: 'amount', order: 'asc' })
+      expect(screen.getByText('Sort: Amount, ascending')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Remove Sort: Amount, ascending' }))
+      expect(onChange).toHaveBeenCalledWith({})
+    })
+
+    it('shows a sort chip when only the order differs from the default', () => {
+      renderFilterBar({ order: 'asc' })
+      expect(screen.getByText('Sort: Date, ascending')).toBeInTheDocument()
+    })
+  })
 })
