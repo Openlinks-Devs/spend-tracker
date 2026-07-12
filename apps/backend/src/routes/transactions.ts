@@ -7,10 +7,18 @@ import {
   getAccountById,
   getCategoryById,
   getTransactionById,
-  getTransactions,
   insertTransaction,
   updateTransaction,
 } from '../db/queries.js'
+import type { Transaction } from '../db/types.js'
+import {
+  buildTransactionListQuery,
+  decodeCursor,
+  encodeCursor,
+  reduceTotals,
+  type TotalsRow,
+  type TransactionListFilters,
+} from '../db/transactionFilters.js'
 import { convertAmount, getBaseCurrencyCode } from '../currency/rates.js'
 import { isUuid, parseJsonBody } from './validation.js'
 
@@ -156,13 +164,113 @@ async function resolveBaseAmount(
   return { base_amount: conversion.convertedAmount, rate_used: conversion.rateUsed }
 }
 
+type ParsedListFilters =
+  | { success: true; filters: TransactionListFilters }
+  | { success: false; error: string }
+
+function parseListFilters(query: Record<string, string>): ParsedListFilters {
+  const filters: TransactionListFilters = {}
+  if (query.from) filters.from = query.from
+  if (query.to) filters.to = query.to
+  if (query.account_ids) {
+    const accountIds = query.account_ids.split(',').filter(Boolean)
+    if (accountIds.some((candidateId) => !isUuid(candidateId))) {
+      return { success: false, error: 'account_ids must be a comma-separated list of uuids' }
+    }
+    filters.account_ids = accountIds
+  }
+  if (query.category_ids) {
+    const categoryIds = query.category_ids.split(',').filter(Boolean)
+    if (categoryIds.some((candidateId) => !isUuid(candidateId))) {
+      return { success: false, error: 'category_ids must be a comma-separated list of uuids' }
+    }
+    filters.category_ids = categoryIds
+  }
+  if (query.uncategorized === 'true') filters.uncategorized = true
+  if (query.tags) filters.tags = query.tags.split(',').filter(Boolean)
+  if (query.tag_mode) {
+    if (!['any', 'all', 'none'].includes(query.tag_mode)) {
+      return { success: false, error: 'tag_mode must be any, all, or none' }
+    }
+    filters.tag_mode = query.tag_mode as 'any' | 'all' | 'none'
+  }
+  if (query.amount_min !== undefined) {
+    const amountMin = Number(query.amount_min)
+    if (Number.isNaN(amountMin)) return { success: false, error: 'amount_min must be a number' }
+    filters.amount_min = amountMin
+  }
+  if (query.amount_max !== undefined) {
+    const amountMax = Number(query.amount_max)
+    if (Number.isNaN(amountMax)) return { success: false, error: 'amount_max must be a number' }
+    filters.amount_max = amountMax
+  }
+  if (query.currency) filters.currency = query.currency
+  if (query.type) {
+    if (!['expense', 'income', 'transfer'].includes(query.type)) {
+      return { success: false, error: 'type must be expense, income, or transfer' }
+    }
+    filters.type = query.type as 'expense' | 'income' | 'transfer'
+  }
+  if (query.search) filters.search = query.search
+  if (query.sort) {
+    if (!['occurred_at', 'amount'].includes(query.sort)) {
+      return { success: false, error: 'sort must be occurred_at or amount' }
+    }
+    filters.sort = query.sort as 'occurred_at' | 'amount'
+  }
+  if (query.order) {
+    if (!['asc', 'desc'].includes(query.order)) {
+      return { success: false, error: 'order must be asc or desc' }
+    }
+    filters.order = query.order as 'asc' | 'desc'
+  }
+  if (query.cursor) {
+    if (!decodeCursor(query.cursor)) return { success: false, error: 'Invalid cursor' }
+    filters.cursor = query.cursor
+  }
+  if (query.limit !== undefined) {
+    const limit = Number(query.limit)
+    if (!Number.isInteger(limit) || limit < 1) {
+      return { success: false, error: 'limit must be a positive integer' }
+    }
+    filters.limit = limit
+  }
+  return { success: true, filters }
+}
+
 export function createTransactionsRoute(resolveDb: () => Queryable = getPool): Hono {
   const route = new Hono()
 
   route.get('/api/transactions', async (context) => {
+    const parsedFilters = parseListFilters(context.req.query())
+    if (!parsedFilters.success) {
+      return context.json({ error: parsedFilters.error }, 400)
+    }
     try {
-      const transactions = await getTransactions(resolveDb())
-      return context.json(transactions)
+      const db = resolveDb()
+      const { listSql, listParams, totalsSql, totalsParams, limit } = buildTransactionListQuery(
+        parsedFilters.filters,
+      )
+      const [listResult, totalsResult, baseCurrencyCode] = await Promise.all([
+        db.query(listSql, listParams),
+        db.query(totalsSql, totalsParams),
+        getBaseCurrencyCode(db),
+      ])
+      const rows = listResult.rows as Transaction[]
+      const hasMore = rows.length > limit
+      const items = hasMore ? rows.slice(0, limit) : rows
+      const lastItem = items[items.length - 1]
+      const sort = parsedFilters.filters.sort ?? 'occurred_at'
+      const next_cursor =
+        hasMore && lastItem
+          ? encodeCursor(
+              sort === 'amount'
+                ? { occurred_at: lastItem.occurred_at, id: lastItem.id, amount: lastItem.amount }
+                : { occurred_at: lastItem.occurred_at, id: lastItem.id },
+            )
+          : null
+      const totals = reduceTotals(totalsResult.rows as TotalsRow[], baseCurrencyCode)
+      return context.json({ items, next_cursor, totals })
     } catch (error) {
       console.error('Failed to list transactions:', error)
       return context.json({ error: 'Failed to list transactions' }, 500)
