@@ -21,7 +21,7 @@ import { usePayees } from '@/hooks/usePayees'
 import { useSettings } from '@/hooks/useSettings'
 import { filtersToSearchParams, searchParamsToFilters } from '@/lib/filterParams'
 import { toNameById } from '@/lib/utils'
-import { groupTransactionsByDay } from '@/lib/groupTransactions'
+import { groupTransactionsByDay, shouldGroupByDay } from '@/lib/groupTransactions'
 import { toErrorMessage } from '@/lib/api'
 import type { NewTransaction, Transaction, TransactionFilters, TransactionUpdate } from '@/types'
 
@@ -69,7 +69,42 @@ export function TransactionsPage() {
   }, [accounts])
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
 
-  const dayGroups = useMemo(() => groupTransactionsByDay(items), [items])
+  // Day grouping assumes occurred_at ordering; under amount sort the list
+  // renders flat so days do not fragment into repeated headers.
+  const groupByDay = shouldGroupByDay(filters)
+  const dayGroups = useMemo(
+    () => (groupByDay ? groupTransactionsByDay(items) : []),
+    [groupByDay, items],
+  )
+
+  function renderTransactionItem(transaction: Transaction, showDate: boolean) {
+    return (
+      <TransactionListItem
+        key={transaction.id}
+        transaction={transaction}
+        accountName={accountNameById.get(transaction.account_id) ?? transaction.account_id}
+        categoryName={
+          transaction.category_id
+            ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
+            : 'Uncategorized'
+        }
+        baseCurrencyCode={baseCurrencyCode}
+        toAccountName={
+          transaction.to_account_id
+            ? accountNameById.get(transaction.to_account_id) ?? transaction.to_account_id
+            : undefined
+        }
+        toAccountCurrency={
+          transaction.to_account_id
+            ? accountCurrencyById.get(transaction.to_account_id) ?? null
+            : null
+        }
+        showDate={showDate}
+        onEdit={openEditDialog}
+        onDelete={openDeleteDialog}
+      />
+    )
+  }
 
   function openCreateDialog() {
     setEditingTransaction(null)
@@ -151,42 +186,24 @@ export function TransactionsPage() {
             <p className="p-6 text-sm text-muted-foreground">No transactions match these filters.</p>
           ) : (
             <div>
-              {dayGroups.map((dayGroup) => (
-                <section key={dayGroup.dayKey} className="border-b last:border-b-0">
-                  <header className="border-b bg-muted/40 px-6 py-2">
-                    <h2 className="text-sm font-medium">{dayGroup.dayLabel}</h2>
-                  </header>
-                  <ul className="divide-y">
-                    {dayGroup.transactions.map((transaction) => (
-                      <TransactionListItem
-                        key={transaction.id}
-                        transaction={transaction}
-                        accountName={
-                          accountNameById.get(transaction.account_id) ?? transaction.account_id
-                        }
-                        categoryName={
-                          transaction.category_id
-                            ? categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
-                            : 'Uncategorized'
-                        }
-                        baseCurrencyCode={baseCurrencyCode}
-                        toAccountName={
-                          transaction.to_account_id
-                            ? accountNameById.get(transaction.to_account_id) ?? transaction.to_account_id
-                            : undefined
-                        }
-                        toAccountCurrency={
-                          transaction.to_account_id
-                            ? accountCurrencyById.get(transaction.to_account_id) ?? null
-                            : null
-                        }
-                        onEdit={openEditDialog}
-                        onDelete={openDeleteDialog}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              ))}
+              {groupByDay ? (
+                dayGroups.map((dayGroup) => (
+                  <section key={dayGroup.dayKey} className="border-b last:border-b-0">
+                    <header className="border-b bg-muted/40 px-6 py-2">
+                      <h2 className="text-sm font-medium">{dayGroup.dayLabel}</h2>
+                    </header>
+                    <ul className="divide-y">
+                      {dayGroup.transactions.map((transaction) =>
+                        renderTransactionItem(transaction, false),
+                      )}
+                    </ul>
+                  </section>
+                ))
+              ) : (
+                <ul className="divide-y">
+                  {items.map((transaction) => renderTransactionItem(transaction, true))}
+                </ul>
+              )}
               {transactionsQuery.hasNextPage ? (
                 <div className="flex justify-center p-4">
                   <Button

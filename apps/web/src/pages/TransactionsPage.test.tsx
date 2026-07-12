@@ -61,3 +61,17 @@ describe('TransactionsPage URL filters', () => {
     expect(screen.getByText('Search: coffee')).toBeInTheDocument()
   })
 })
+
+describe('TransactionsPage day grouping', () => {
+  it('renders day group headers under the default date sort', async () => {
+    renderPage('/transactions')
+    await waitFor(() => expect(screen.getByText('Coffee')).toBeInTheDocument())
+    expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument()
+  })
+
+  it('renders a flat list without day headers under amount sort', async () => {
+    renderPage('/transactions?sort=amount')
+    await waitFor(() => expect(screen.getByText('Coffee')).toBeInTheDocument())
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument()
+  })
+})
