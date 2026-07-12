@@ -14,11 +14,20 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   useAccounts,
   useCreateAccount,
   useDeleteAccount,
   useUpdateAccount,
 } from '@/hooks/useAccounts'
+import { useCurrencies } from '@/hooks/useCurrencies'
+import { useSettings } from '@/hooks/useSettings'
 import { toErrorMessage } from '@/lib/api'
 import type { Account } from '@/types'
 
@@ -28,10 +37,10 @@ interface AccountFormState {
   currency: string
 }
 
-const emptyFormState: AccountFormState = { name: '', type: 'checking', currency: 'USD' }
-
 export function AccountsPage() {
   const accountsQuery = useAccounts()
+  const currenciesQuery = useCurrencies()
+  const settingsQuery = useSettings()
   const createAccount = useCreateAccount()
   const updateAccount = useUpdateAccount()
   const deleteAccount = useDeleteAccount()
@@ -40,10 +49,16 @@ export function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deletingAccount, setDeletingAccount] = useState<Account | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [formState, setFormState] = useState<AccountFormState>(emptyFormState)
+  const [formState, setFormState] = useState<AccountFormState>({
+    name: '',
+    type: 'checking',
+    currency: 'PEN',
+  })
   const [formError, setFormError] = useState<string | null>(null)
 
   const accounts = accountsQuery.data ?? []
+  const currencies = currenciesQuery.data ?? []
+  const baseCurrencyCode = settingsQuery.data?.base_currency_code ?? 'PEN'
   const isEditing = editingAccount !== null
 
   useEffect(() => {
@@ -55,8 +70,11 @@ export function AccountsPage() {
         currency: editingAccount.currency,
       })
     } else {
-      setFormState(emptyFormState)
+      setFormState({ name: '', type: 'checking', currency: baseCurrencyCode })
     }
+    // baseCurrencyCode only needs to seed the form the moment the dialog opens
+    // for a new account, not while the user is editing the currency field.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDialogOpen, editingAccount])
 
   function openCreateDialog() {
@@ -211,18 +229,23 @@ export function AccountsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="account-currency">Currency</Label>
-                <Input
-                  id="account-currency"
+                <Select
                   value={formState.currency}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      currency: event.target.value.toUpperCase(),
-                    }))
+                  onValueChange={(value) =>
+                    setFormState((current) => ({ ...current, currency: value }))
                   }
-                  maxLength={3}
-                  required
-                />
+                >
+                  <SelectTrigger id="account-currency" aria-label="Currency">
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency) => (
+                      <SelectItem key={currency.code} value={currency.code}>
+                        {currency.code} - {currency.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}

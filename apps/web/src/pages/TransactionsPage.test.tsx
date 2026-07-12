@@ -26,6 +26,7 @@ function renderPage(initialUrl: string) {
       data: [{ code: 'PEN', name: 'Sol', symbol: 'S/', decimal_places: 2 }],
     },
     { match: '/settings', data: { id: 1, base_currency_code: 'PEN' } },
+    { match: '/payees', data: [{ payee: 'Wong', last_category_id: 'cat-1' }] },
   ])
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

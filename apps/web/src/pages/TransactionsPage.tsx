@@ -17,6 +17,7 @@ import {
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
 import { useCurrencies } from '@/hooks/useCurrencies'
+import { usePayees } from '@/hooks/usePayees'
 import { useSettings } from '@/hooks/useSettings'
 import { filtersToSearchParams, searchParamsToFilters } from '@/lib/filterParams'
 import { toNameById } from '@/lib/utils'
@@ -37,6 +38,7 @@ export function TransactionsPage() {
   const categoriesQuery = useCategories()
   const currenciesQuery = useCurrencies()
   const settingsQuery = useSettings()
+  const { payees: existingPayees, payeeCategoryHistory } = usePayees()
 
   const createTransaction = useCreateTransaction()
   const updateTransaction = useUpdateTransaction()
@@ -66,27 +68,6 @@ export function TransactionsPage() {
     return lookup
   }, [accounts])
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
-
-  const existingPayees = useMemo(() => {
-    const seen = new Set<string>()
-    for (const transaction of items) {
-      if (transaction.payee) seen.add(transaction.payee)
-    }
-    return Array.from(seen).sort()
-  }, [items])
-
-  // Most recent transaction per payee wins: items are already ordered
-  // newest first (occurred_at desc), so the first category_id seen for a
-  // payee is kept and later, older duplicates are skipped.
-  const payeeCategoryHistory = useMemo(() => {
-    const history: Record<string, string> = {}
-    for (const transaction of items) {
-      if (transaction.payee && transaction.category_id && !(transaction.payee in history)) {
-        history[transaction.payee] = transaction.category_id
-      }
-    }
-    return history
-  }, [items])
 
   const dayGroups = useMemo(() => groupTransactionsByDay(items), [items])
 
