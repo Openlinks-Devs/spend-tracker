@@ -3,13 +3,14 @@ import { z } from 'zod'
 import type { Queryable } from '../db/pool.js'
 import { getPool } from '../db/pool.js'
 import {
+  accountHasTransactions,
   deleteAccount,
   getAccountById,
   getAccounts,
   insertAccount,
   updateAccount,
 } from '../db/queries.js'
-import { parseJsonBody } from './validation.js'
+import { isUuid, parseJsonBody } from './validation.js'
 
 const newAccountSchema = z.object({
   name: z.string().min(1),
@@ -37,8 +38,10 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
   })
 
   route.get('/api/accounts/:id', async (context) => {
+    const id = context.req.param('id')
+    if (!isUuid(id)) return context.json({ error: 'Invalid account id' }, 400)
     try {
-      const account = await getAccountById(resolveDb(), context.req.param('id'))
+      const account = await getAccountById(resolveDb(), id)
       if (!account) return context.json({ error: 'Account not found' }, 404)
       return context.json(account)
     } catch (error) {
@@ -65,6 +68,7 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
 
   route.patch('/api/accounts/:id', async (context) => {
     const id = context.req.param('id')
+    if (!isUuid(id)) return context.json({ error: 'Invalid account id' }, 400)
     const parsed = await parseJsonBody(context, accountUpdateSchema)
     if (!parsed.success) {
       return context.json({ error: parsed.error }, 400)
@@ -89,10 +93,17 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
 
   route.delete('/api/accounts/:id', async (context) => {
     const id = context.req.param('id')
+    if (!isUuid(id)) return context.json({ error: 'Invalid account id' }, 400)
     try {
       const db = resolveDb()
       const existing = await getAccountById(db, id)
       if (!existing) return context.json({ error: 'Account not found' }, 404)
+      if (await accountHasTransactions(db, id)) {
+        return context.json(
+          { error: 'Account has transactions. Reassign or delete them first.' },
+          409,
+        )
+      }
       await deleteAccount(db, id)
       return context.json({ success: true })
     } catch (error) {

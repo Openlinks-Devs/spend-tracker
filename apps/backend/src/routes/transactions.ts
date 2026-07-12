@@ -278,8 +278,10 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
   })
 
   route.get('/api/transactions/:id', async (context) => {
+    const id = context.req.param('id')
+    if (!isUuid(id)) return context.json({ error: 'Invalid transaction id' }, 400)
     try {
-      const transaction = await getTransactionById(resolveDb(), context.req.param('id'))
+      const transaction = await getTransactionById(resolveDb(), id)
       if (!transaction) return context.json({ error: 'Transaction not found' }, 404)
       return context.json(transaction)
     } catch (error) {
@@ -342,6 +344,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
 
   route.patch('/api/transactions/:id', async (context) => {
     const id = context.req.param('id')
+    if (!isUuid(id)) return context.json({ error: 'Invalid transaction id' }, 400)
     const parsed = await parseJsonBody(context, transactionUpdateSchema)
     if (!parsed.success) {
       return context.json({ error: parsed.error }, 400)
@@ -437,6 +440,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
 
   route.delete('/api/transactions/:id', async (context) => {
     const id = context.req.param('id')
+    if (!isUuid(id)) return context.json({ error: 'Invalid transaction id' }, 400)
     try {
       const db = resolveDb()
       const existing = await getTransactionById(db, id)
