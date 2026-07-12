@@ -41,6 +41,8 @@ interface DbFixtures {
   accounts?: Record<string, unknown>
   categories?: Record<string, unknown>
   transactions?: Record<string, unknown>
+  listRows?: unknown[]
+  totalsRows?: unknown[]
 }
 
 const defaultAccounts = {
@@ -77,6 +79,17 @@ function createDb(fixtures: DbFixtures = {}) {
       if (/insert into transactions/i.test(sql)) return { rows: [{ id: 'tx-new' }] }
       if (/update transactions/i.test(sql)) return { rows: [] }
       if (/delete from transactions/i.test(sql)) return { rows: [] }
+      if (/group by currency/i.test(sql)) {
+        return {
+          rows:
+            fixtures.totalsRows ?? [
+              { currency: 'PEN', count: 2, sum: -25, base_sum: -25, missing_base: false },
+            ],
+        }
+      }
+      if (/from transactions/i.test(sql) && /order by/i.test(sql)) {
+        return { rows: fixtures.listRows ?? Object.values(transactions) }
+      }
       if (/from transactions/i.test(sql) && /where id/i.test(sql)) {
         const transaction = transactions[String(params?.[0])]
         return { rows: transaction ? [transaction] : [] }
@@ -119,13 +132,91 @@ beforeEach(() => {
 })
 
 describe('transactions route: read and delete', () => {
-  it('GET /api/transactions returns the list', async () => {
+  it('GET /api/transactions returns items, next_cursor, and totals', async () => {
     const db = createDb()
     const route = createTransactionsRoute(() => db)
     const response = await route.request('/api/transactions')
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(Array.isArray(body)).toBe(true)
+    expect(Array.isArray(body.items)).toBe(true)
+    expect(body.next_cursor).toBeNull()
+    expect(body.totals).toEqual({
+      count: 2,
+      by_currency: [{ currency: 'PEN', sum: -25 }],
+      base: { currency: 'PEN', sum: -25 },
+    })
+  })
+
+  it('GET /api/transactions pages with a decodable next_cursor', async () => {
+    const rowIds = [
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    ]
+    const listRows = rowIds.map((rowId, index) => ({
+      ...sampleTransaction,
+      id: rowId,
+      occurred_at: `2026-06-2${index}T10:00:00.000Z`,
+    }))
+    const db = createDb({ listRows })
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions?limit=2')
+    const body = await response.json()
+    expect(body.items).toHaveLength(2)
+    expect(body.next_cursor).toBeTypeOf('string')
+    const decoded = JSON.parse(
+      Buffer.from(body.next_cursor as string, 'base64url').toString('utf8'),
+    )
+    expect(decoded.id).toBe(rowIds[1])
+  })
+
+  it('GET /api/transactions passes filters into the SQL', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await route.request('/api/transactions?currency=USD&type=expense&search=cafe')
+    const listCall = db.query.mock.calls.find(([sql]) => /order by/i.test(sql as string))
+    expect(listCall?.[0]).toMatch(/currency = \$/)
+    expect(listCall?.[0]).toMatch(/type = \$/)
+    expect(listCall?.[0]).toMatch(/ILIKE/)
+    expect(listCall?.[1]).toContain('USD')
+    expect(listCall?.[1]).toContain('expense')
+    expect(listCall?.[1]).toContain('%cafe%')
+  })
+
+  it('GET /api/transactions returns a null base sum when rates are missing', async () => {
+    const db = createDb({
+      totalsRows: [
+        { currency: 'PEN', count: 1, sum: -10, base_sum: -10, missing_base: false },
+        { currency: 'USD', count: 1, sum: -20, base_sum: null, missing_base: true },
+      ],
+    })
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions')
+    const body = await response.json()
+    expect(body.totals.base.sum).toBeNull()
+    expect(body.totals.count).toBe(2)
+  })
+
+  it('GET /api/transactions rejects an invalid cursor with 400', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions?cursor=%%%broken')
+    expect(response.status).toBe(400)
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  it('GET /api/transactions rejects an invalid tag_mode with 400', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions?tags=food&tag_mode=some')
+    expect(response.status).toBe(400)
+  })
+
+  it('GET /api/transactions rejects non-uuid account_ids with 400', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions?account_ids=abc,def')
+    expect(response.status).toBe(400)
   })
 
   it('GET /api/transactions/:id returns 404 when missing', async () => {

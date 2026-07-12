@@ -6,7 +6,6 @@ import {
   updateTransaction,
   deleteTransaction,
   setState,
-  getTransactions,
   getTransactionById,
   getAccountById,
   insertAccount,
@@ -99,17 +98,6 @@ describe('queries', () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     await setState(db, 'gmail_history_id', '42')
     expect(db.query.mock.calls[0][0]).toMatch(/on conflict/i)
-  })
-
-  it('getTransactions selects the full row ordered by occurred_at', async () => {
-    const db = fakeDb([{ id: 'tx1' }, { id: 'tx2' }])
-    const transactions = await getTransactions(db)
-    expect(transactions).toHaveLength(2)
-    expect(db.query.mock.calls[0][0]).toMatch(/from transactions/i)
-    expect(db.query.mock.calls[0][0]).toMatch(/order by occurred_at desc, id desc/i)
-    expect(db.query.mock.calls[0][0]).toMatch(/payee/)
-    expect(db.query.mock.calls[0][0]).toMatch(/base_amount/)
-    expect(db.query.mock.calls[0][0]).toMatch(/external_id/)
   })
 
   it('getTransactionById returns null when no rows', async () => {
