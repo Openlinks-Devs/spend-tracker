@@ -7,6 +7,7 @@ import { createTransactionsRoute } from './routes/transactions.js'
 import { createAccountsRoute } from './routes/accounts.js'
 import { createCategoriesRoute } from './routes/categories.js'
 import { createTagsRoute } from './routes/tags.js'
+import { createPayeesRoute } from './routes/payees.js'
 import { createCurrenciesRoute } from './routes/currencies.js'
 import { createSettingsRoute } from './routes/settings.js'
 import { createRatesRoute } from './routes/rates.js'
@@ -31,6 +32,7 @@ export function buildApp(): Hono {
   app.route('/', createAccountsRoute())
   app.route('/', createCategoriesRoute())
   app.route('/', createTagsRoute())
+  app.route('/', createPayeesRoute())
   app.route('/', createCurrenciesRoute())
   app.route('/', createSettingsRoute())
   app.route('/', createRatesRoute())
