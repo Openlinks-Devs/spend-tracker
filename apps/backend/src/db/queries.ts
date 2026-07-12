@@ -104,6 +104,25 @@ export async function getDistinctTags(db: Queryable): Promise<string[]> {
   return result.rows.map((row: { tag: string }) => row.tag)
 }
 
+export interface Payee {
+  payee: string
+  last_category_id: string | null
+}
+
+// One row per distinct payee, carrying the category of that payee's most
+// recent non-transfer transaction (transfers never carry a category_id).
+// Feeds the web app's payee autocomplete, which should pre-fill the last
+// category used for a known payee.
+export async function getPayees(db: Queryable): Promise<Payee[]> {
+  const result = await db.query(
+    `SELECT DISTINCT ON (payee) payee, category_id AS last_category_id
+       FROM transactions
+      WHERE payee IS NOT NULL AND type <> 'transfer'
+      ORDER BY payee, occurred_at DESC`,
+  )
+  return result.rows as Payee[]
+}
+
 export async function insertTransaction(
   db: Queryable,
   transaction: NewTransaction,

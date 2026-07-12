@@ -113,10 +113,20 @@ export function buildTransactionListQuery(filters: TransactionListFilters): Tran
   }
   if (filters.search) {
     const searchParam = addParam(`%${filters.search}%`)
-    conditions.push(
-      `(description ILIKE ${searchParam} OR payee ILIKE ${searchParam} OR notes ILIKE ${searchParam}` +
-        ` OR EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE tag ILIKE ${searchParam}))`,
-    )
+    const searchConditions = [
+      `description ILIKE ${searchParam}`,
+      `payee ILIKE ${searchParam}`,
+      `notes ILIKE ${searchParam}`,
+      `EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE tag ILIKE ${searchParam})`,
+    ]
+    // A search term that parses as a finite positive number also matches on
+    // the transaction's absolute amount (research P0 item 9: text search
+    // matches description, payee, notes, tag names, and amount).
+    const searchAmount = Number(filters.search)
+    if (Number.isFinite(searchAmount) && searchAmount > 0) {
+      searchConditions.push(`abs(amount) = ${addParam(searchAmount)}`)
+    }
+    conditions.push(`(${searchConditions.join(' OR ')})`)
   }
 
   // Totals cover the WHOLE filtered set: snapshot before cursor and limit.
