@@ -1,12 +1,17 @@
+import { filtersToApiSearchParams } from '@/lib/filterParams'
 import type {
   Account,
   AccountUpdate,
   Category,
   CategoryUpdate,
+  Currency,
   NewAccount,
   NewCategory,
   NewTransaction,
+  Settings,
   Transaction,
+  TransactionFilters,
+  TransactionListResponse,
   TransactionUpdate,
 } from '@/types'
 
@@ -77,9 +82,39 @@ function createResourceApi<Entity, NewEntity, UpdateEntity>(
   }
 }
 
-export const transactionsApi = createResourceApi<Transaction, NewTransaction, TransactionUpdate>(
+const transactionsResource = createResourceApi<Transaction, NewTransaction, TransactionUpdate>(
   'transactions',
 )
+
+// Bridge: GET /api/transactions now returns a paginated envelope. Old pages
+// still consume a flat array until they move to useTransactionsInfinite
+// (Tasks 11 to 13), so list() unwraps the first page.
+export const transactionsApi = {
+  ...transactionsResource,
+  list: () =>
+    request<TransactionListResponse>('/transactions?limit=200').then((page) => page.items),
+}
+
+export function listTransactionsPage(
+  filters: TransactionFilters,
+  cursor: string | null,
+): Promise<TransactionListResponse> {
+  const params = filtersToApiSearchParams(filters)
+  if (cursor) params.set('cursor', cursor)
+  const query = params.toString()
+  return request<TransactionListResponse>(`/transactions${query ? `?${query}` : ''}`)
+}
+
+export const currenciesApi = {
+  list: () => request<Currency[]>('/currencies'),
+}
+
+export const settingsApi = {
+  get: () => request<Settings>('/settings'),
+  update: (payload: { base_currency_code: string }) =>
+    request<Settings>('/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+}
+
 export const accountsApi = createResourceApi<Account, NewAccount, AccountUpdate>('accounts')
 export const categoriesApi = createResourceApi<Category, NewCategory, CategoryUpdate>('categories')
 
