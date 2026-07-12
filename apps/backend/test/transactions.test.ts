@@ -40,6 +40,7 @@ const sampleTransaction = {
 interface DbFixtures {
   accounts?: Record<string, unknown>
   categories?: Record<string, unknown>
+  currencies?: Record<string, unknown>
   transactions?: Record<string, unknown>
   listRows?: unknown[]
   totalsRows?: unknown[]
@@ -55,6 +56,11 @@ const defaultCategories = {
   [incomeCategoryId]: { id: incomeCategoryId, name: 'Salary', type: 'income' },
 }
 
+const defaultCurrencies = {
+  PEN: { code: 'PEN', name: 'Peruvian Sol', symbol: 'S/', decimal_places: 2 },
+  USD: { code: 'USD', name: 'US Dollar', symbol: '$', decimal_places: 2 },
+}
+
 function defaultTransactions(): Record<string, unknown> {
   return {
     [transactionId]: { ...sampleTransaction },
@@ -65,6 +71,7 @@ function defaultTransactions(): Record<string, unknown> {
 function createDb(fixtures: DbFixtures = {}) {
   const accounts = fixtures.accounts ?? defaultAccounts
   const categories = fixtures.categories ?? defaultCategories
+  const currencies = fixtures.currencies ?? defaultCurrencies
   const transactions = fixtures.transactions ?? defaultTransactions()
   return {
     query: vi.fn(async (sql: string, params?: unknown[]) => {
@@ -75,6 +82,10 @@ function createDb(fixtures: DbFixtures = {}) {
       if (/from categories/i.test(sql)) {
         const category = (categories as Record<string, unknown>)[String(params?.[0])]
         return { rows: category ? [category] : [] }
+      }
+      if (/from currencies/i.test(sql)) {
+        const currency = (currencies as Record<string, unknown>)[String(params?.[0])]
+        return { rows: currency ? [currency] : [] }
       }
       if (/insert into transactions/i.test(sql)) return { rows: [{ id: 'tx-new' }] }
       if (/update transactions/i.test(sql)) return { rows: [] }
@@ -577,6 +588,22 @@ describe('POST /api/transactions', () => {
     })
     expect(response.status).toBe(400)
   })
+
+  it('returns 400 for an unknown currency code', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'XXX',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Unknown currency code: XXX' })
+    expect(findParams(db, /insert into transactions/i)).toBeUndefined()
+  })
 })
 
 describe('PATCH /api/transactions/:id', () => {
@@ -664,5 +691,14 @@ describe('PATCH /api/transactions/:id', () => {
     const route = createTransactionsRoute(() => db)
     const response = await patchTransaction(route, missingId, { description: 'Tea' })
     expect(response.status).toBe(404)
+  })
+
+  it('returns 400 when changing currency to an unknown code', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, transactionId, { currency: 'XXX' })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Unknown currency code: XXX' })
+    expect(findParams(db, /update transactions/i)).toBeUndefined()
   })
 })
