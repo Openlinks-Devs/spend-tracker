@@ -1,66 +1,41 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { IconPlus } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { FilterBar } from '@/components/transactions/FilterBar'
 import { TransactionFormDialog } from '@/components/transactions/TransactionFormDialog'
 import { TransactionListItem } from '@/components/transactions/TransactionListItem'
+import { TransactionTotalsBar } from '@/components/transactions/TransactionTotalsBar'
 import {
   useCreateTransaction,
   useDeleteTransaction,
-  useTransactions,
+  useTransactionsInfinite,
   useUpdateTransaction,
 } from '@/hooks/useTransactions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
-import { formatCurrency, formatDayLabel, toDayKey, toNameById } from '@/lib/utils'
+import { useCurrencies } from '@/hooks/useCurrencies'
+import { useSettings } from '@/hooks/useSettings'
+import { filtersToSearchParams, searchParamsToFilters } from '@/lib/filterParams'
+import { formatDayLabel, toDayKey, toNameById } from '@/lib/utils'
 import { toErrorMessage } from '@/lib/api'
-import type { NewTransaction, Transaction, TransactionUpdate } from '@/types'
-
-interface DayGroup {
-  dayKey: string
-  dayLabel: string
-  netByCurrency: Map<string, number>
-  transactions: Transaction[]
-}
-
-function groupTransactionsByDay(transactions: Transaction[]): DayGroup[] {
-  const sorted = [...transactions].sort(
-    (first, second) =>
-      new Date(second.created_at).getTime() - new Date(first.created_at).getTime(),
-  )
-  const groups: DayGroup[] = []
-  for (const transaction of sorted) {
-    const dayKey = toDayKey(transaction.created_at)
-    let group = groups[groups.length - 1]
-    if (!group || group.dayKey !== dayKey) {
-      group = {
-        dayKey,
-        dayLabel: formatDayLabel(transaction.created_at),
-        netByCurrency: new Map(),
-        transactions: [],
-      }
-      groups.push(group)
-    }
-    group.transactions.push(transaction)
-    group.netByCurrency.set(
-      transaction.currency,
-      (group.netByCurrency.get(transaction.currency) ?? 0) + transaction.amount,
-    )
-  }
-  return groups
-}
-
-function formatDayNet(netByCurrency: Map<string, number>): string {
-  return Array.from(netByCurrency.entries())
-    .map(([currency, net]) => formatCurrency(net, currency))
-    .join(' · ')
-}
+import type { NewTransaction, Transaction, TransactionFilters, TransactionUpdate } from '@/types'
 
 export function TransactionsPage() {
-  const transactionsQuery = useTransactions()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filters = useMemo(() => searchParamsToFilters(searchParams), [searchParams])
+
+  function applyFilters(nextFilters: TransactionFilters) {
+    setSearchParams(filtersToSearchParams(nextFilters), { replace: true })
+  }
+
+  const transactionsQuery = useTransactionsInfinite(filters)
   const accountsQuery = useAccounts()
   const categoriesQuery = useCategories()
+  const currenciesQuery = useCurrencies()
+  const settingsQuery = useSettings()
 
   const createTransaction = useCreateTransaction()
   const updateTransaction = useUpdateTransaction()
@@ -74,34 +49,53 @@ export function TransactionsPage() {
 
   const accounts = accountsQuery.data ?? []
   const categories = categoriesQuery.data ?? []
-  const transactions = transactionsQuery.data ?? []
+  const currencies = currenciesQuery.data ?? []
+  const baseCurrencyCode = settingsQuery.data?.base_currency_code ?? 'PEN'
+
+  const items = useMemo(
+    () => transactionsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [transactionsQuery.data],
+  )
+  const totals = transactionsQuery.data?.pages[0]?.totals ?? null
 
   const accountNameById = useMemo(() => toNameById(accounts), [accounts])
-
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
 
   const existingPayees = useMemo(() => {
     const seen = new Set<string>()
-    for (const transaction of transactions) {
+    for (const transaction of items) {
       if (transaction.payee) seen.add(transaction.payee)
     }
     return Array.from(seen).sort()
-  }, [transactions])
+  }, [items])
 
-  // Most recent transaction per payee wins: transactions are already
-  // ordered newest first, so the first category_id seen for a payee is
-  // kept and later, older duplicates are skipped.
+  // Most recent transaction per payee wins: items are already ordered
+  // newest first (occurred_at desc), so the first category_id seen for a
+  // payee is kept and later, older duplicates are skipped.
   const payeeCategoryHistory = useMemo(() => {
     const history: Record<string, string> = {}
-    for (const transaction of transactions) {
+    for (const transaction of items) {
       if (transaction.payee && transaction.category_id && !(transaction.payee in history)) {
         history[transaction.payee] = transaction.category_id
       }
     }
     return history
-  }, [transactions])
+  }, [items])
 
-  const dayGroups = useMemo(() => groupTransactionsByDay(transactions), [transactions])
+  // Interim grouping on occurred_at; Task 12 extracts and tests a pure module.
+  const dayGroups = useMemo(() => {
+    const groups: { dayKey: string; dayLabel: string; transactions: Transaction[] }[] = []
+    for (const transaction of items) {
+      const dayKey = toDayKey(transaction.occurred_at)
+      let group = groups[groups.length - 1]
+      if (!group || group.dayKey !== dayKey) {
+        group = { dayKey, dayLabel: formatDayLabel(transaction.occurred_at), transactions: [] }
+        groups.push(group)
+      }
+      group.transactions.push(transaction)
+    }
+    return groups
+  }, [items])
 
   function openCreateDialog() {
     setEditingTransaction(null)
@@ -155,17 +149,21 @@ export function TransactionsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
           <p className="text-sm text-muted-foreground">Create, edit, and remove transactions</p>
         </div>
-        <Button onClick={openCreateDialog} disabled={accounts.length === 0 || categories.length === 0}>
+        <Button onClick={openCreateDialog} disabled={accounts.length === 0}>
           <IconPlus className="h-4 w-4" />
           New transaction
         </Button>
       </div>
 
-      {accounts.length === 0 || categories.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Add at least one account and one category before creating transactions.
-        </p>
-      ) : null}
+      <FilterBar
+        filters={filters}
+        onChange={applyFilters}
+        accounts={accounts}
+        categories={categories}
+        currencies={currencies}
+      />
+
+      <TransactionTotalsBar totals={totals} baseCurrencyCode={baseCurrencyCode} />
 
       <Card>
         <CardContent className="p-0">
@@ -175,17 +173,14 @@ export function TransactionsPage() {
             <p className="p-6 text-sm text-destructive">
               {toErrorMessage(transactionsQuery.error)}
             </p>
-          ) : transactions.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">No transactions yet.</p>
+          ) : items.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">No transactions match these filters.</p>
           ) : (
             <div>
               {dayGroups.map((dayGroup) => (
                 <section key={dayGroup.dayKey} className="border-b last:border-b-0">
-                  <header className="flex items-baseline justify-between gap-4 border-b bg-muted/40 px-6 py-2">
+                  <header className="border-b bg-muted/40 px-6 py-2">
                     <h2 className="text-sm font-medium">{dayGroup.dayLabel}</h2>
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {formatDayNet(dayGroup.netByCurrency)}
-                    </span>
                   </header>
                   <ul className="divide-y">
                     {dayGroup.transactions.map((transaction) => (
