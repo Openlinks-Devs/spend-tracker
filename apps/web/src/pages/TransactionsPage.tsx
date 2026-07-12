@@ -60,6 +60,11 @@ export function TransactionsPage() {
   const totals = transactionsQuery.data?.pages[0]?.totals ?? null
 
   const accountNameById = useMemo(() => toNameById(accounts), [accounts])
+  const accountCurrencyById = useMemo(() => {
+    const lookup = new Map<string, string>()
+    for (const account of accounts) lookup.set(account.id, account.currency)
+    return lookup
+  }, [accounts])
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
 
   const existingPayees = useMemo(() => {
@@ -188,6 +193,11 @@ export function TransactionsPage() {
                           transaction.to_account_id
                             ? accountNameById.get(transaction.to_account_id) ?? transaction.to_account_id
                             : undefined
+                        }
+                        toAccountCurrency={
+                          transaction.to_account_id
+                            ? accountCurrencyById.get(transaction.to_account_id) ?? null
+                            : null
                         }
                         onEdit={openEditDialog}
                         onDelete={openDeleteDialog}
