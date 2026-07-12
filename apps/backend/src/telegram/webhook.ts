@@ -58,7 +58,15 @@ export async function handleTelegramUpdate(update: TelegramUpdate, deps: Webhook
     account_id: existing.account_id,
     category_id: classified.category_id,
     tags: finalTags,
-    created_at: existing.created_at,
+    type: existing.type,
+    payee: existing.payee,
+    notes: existing.notes,
+    occurred_at: existing.occurred_at,
+    base_amount: existing.base_amount,
+    rate_used: existing.rate_used,
+    to_account_id: existing.to_account_id,
+    to_amount: existing.to_amount,
+    external_id: existing.external_id,
   })
   const category = categories.find((candidate) => candidate.id === classified.category_id)
   await deps.notify(
