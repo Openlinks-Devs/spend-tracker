@@ -3,6 +3,7 @@ import {
   getCategories,
   getDistinctTags,
   insertTransaction,
+  updateTransaction,
   deleteTransaction,
   setState,
   getTransactions,
@@ -33,15 +34,57 @@ describe('queries', () => {
   it('insertTransaction passes params and returns id', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'tx1' }] }) }
     const result = await insertTransaction(db, {
-      description: 'PLIN', amount: -35, currency: 'PEN',
-      account_id: 'a1', category_id: 'c1', tags: ['food', 'plin', 'transfer'],
-      created_at: '2026-06-30T10:00:00.000Z',
+      description: 'PLIN',
+      amount: -35,
+      currency: 'PEN',
+      account_id: 'a1',
+      category_id: 'c1',
+      tags: ['food', 'plin', 'transfer'],
+      type: 'expense',
+      payee: 'Marisela Calle',
+      notes: null,
+      occurred_at: '2026-06-29T20:55:00.000Z',
+      base_amount: -35,
+      rate_used: 1,
+      to_account_id: null,
+      to_amount: null,
+      external_id: 'gmail-123',
     })
     expect(result.id).toBe('tx1')
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/insert into transactions/i)
-    expect(params).toContain('PLIN')
-    expect(params).toContain(-35)
+    expect(params).toEqual([
+      'PLIN', -35, 'PEN', 'a1', 'c1', ['food', 'plin', 'transfer'],
+      'expense', 'Marisela Calle', null, '2026-06-29T20:55:00.000Z',
+      -35, 1, null, null, 'gmail-123',
+    ])
+  })
+
+  it('updateTransaction writes every column and bumps updated_at', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    await updateTransaction(db, {
+      id: 'tx1',
+      description: 'PLIN',
+      amount: -35,
+      currency: 'PEN',
+      account_id: 'a1',
+      category_id: 'c1',
+      tags: ['food'],
+      type: 'expense',
+      payee: null,
+      notes: null,
+      occurred_at: '2026-06-29T20:55:00.000Z',
+      base_amount: -35,
+      rate_used: 1,
+      to_account_id: null,
+      to_amount: null,
+      external_id: null,
+    })
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/update transactions/i)
+    expect(sql).toMatch(/updated_at = now\(\)/i)
+    expect(params).toHaveLength(16)
+    expect(params[0]).toBe('tx1')
   })
 
   it('deleteTransaction issues a delete with the id', async () => {
@@ -58,12 +101,15 @@ describe('queries', () => {
     expect(db.query.mock.calls[0][0]).toMatch(/on conflict/i)
   })
 
-  it('getTransactions selects ordered rows', async () => {
+  it('getTransactions selects the full row ordered by occurred_at', async () => {
     const db = fakeDb([{ id: 'tx1' }, { id: 'tx2' }])
     const transactions = await getTransactions(db)
     expect(transactions).toHaveLength(2)
     expect(db.query.mock.calls[0][0]).toMatch(/from transactions/i)
-    expect(db.query.mock.calls[0][0]).toMatch(/order by created_at desc/i)
+    expect(db.query.mock.calls[0][0]).toMatch(/order by occurred_at desc, id desc/i)
+    expect(db.query.mock.calls[0][0]).toMatch(/payee/)
+    expect(db.query.mock.calls[0][0]).toMatch(/base_amount/)
+    expect(db.query.mock.calls[0][0]).toMatch(/external_id/)
   })
 
   it('getTransactionById returns null when no rows', async () => {

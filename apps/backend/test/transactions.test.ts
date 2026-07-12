@@ -1,211 +1,153 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const convertAmount = vi.fn()
+const getBaseCurrencyCode = vi.fn()
+vi.mock('../src/currency/rates.js', () => ({
+  convertAmount: (...args: unknown[]) => convertAmount(...args),
+  getBaseCurrencyCode: (...args: unknown[]) => getBaseCurrencyCode(...args),
+}))
+
 import { createTransactionsRoute } from '../src/routes/transactions.js'
 
+const accountId = '11111111-1111-4111-8111-111111111111'
+const destinationAccountId = '22222222-2222-4222-8222-222222222222'
+const expenseCategoryId = '33333333-3333-4333-8333-333333333333'
+const incomeCategoryId = '44444444-4444-4444-8444-444444444444'
+const transactionId = '55555555-5555-4555-8555-555555555555'
+const missingId = '99999999-9999-4999-8999-999999999999'
+
 const sampleTransaction = {
-  id: 'tx1',
+  id: transactionId,
   description: 'Coffee',
   amount: -12.5,
   currency: 'PEN',
-  account_id: 'a1',
-  category_id: 'c1',
+  account_id: accountId,
+  category_id: expenseCategoryId,
   tags: ['food'],
+  type: 'expense',
+  payee: null,
+  notes: null,
+  occurred_at: '2026-06-30T10:00:00.000Z',
+  base_amount: -12.5,
+  rate_used: 1,
+  to_account_id: null,
+  to_amount: null,
+  external_id: null,
   created_at: '2026-06-30T10:00:00.000Z',
   updated_at: null,
 }
 
-describe('transactions route', () => {
+interface DbFixtures {
+  accounts?: Record<string, unknown>
+  categories?: Record<string, unknown>
+  transactions?: Record<string, unknown>
+}
+
+const defaultAccounts = {
+  [accountId]: { id: accountId, name: 'Cash', type: 'cash', currency: 'PEN' },
+  [destinationAccountId]: { id: destinationAccountId, name: 'BCP USD', type: 'bank', currency: 'USD' },
+}
+
+const defaultCategories = {
+  [expenseCategoryId]: { id: expenseCategoryId, name: 'Food', type: 'expense' },
+  [incomeCategoryId]: { id: incomeCategoryId, name: 'Salary', type: 'income' },
+}
+
+function defaultTransactions(): Record<string, unknown> {
+  return {
+    [transactionId]: { ...sampleTransaction },
+    'tx-new': { ...sampleTransaction, id: 'tx-new' },
+  }
+}
+
+function createDb(fixtures: DbFixtures = {}) {
+  const accounts = fixtures.accounts ?? defaultAccounts
+  const categories = fixtures.categories ?? defaultCategories
+  const transactions = fixtures.transactions ?? defaultTransactions()
+  return {
+    query: vi.fn(async (sql: string, params?: unknown[]) => {
+      if (/from accounts/i.test(sql)) {
+        const account = (accounts as Record<string, unknown>)[String(params?.[0])]
+        return { rows: account ? [account] : [] }
+      }
+      if (/from categories/i.test(sql)) {
+        const category = (categories as Record<string, unknown>)[String(params?.[0])]
+        return { rows: category ? [category] : [] }
+      }
+      if (/insert into transactions/i.test(sql)) return { rows: [{ id: 'tx-new' }] }
+      if (/update transactions/i.test(sql)) return { rows: [] }
+      if (/delete from transactions/i.test(sql)) return { rows: [] }
+      if (/from transactions/i.test(sql) && /where id/i.test(sql)) {
+        const transaction = transactions[String(params?.[0])]
+        return { rows: transaction ? [transaction] : [] }
+      }
+      if (/from transactions/i.test(sql)) return { rows: Object.values(transactions) }
+      return { rows: [] }
+    }),
+  }
+}
+
+function findParams(db: ReturnType<typeof createDb>, pattern: RegExp): unknown[] | undefined {
+  const call = db.query.mock.calls.find(([sql]) => pattern.test(sql as string))
+  return call?.[1] as unknown[] | undefined
+}
+
+function postTransaction(route: ReturnType<typeof createTransactionsRoute>, body: unknown) {
+  return route.request('/api/transactions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function patchTransaction(
+  route: ReturnType<typeof createTransactionsRoute>,
+  id: string,
+  body: unknown,
+) {
+  return route.request(`/api/transactions/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  getBaseCurrencyCode.mockResolvedValue('PEN')
+  convertAmount.mockResolvedValue({ convertedAmount: -12.5, rateUsed: 1 })
+})
+
+describe('transactions route: read and delete', () => {
   it('GET /api/transactions returns the list', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [sampleTransaction] }) }
+    const db = createDb()
     const route = createTransactionsRoute(() => db)
     const response = await route.request('/api/transactions')
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body[0].id).toBe('tx1')
+    expect(Array.isArray(body)).toBe(true)
   })
 
   it('GET /api/transactions/:id returns 404 when missing', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const db = createDb()
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/nope')
+    const response = await route.request(`/api/transactions/${missingId}`)
     expect(response.status).toBe(404)
     expect(await response.json()).toEqual({ error: 'Transaction not found' })
   })
 
-  it('POST /api/transactions creates and returns 201', async () => {
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce({ rows: [{ id: 'tx-new' }] })
-        .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, id: 'tx-new' }] }),
-    }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        description: 'Lunch',
-        amount: -30,
-        currency: 'PEN',
-        account_id: 'a1',
-        category_id: 'c1',
-        tags: ['food'],
-      }),
-    })
-    expect(response.status).toBe(201)
-    const body = await response.json()
-    expect(body.id).toBe('tx-new')
-    const [insertSql] = db.query.mock.calls[0]
-    expect(insertSql).toMatch(/insert into transactions/i)
-  })
-
-  it('POST /api/transactions returns 400 on invalid body', async () => {
-    const db = { query: vi.fn() }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ description: '' }),
-    })
-    expect(response.status).toBe(400)
-    expect(db.query).not.toHaveBeenCalled()
-  })
-
-  it('PATCH /api/transactions/:id merges and returns the updated record', async () => {
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce({ rows: [sampleTransaction] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
-    }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ description: 'Tea' }),
-    })
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(body.description).toBe('Tea')
-  })
-
-  it('PATCH /api/transactions/:id preserves the existing category_id when the body omits it', async () => {
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce({ rows: [sampleTransaction] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
-    }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ description: 'Tea' }),
-    })
-    expect(response.status).toBe(200)
-    const updateParams = db.query.mock.calls[1][1]
-    expect(updateParams[5]).toBe('c1')
-  })
-
-  it('PATCH /api/transactions/:id updates amount, currency, account, and date', async () => {
-    const updatedTransaction = {
-      ...sampleTransaction,
-      amount: -99.9,
-      currency: 'USD',
-      account_id: 'a2',
-      created_at: '2026-07-01T08:30:00.000Z',
-    }
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce({ rows: [sampleTransaction] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [updatedTransaction] }),
-    }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        amount: -99.9,
-        currency: 'USD',
-        account_id: 'a2',
-        created_at: '2026-07-01T08:30:00.000Z',
-      }),
-    })
-    expect(response.status).toBe(200)
-    const body = await response.json()
-    expect(body.amount).toBe(-99.9)
-    const updateParams = db.query.mock.calls[1][1]
-    expect(updateParams).toEqual([
-      'tx1',
-      'Coffee',
-      -99.9,
-      'USD',
-      'a2',
-      'c1',
-      ['food'],
-      '2026-07-01T08:30:00.000Z',
-    ])
-  })
-
-  it('PATCH /api/transactions/:id preserves amount, currency, account, and date when omitted', async () => {
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce({ rows: [sampleTransaction] })
-        .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
-    }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ description: 'Tea' }),
-    })
-    expect(response.status).toBe(200)
-    const updateParams = db.query.mock.calls[1][1]
-    expect(updateParams).toEqual([
-      'tx1',
-      'Tea',
-      -12.5,
-      'PEN',
-      'a1',
-      'c1',
-      ['food'],
-      '2026-06-30T10:00:00.000Z',
-    ])
-  })
-
-  it('PATCH /api/transactions/:id returns 404 when missing', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
-    const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/nope', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ description: 'Tea' }),
-    })
-    expect(response.status).toBe(404)
-  })
-
   it('DELETE /api/transactions/:id deletes when present', async () => {
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce({ rows: [sampleTransaction] })
-        .mockResolvedValueOnce({ rows: [] }),
-    }
+    const db = createDb()
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', { method: 'DELETE' })
+    const response = await route.request(`/api/transactions/${transactionId}`, { method: 'DELETE' })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ success: true })
   })
 
   it('DELETE /api/transactions/:id returns 404 when missing', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const db = createDb()
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/nope', { method: 'DELETE' })
+    const response = await route.request(`/api/transactions/${missingId}`, { method: 'DELETE' })
     expect(response.status).toBe(404)
   })
 
@@ -215,5 +157,404 @@ describe('transactions route', () => {
     const response = await route.request('/api/transactions')
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ error: 'Failed to list transactions' })
+  })
+})
+
+describe('POST /api/transactions', () => {
+  it('creates an expense: negative sign derived, base_amount from convertAmount', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      tags: ['food'],
+      type: 'expense',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    expect((await response.json()).id).toBe('tx-new')
+    const params = findParams(db, /insert into transactions/i)
+    expect(params).toEqual([
+      'Lunch', -12.5, 'PEN', accountId, expenseCategoryId, ['food'],
+      'expense', null, null, '2026-06-30T10:00:00.000Z', -12.5, 1, null, null, null,
+    ])
+    expect(convertAmount).toHaveBeenCalledTimes(1)
+    const [, amountArg, fromArg, toArg, dateArg] = convertAmount.mock.calls[0]
+    expect([amountArg, fromArg, toArg, dateArg]).toEqual([-12.5, 'PEN', 'PEN', '2026-06-30'])
+  })
+
+  it('creates an income with a positive stored amount', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: 1200, rateUsed: 1 })
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Salary',
+      amount: 1200,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: incomeCategoryId,
+      type: 'income',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[1]).toBe(1200)
+    expect(params?.[6]).toBe('income')
+  })
+
+  it('defaults occurred_at to now when omitted', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(String(params?.[9])).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('stores payee, notes, and external_id', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      payee: 'La Lucha',
+      notes: 'with the team',
+      external_id: 'gmail-abc',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[7]).toBe('La Lucha')
+    expect(params?.[8]).toBe('with the team')
+    expect(params?.[14]).toBe('gmail-abc')
+  })
+
+  it('stores null base_amount and rate_used when no rate exists (never 1)', async () => {
+    convertAmount.mockResolvedValue(null)
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Import',
+      amount: 20,
+      currency: 'USD',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[10]).toBeNull()
+    expect(params?.[11]).toBeNull()
+  })
+
+  it('honors an explicit base_amount override and derives rate_used', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await postTransaction(route, {
+      description: 'Import',
+      amount: 20,
+      currency: 'USD',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      base_amount: 74.8,
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[10]).toBe(-74.8)
+    expect(params?.[11]).toBe(3.74)
+    expect(convertAmount).not.toHaveBeenCalled()
+  })
+
+  it('honors an explicit rate_used alongside base_amount', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await postTransaction(route, {
+      description: 'Import',
+      amount: 20,
+      currency: 'USD',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      base_amount: 74.8,
+      rate_used: 3.7401,
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[11]).toBe(3.7401)
+  })
+
+  it('creates a transfer: negative source leg, null category, destination stored', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: -100, rateUsed: 1 })
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'To USD account',
+      amount: 100,
+      currency: 'PEN',
+      account_id: accountId,
+      type: 'transfer',
+      to_account_id: destinationAccountId,
+      to_amount: 26.7,
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(201)
+    const params = findParams(db, /insert into transactions/i)
+    expect(params?.[1]).toBe(-100)
+    expect(params?.[4]).toBeNull()
+    expect(params?.[6]).toBe('transfer')
+    expect(params?.[12]).toBe(destinationAccountId)
+    expect(params?.[13]).toBe(26.7)
+  })
+
+  it('returns 422 when the category type does not match the transaction type', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Salary',
+      amount: 1200,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'income',
+      occurred_at: '2026-06-30T10:00:00.000Z',
+    })
+    expect(response.status).toBe(422)
+    expect((await response.json()).error).toMatch(/does not match/i)
+    expect(findParams(db, /insert into transactions/i)).toBeUndefined()
+  })
+
+  it('returns 400 on a malformed account_id uuid', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: 'not-a-uuid',
+      category_id: expenseCategoryId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(400)
+    expect(findParams(db, /insert into transactions/i)).toBeUndefined()
+  })
+
+  it('returns 404 when the account does not exist', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: missingId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'Account not found' })
+  })
+
+  it('returns 404 when the category does not exist', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: missingId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'Category not found' })
+  })
+
+  it('returns 422 for a transfer without to_amount', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Move',
+      amount: 100,
+      currency: 'PEN',
+      account_id: accountId,
+      type: 'transfer',
+      to_account_id: destinationAccountId,
+    })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 for a transfer carrying a category_id', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Move',
+      amount: 100,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'transfer',
+      to_account_id: destinationAccountId,
+      to_amount: 100,
+    })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 for a transfer into the same account', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Move',
+      amount: 100,
+      currency: 'PEN',
+      account_id: accountId,
+      type: 'transfer',
+      to_account_id: accountId,
+      to_amount: 100,
+    })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 for a non-transfer carrying to_account_id', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+      to_account_id: destinationAccountId,
+    })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 for a non-transfer without category_id', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: 12.5,
+      currency: 'PEN',
+      account_id: accountId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 400 when amount is not positive', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await postTransaction(route, {
+      description: 'Lunch',
+      amount: -5,
+      currency: 'PEN',
+      account_id: accountId,
+      category_id: expenseCategoryId,
+      type: 'expense',
+    })
+    expect(response.status).toBe(400)
+  })
+})
+
+describe('PATCH /api/transactions/:id', () => {
+  it('merges description only and does not recompute base_amount', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, transactionId, { description: 'Tea' })
+    expect(response.status).toBe(200)
+    const params = findParams(db, /update transactions/i)
+    expect(params).toEqual([
+      transactionId, 'Tea', -12.5, 'PEN', accountId, expenseCategoryId, ['food'],
+      'expense', null, null, '2026-06-30T10:00:00.000Z', -12.5, 1, null, null, null,
+    ])
+    expect(convertAmount).not.toHaveBeenCalled()
+  })
+
+  it('recomputes base_amount when the amount changes', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: -99.9, rateUsed: 1 })
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, transactionId, { amount: 99.9 })
+    expect(response.status).toBe(200)
+    const params = findParams(db, /update transactions/i)
+    expect(params?.[2]).toBe(-99.9)
+    expect(params?.[11]).toBe(-99.9)
+    expect(params?.[12]).toBe(1)
+    expect(convertAmount).toHaveBeenCalledTimes(1)
+  })
+
+  it('recomputes base_amount when the currency changes', async () => {
+    convertAmount.mockResolvedValue({ convertedAmount: -46.75, rateUsed: 3.74 })
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await patchTransaction(route, transactionId, { currency: 'USD' })
+    const params = findParams(db, /update transactions/i)
+    expect(params?.[3]).toBe('USD')
+    expect(params?.[11]).toBe(-46.75)
+    expect(params?.[12]).toBe(3.74)
+  })
+
+  it('does not recompute when an explicit base_amount accompanies the change', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    await patchTransaction(route, transactionId, { amount: 20, currency: 'USD', base_amount: 74.8 })
+    const params = findParams(db, /update transactions/i)
+    expect(params?.[2]).toBe(-20)
+    expect(params?.[11]).toBe(-74.8)
+    expect(params?.[12]).toBe(3.74)
+    expect(convertAmount).not.toHaveBeenCalled()
+  })
+
+  it('flips the stored sign when type changes to income', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, transactionId, {
+      type: 'income',
+      category_id: incomeCategoryId,
+    })
+    expect(response.status).toBe(200)
+    const params = findParams(db, /update transactions/i)
+    expect(params?.[2]).toBe(12.5)
+    expect(params?.[7]).toBe('income')
+    expect(params?.[11]).toBe(12.5)
+    expect(convertAmount).not.toHaveBeenCalled()
+  })
+
+  it('returns 422 when changing type to transfer without a destination', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, transactionId, { type: 'transfer' })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 422 when the new category type mismatches the type', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, transactionId, {
+      category_id: incomeCategoryId,
+    })
+    expect(response.status).toBe(422)
+  })
+
+  it('returns 404 when the transaction is missing', async () => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await patchTransaction(route, missingId, { description: 'Tea' })
+    expect(response.status).toBe(404)
   })
 })
