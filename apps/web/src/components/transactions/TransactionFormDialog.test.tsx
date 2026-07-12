@@ -9,6 +9,7 @@ import type { Account, Category } from '@/types'
 const accounts: Account[] = [
   { id: 'acc-pen', name: 'Cash', type: 'cash', currency: 'PEN' },
   { id: 'acc-usd', name: 'BCP USD', type: 'checking', currency: 'USD' },
+  { id: 'acc-jpy', name: 'Tokyo Wallet', type: 'cash', currency: 'JPY' },
 ]
 
 const categories: Category[] = [
@@ -23,6 +24,7 @@ function stubReferenceData() {
       data: [
         { code: 'PEN', name: 'Sol', symbol: 'S/', decimal_places: 2 },
         { code: 'USD', name: 'US Dollar', symbol: '$', decimal_places: 2 },
+        { code: 'JPY', name: 'Japanese Yen', symbol: '¥', decimal_places: 0 },
       ],
     },
     { match: '/settings', data: { id: 1, base_currency_code: 'PEN' } },
@@ -100,6 +102,23 @@ describe('TransactionFormDialog', () => {
     await user.click(await screen.findByRole('option', { name: 'BCP USD' }))
 
     expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveTextContent('USD')
+  })
+
+  it('derives the amount step from the account currency decimal places', async () => {
+    const user = userEvent.setup()
+    stubReferenceData()
+    renderDialog()
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveTextContent('PEN'),
+    )
+    expect(screen.getByLabelText('Amount')).toHaveAttribute('step', '0.01')
+
+    await user.click(screen.getByRole('combobox', { name: 'Account' }))
+    await user.click(await screen.findByRole('option', { name: 'Tokyo Wallet' }))
+
+    expect(screen.getByRole('combobox', { name: 'Currency' })).toHaveTextContent('JPY')
+    expect(screen.getByLabelText('Amount')).toHaveAttribute('step', '1')
   })
 
   it('requires a destination account and amount for transfers', async () => {

@@ -24,6 +24,7 @@ import { cn, toDatetimeLocalValue } from '@/lib/utils'
 import type {
   Account,
   Category,
+  Currency,
   NewTransaction,
   Transaction,
   TransactionType,
@@ -78,6 +79,17 @@ function parseTags(rawTags: string): string[] {
 
 function firstCategoryIdForType(categories: Category[], type: TransactionType): string {
   return categories.find((category) => category.type === type)?.id ?? ''
+}
+
+const defaultDecimalPlaces = 2
+
+function decimalPlacesForCurrency(currencies: Currency[], currencyCode: string): number {
+  const matchingCurrency = currencies.find((currency) => currency.code === currencyCode)
+  return matchingCurrency?.decimal_places ?? defaultDecimalPlaces
+}
+
+function stepForDecimalPlaces(decimalPlaces: number): string {
+  return (10 ** -decimalPlaces).toString()
 }
 
 export function TransactionFormDialog({
@@ -166,6 +178,19 @@ export function TransactionFormDialog({
 
   const isTransfer = formState.type === 'transfer'
   const isForeign = formState.currency !== baseCurrencyCode
+
+  const amountDecimalPlaces = decimalPlacesForCurrency(currencies, formState.currency)
+  const amountStep = stepForDecimalPlaces(amountDecimalPlaces)
+
+  const destinationAccount = accounts.find((account) => account.id === formState.toAccountId)
+  const destinationDecimalPlaces = decimalPlacesForCurrency(
+    currencies,
+    destinationAccount?.currency ?? formState.currency,
+  )
+  const destinationAmountStep = stepForDecimalPlaces(destinationDecimalPlaces)
+
+  const baseDecimalPlaces = decimalPlacesForCurrency(currencies, baseCurrencyCode)
+  const baseAmountStep = stepForDecimalPlaces(baseDecimalPlaces)
 
   function handleTypeChange(nextType: TransactionType) {
     setFormState((current) => ({
@@ -300,7 +325,7 @@ export function TransactionFormDialog({
               <Input
                 id="transaction-amount"
                 type="number"
-                step="0.01"
+                step={amountStep}
                 min="0"
                 value={formState.amount}
                 onChange={(event) =>
@@ -375,7 +400,7 @@ export function TransactionFormDialog({
                 <Input
                   id="transaction-destination-amount"
                   type="number"
-                  step="0.01"
+                  step={destinationAmountStep}
                   min="0"
                   value={formState.toAmount}
                   onChange={(event) =>
@@ -448,7 +473,7 @@ export function TransactionFormDialog({
               <Input
                 id="transaction-base-amount"
                 type="number"
-                step="0.01"
+                step={baseAmountStep}
                 min="0"
                 value={formState.baseAmount}
                 onChange={(event) =>
@@ -461,8 +486,8 @@ export function TransactionFormDialog({
               transaction.base_amount !== null &&
               transaction.currency !== baseCurrencyCode ? (
                 <p className="text-xs text-muted-foreground">
-                  {baseCurrencyCode} {Math.abs(transaction.base_amount).toFixed(2)} at{' '}
-                  {transaction.rate_used}
+                  {baseCurrencyCode} {Math.abs(transaction.base_amount).toFixed(baseDecimalPlaces)}{' '}
+                  at {transaction.rate_used}
                 </p>
               ) : null}
             </div>
