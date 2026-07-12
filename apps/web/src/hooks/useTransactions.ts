@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { listTransactionsPage, transactionsApi } from '@/lib/api'
 import type { NewTransaction, Transaction, TransactionFilters, TransactionUpdate } from '@/types'
 import { createResourceHooks } from './createResourceHooks'
@@ -21,5 +21,15 @@ export function useTransactionsInfinite(filters: TransactionFilters) {
     queryFn: ({ pageParam }) => listTransactionsPage(filters, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor,
+  })
+}
+
+// Authoritative totals over the whole transaction set (count, per-currency
+// net sums, base net sum). Keyed under 'transactions' so CRUD mutations
+// invalidate it alongside the lists.
+export function useTransactionTotals() {
+  return useQuery({
+    queryKey: ['transactions', 'totals'],
+    queryFn: transactionsApi.totals,
   })
 }
