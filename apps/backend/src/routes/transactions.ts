@@ -6,6 +6,7 @@ import {
   deleteTransaction,
   getAccountById,
   getCategoryById,
+  getCurrencyByCode,
   getTransactionById,
   insertTransaction,
   updateTransaction,
@@ -124,6 +125,23 @@ async function validateTransactionShape(
     }
   }
   return null
+}
+
+type CurrencyResolution =
+  | { success: true; code: string }
+  | { success: false; failure: ValidationFailure }
+
+// Mirrors the pipeline's normalization (src/pipeline/processEmail.ts) so the
+// same "PEN"/"pen "/" Pen" input resolves to the same currencies row, and
+// reports an unknown code as a 400 instead of letting it fall through to the
+// transactions_currency_fkey constraint and surface as a generic 500.
+async function resolveCurrencyCode(db: Queryable, rawCurrency: string): Promise<CurrencyResolution> {
+  const currencyCode = rawCurrency.trim().toUpperCase()
+  const currency = await getCurrencyByCode(db, currencyCode)
+  if (!currency) {
+    return { success: false, failure: { status: 400, error: `Unknown currency code: ${currencyCode}` } }
+  }
+  return { success: true, code: currencyCode }
 }
 
 function signAmount(type: TransactionType, magnitude: number): number {
@@ -307,12 +325,18 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       })
       if (failure) return context.json({ error: failure.error }, failure.status)
 
+      const currencyResolution = await resolveCurrencyCode(db, body.currency)
+      if (!currencyResolution.success) {
+        return context.json({ error: currencyResolution.failure.error }, currencyResolution.failure.status)
+      }
+      const currencyCode = currencyResolution.code
+
       const occurredAt = body.occurred_at ?? new Date().toISOString()
       const signedAmount = signAmount(body.type, body.amount)
       const { base_amount, rate_used } = await resolveBaseAmount(
         db,
         signedAmount,
-        body.currency,
+        currencyCode,
         occurredAt,
         body,
       )
@@ -320,7 +344,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       const { id } = await insertTransaction(db, {
         description: body.description,
         amount: signedAmount,
-        currency: body.currency,
+        currency: currencyCode,
         account_id: body.account_id,
         category_id: body.type === 'transfer' ? null : (body.category_id as string),
         tags: body.tags,
@@ -388,7 +412,14 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       })
       if (failure) return context.json({ error: failure.error }, failure.status)
 
-      const mergedCurrency = body.currency ?? existing.currency
+      let mergedCurrency = body.currency ?? existing.currency
+      if (body.currency !== undefined) {
+        const currencyResolution = await resolveCurrencyCode(db, body.currency)
+        if (!currencyResolution.success) {
+          return context.json({ error: currencyResolution.failure.error }, currencyResolution.failure.status)
+        }
+        mergedCurrency = currencyResolution.code
+      }
       const mergedOccurredAt = body.occurred_at ?? existing.occurred_at
       const amountMagnitude = body.amount ?? Math.abs(existing.amount)
       const signedAmount = signAmount(mergedType, amountMagnitude)
