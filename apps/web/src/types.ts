@@ -94,6 +94,13 @@ export interface TransactionUpdate {
   to_amount?: number | null
 }
 
+// Mirrors GET /api/payees: one row per distinct payee, carrying the
+// category of that payee's most recent non-transfer transaction.
+export interface Payee {
+  payee: string
+  last_category_id: string | null
+}
+
 export interface Currency {
   code: string
   name: string
