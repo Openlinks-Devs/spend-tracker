@@ -19,7 +19,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toDatetimeLocalValue } from '@/lib/utils'
-import type { Account, Category, NewTransaction, Transaction, TransactionUpdate } from '@/types'
+import type {
+  Account,
+  Category,
+  NewTransaction,
+  Transaction,
+  TransactionType,
+  TransactionUpdate,
+} from '@/types'
 
 interface TransactionFormDialogProps {
   open: boolean
@@ -82,9 +89,9 @@ export function TransactionFormDialog({
         amount: String(transaction.amount ?? ''),
         currency: transaction.currency,
         accountId: transaction.account_id,
-        categoryId: transaction.category_id,
+        categoryId: transaction.category_id ?? '',
         tags: transaction.tags.join(', '),
-        date: toDatetimeLocalValue(transaction.created_at),
+        date: toDatetimeLocalValue(transaction.occurred_at),
       })
     } else {
       setFormState({
@@ -99,28 +106,24 @@ export function TransactionFormDialog({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const createdAt = formState.date ? new Date(formState.date).toISOString() : undefined
-    if (isEditing && transaction) {
-      onUpdate(transaction.id, {
-        description: formState.description,
-        amount: Number(formState.amount),
-        currency: formState.currency,
-        account_id: formState.accountId,
-        category_id: formState.categoryId,
-        tags: parseTags(formState.tags),
-        created_at: createdAt,
-      })
-      return
-    }
-    onCreate({
+    const occurredAt = formState.date ? new Date(formState.date).toISOString() : undefined
+    const signedAmount = Number(formState.amount)
+    const bridgeType: TransactionType = signedAmount >= 0 ? 'income' : 'expense'
+    const payload = {
       description: formState.description,
-      amount: Number(formState.amount),
+      amount: Math.abs(signedAmount),
       currency: formState.currency,
       account_id: formState.accountId,
       category_id: formState.categoryId,
       tags: parseTags(formState.tags),
-      created_at: createdAt,
-    })
+      type: bridgeType,
+      occurred_at: occurredAt,
+    }
+    if (isEditing && transaction) {
+      onUpdate(transaction.id, payload)
+      return
+    }
+    onCreate(payload)
   }
 
   return (

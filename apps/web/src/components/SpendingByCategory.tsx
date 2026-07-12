@@ -94,7 +94,7 @@ export function SpendingByCategory({ transactions, categoryNameById }: SpendingB
   const colorByCategory = useMemo(() => {
     const totals = new Map<string, number>()
     for (const expense of expenses) {
-      const categoryName = categoryNameById.get(expense.category_id) ?? 'Uncategorized'
+      const categoryName = categoryNameById.get(expense.category_id ?? '') ?? 'Uncategorized'
       totals.set(categoryName, (totals.get(categoryName) ?? 0) + Math.abs(expense.amount))
     }
     const ranked = Array.from(totals.entries()).sort((first, second) => second[1] - first[1])
@@ -113,7 +113,7 @@ export function SpendingByCategory({ transactions, categoryNameById }: SpendingB
       const createdAt = new Date(expense.created_at)
       if (start && createdAt < start) continue
       if (end && createdAt >= end) continue
-      const categoryName = categoryNameById.get(expense.category_id) ?? 'Uncategorized'
+      const categoryName = categoryNameById.get(expense.category_id ?? '') ?? 'Uncategorized'
       totals.set(categoryName, (totals.get(categoryName) ?? 0) + Math.abs(expense.amount))
     }
     return Array.from(totals.entries())
