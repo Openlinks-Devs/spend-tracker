@@ -43,7 +43,7 @@ export interface Transaction {
   account_id: string
   category_id: string | null
   tags: string[]
-  type: 'expense' | 'income' | 'transfer'
+  type: TransactionType
   payee: string | null
   notes: string | null
   occurred_at: string
@@ -76,23 +76,26 @@ export interface ExchangeRate {
   source: 'exchangerate-api' | 'exchangerate-host' | 'manual'
 }
 
+export type TransactionType = 'expense' | 'income' | 'transfer'
+
 export interface NewTransaction {
   description: string
   amount: number
   currency: string
   account_id: string
-  category_id: string
+  category_id: string | null
   tags: string[]
-  created_at: string
+  type: TransactionType
+  payee: string | null
+  notes: string | null
+  occurred_at: string
+  base_amount: number | null
+  rate_used: number | null
+  to_account_id: string | null
+  to_amount: number | null
+  external_id: string | null
 }
 
-export interface TransactionUpdate {
+export interface TransactionUpdate extends NewTransaction {
   id: string
-  description: string
-  amount: number
-  currency: string
-  account_id: string
-  category_id: string
-  tags: string[]
-  created_at: string
 }

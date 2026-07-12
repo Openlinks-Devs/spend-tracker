@@ -81,21 +81,26 @@ export async function deleteAccount(db: Queryable, id: string): Promise<void> {
   await db.query('DELETE FROM accounts WHERE id = $1', [id])
 }
 
+// Shared SELECT list. ::float8 casts because node-postgres returns NUMERIC as
+// a string by default; scoping the cast to these columns avoids a
+// process-global type parser.
+export const transactionColumns = `id, description, amount::float8 AS amount, currency, account_id,
+       category_id, tags, type, payee, notes, occurred_at,
+       base_amount::float8 AS base_amount, rate_used::float8 AS rate_used,
+       to_account_id, to_amount::float8 AS to_amount, external_id, created_at, updated_at`
+
 export async function getTransactions(db: Queryable): Promise<Transaction[]> {
   const result = await db.query(
-    // amount::float8 so node-postgres returns amount as a JS number (it returns
-    // NUMERIC as a string by default), scoped to this column instead of a
-    // process-global type parser.
-    `SELECT id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at
+    `SELECT ${transactionColumns}
        FROM transactions
-      ORDER BY created_at DESC`,
+      ORDER BY occurred_at DESC, id DESC`,
   )
   return result.rows as Transaction[]
 }
 
 export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
   const result = await db.query(
-    `SELECT id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at
+    `SELECT ${transactionColumns}
        FROM transactions
       WHERE id = $1`,
     [id],
@@ -114,8 +119,10 @@ export async function insertTransaction(
 ): Promise<{ id: string }> {
   const result = await db.query(
     `INSERT INTO transactions
-       (description, amount, currency, account_id, category_id, tags, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (description, amount, currency, account_id, category_id, tags,
+        type, payee, notes, occurred_at, base_amount, rate_used,
+        to_account_id, to_amount, external_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING id`,
     [
       transaction.description,
@@ -124,7 +131,15 @@ export async function insertTransaction(
       transaction.account_id,
       transaction.category_id,
       transaction.tags,
-      transaction.created_at,
+      transaction.type,
+      transaction.payee,
+      transaction.notes,
+      transaction.occurred_at,
+      transaction.base_amount,
+      transaction.rate_used,
+      transaction.to_account_id,
+      transaction.to_amount,
+      transaction.external_id,
     ],
   )
   return { id: result.rows[0].id as string }
@@ -134,7 +149,10 @@ export async function updateTransaction(db: Queryable, update: TransactionUpdate
   await db.query(
     `UPDATE transactions
        SET description = $2, amount = $3, currency = $4, account_id = $5,
-           category_id = $6, tags = $7, created_at = $8, updated_at = now()
+           category_id = $6, tags = $7, type = $8, payee = $9, notes = $10,
+           occurred_at = $11, base_amount = $12, rate_used = $13,
+           to_account_id = $14, to_amount = $15, external_id = $16,
+           updated_at = now()
      WHERE id = $1`,
     [
       update.id,
@@ -144,7 +162,15 @@ export async function updateTransaction(db: Queryable, update: TransactionUpdate
       update.account_id,
       update.category_id,
       update.tags,
-      update.created_at,
+      update.type,
+      update.payee,
+      update.notes,
+      update.occurred_at,
+      update.base_amount,
+      update.rate_used,
+      update.to_account_id,
+      update.to_amount,
+      update.external_id,
     ],
   )
 }
