@@ -221,20 +221,32 @@ export function TransactionFormDialog({
       occurred_at: occurredAt,
       base_amount: baseAmountOverride,
     }
-    const payload: NewTransaction = isTransfer
+    if (isEditing && transaction) {
+      // PATCH accepts a nullable category_id, and switching a transaction to
+      // transfer type needs the explicit null to clear its category.
+      const updatePayload: TransactionUpdate = isTransfer
+        ? {
+            ...common,
+            category_id: null,
+            to_account_id: formState.toAccountId,
+            to_amount: Math.abs(Number(formState.toAmount)),
+          }
+        : { ...common, category_id: formState.categoryId }
+      onUpdate(transaction.id, updatePayload)
+      return
+    }
+
+    // The create schema only allows category_id when it's a non-empty
+    // string (optional but not nullable), so transfers must omit the key
+    // entirely rather than sending null.
+    const createPayload: NewTransaction = isTransfer
       ? {
           ...common,
-          category_id: null,
           to_account_id: formState.toAccountId,
           to_amount: Math.abs(Number(formState.toAmount)),
         }
       : { ...common, category_id: formState.categoryId }
-
-    if (isEditing && transaction) {
-      onUpdate(transaction.id, payload)
-      return
-    }
-    onCreate(payload)
+    onCreate(createPayload)
   }
 
   const missingDestination =

@@ -131,9 +131,9 @@ describe('TransactionFormDialog', () => {
       amount: 100,
       to_account_id: 'acc-usd',
       to_amount: 26.7,
-      category_id: null,
     })
     const [payload] = onCreate.mock.calls[0]
+    expect(payload).not.toHaveProperty('category_id')
     expect(within(document.body).queryByText('Category')).toBeNull()
     expect(payload.account_id).toBe('acc-pen')
   })
