@@ -249,6 +249,23 @@ describe('transactions route: read and delete', () => {
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ error: 'Failed to list transactions' })
   })
+
+  it.each(['GET', 'PATCH', 'DELETE'])('%s /api/transactions/:id returns 400 on a malformed id', async (method) => {
+    const db = createDb()
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions/not-a-uuid', {
+      method,
+      ...(method === 'PATCH'
+        ? {
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ description: 'Tea' }),
+          }
+        : {}),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid transaction id' })
+    expect(db.query).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/transactions', () => {

@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createAccountsRoute } from '../src/routes/accounts.js'
 
-const sampleAccount = { id: 'a1', name: 'Cash', type: 'cash', currency: 'PEN' }
+const accountId = '11111111-1111-4111-8111-111111111111'
+const missingId = '99999999-9999-4999-8999-999999999999'
+
+const sampleAccount = { id: accountId, name: 'Cash', type: 'cash', currency: 'PEN' }
 
 describe('accounts route', () => {
   it('GET /api/accounts returns the list', async () => {
@@ -15,7 +18,7 @@ describe('accounts route', () => {
   it('GET /api/accounts/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createAccountsRoute(() => db)
-    const response = await route.request('/api/accounts/nope')
+    const response = await route.request(`/api/accounts/${missingId}`)
     expect(response.status).toBe(404)
   })
 
@@ -58,7 +61,7 @@ describe('accounts route', () => {
         .mockResolvedValueOnce({ rows: [{ ...sampleAccount, name: 'Wallet' }] }),
     }
     const route = createAccountsRoute(() => db)
-    const response = await route.request('/api/accounts/a1', {
+    const response = await route.request(`/api/accounts/${accountId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'Wallet' }),
@@ -66,26 +69,57 @@ describe('accounts route', () => {
     expect(response.status).toBe(200)
     expect((await response.json()).name).toBe('Wallet')
     const [, updateParams] = db.query.mock.calls[1]
-    expect(updateParams).toEqual(['a1', 'Wallet', 'cash', 'PEN'])
+    expect(updateParams).toEqual([accountId, 'Wallet', 'cash', 'PEN'])
   })
 
   it('DELETE /api/accounts/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createAccountsRoute(() => db)
-    const response = await route.request('/api/accounts/nope', { method: 'DELETE' })
+    const response = await route.request(`/api/accounts/${missingId}`, { method: 'DELETE' })
     expect(response.status).toBe(404)
   })
 
-  it('DELETE /api/accounts/:id deletes when present', async () => {
+  it('DELETE /api/accounts/:id deletes when unreferenced', async () => {
     const db = {
       query: vi
         .fn()
         .mockResolvedValueOnce({ rows: [sampleAccount] })
+        .mockResolvedValueOnce({ rows: [{ referenced: false }] })
         .mockResolvedValueOnce({ rows: [] }),
     }
     const route = createAccountsRoute(() => db)
-    const response = await route.request('/api/accounts/a1', { method: 'DELETE' })
+    const response = await route.request(`/api/accounts/${accountId}`, { method: 'DELETE' })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ success: true })
+  })
+
+  it('DELETE /api/accounts/:id returns 409 when transactions reference the account', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleAccount] })
+        .mockResolvedValueOnce({ rows: [{ referenced: true }] }),
+    }
+    const route = createAccountsRoute(() => db)
+    const response = await route.request(`/api/accounts/${accountId}`, { method: 'DELETE' })
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: 'Account has transactions. Reassign or delete them first.',
+    })
+    expect(db.query).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['GET', 'PATCH', 'DELETE'])('%s /api/accounts/:id returns 400 on a malformed id', async (method) => {
+    const db = { query: vi.fn() }
+    const route = createAccountsRoute(() => db)
+    const response = await route.request('/api/accounts/not-a-uuid', {
+      method,
+      ...(method === 'PATCH'
+        ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'X' }) }
+        : {}),
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Invalid account id' })
+    expect(db.query).not.toHaveBeenCalled()
   })
 })

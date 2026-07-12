@@ -12,6 +12,8 @@ import {
   insertCategory,
   getTransactionByExternalId,
   getCurrencyByCode,
+  accountHasTransactions,
+  categoryHasTransactions,
 } from '../src/db/queries.js'
 
 function fakeDb(rows: unknown[]) {
@@ -159,5 +161,28 @@ describe('queries', () => {
   it('getCurrencyByCode returns null for an unknown code', async () => {
     const db = fakeDb([])
     expect(await getCurrencyByCode(db, 'XYZ')).toBeNull()
+  })
+
+  it('accountHasTransactions checks source and destination references', async () => {
+    const db = fakeDb([{ referenced: true }])
+    expect(await accountHasTransactions(db, 'a1')).toBe(true)
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/select exists/i)
+    expect(sql).toMatch(/account_id = \$1 or to_account_id = \$1/i)
+    expect(params).toEqual(['a1'])
+  })
+
+  it('accountHasTransactions returns false when unreferenced', async () => {
+    const db = fakeDb([{ referenced: false }])
+    expect(await accountHasTransactions(db, 'a1')).toBe(false)
+  })
+
+  it('categoryHasTransactions checks category references', async () => {
+    const db = fakeDb([{ referenced: true }])
+    expect(await categoryHasTransactions(db, 'c1')).toBe(true)
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/select exists/i)
+    expect(sql).toMatch(/category_id = \$1/i)
+    expect(params).toEqual(['c1'])
   })
 })
