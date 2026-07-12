@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeCategorySpend, summarizeTransactions } from '@/lib/dashboardSummary'
+import {
+  spendTruncationNote,
+  summarizeCategorySpend,
+  summarizeTransactions,
+} from '@/lib/dashboardSummary'
 import { makeTransaction } from '@/test/factories'
+
+describe('spendTruncationNote', () => {
+  it('returns a note when fewer transactions were loaded than exist', () => {
+    expect(spendTruncationNote(200, 350)).toBe(
+      'Based on the 200 most recent of 350 transactions.',
+    )
+  })
+
+  it('returns null when every transaction was loaded', () => {
+    expect(spendTruncationNote(42, 42)).toBeNull()
+  })
+
+  it('returns null when the authoritative count is not known yet', () => {
+    expect(spendTruncationNote(42, undefined)).toBeNull()
+  })
+})
 
 describe('summarizeTransactions', () => {
   it('sums base_amount excluding transfers and reports per-currency detail', () => {

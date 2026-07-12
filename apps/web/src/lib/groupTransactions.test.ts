@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupTransactionsByDay } from '@/lib/groupTransactions'
+import { groupTransactionsByDay, shouldGroupByDay } from '@/lib/groupTransactions'
 import { makeTransaction } from '@/test/factories'
 
 describe('groupTransactionsByDay', () => {
@@ -17,5 +17,19 @@ describe('groupTransactionsByDay', () => {
 
   it('returns no groups for an empty list', () => {
     expect(groupTransactionsByDay([])).toEqual([])
+  })
+})
+
+describe('shouldGroupByDay', () => {
+  it('groups by day when sort is unset (defaults to occurred_at)', () => {
+    expect(shouldGroupByDay({})).toBe(true)
+  })
+
+  it('groups by day when sort is explicitly occurred_at', () => {
+    expect(shouldGroupByDay({ sort: 'occurred_at' })).toBe(true)
+  })
+
+  it('does not group by day when sort is amount, since the list is no longer occurred_at-ordered', () => {
+    expect(shouldGroupByDay({ sort: 'amount' })).toBe(false)
   })
 })

@@ -57,6 +57,17 @@ export function summarizeTransactions(
   }
 }
 
+// The dashboard loads a bounded page of transactions but the backend knows the
+// full count. When the page is shorter than the full set, spend figures built
+// from the page are partial and the card must say so.
+export function spendTruncationNote(
+  loadedCount: number,
+  totalCount: number | undefined,
+): string | null {
+  if (totalCount === undefined || loadedCount >= totalCount) return null
+  return `Based on the ${loadedCount} most recent of ${totalCount} transactions.`
+}
+
 export function summarizeCategorySpend(
   transactions: Transaction[],
   categoryNameById: Map<string, string>,

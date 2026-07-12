@@ -1,10 +1,16 @@
 import { formatDayLabel, toDayKey } from '@/lib/utils'
-import type { Transaction } from '@/types'
+import type { Transaction, TransactionFilters } from '@/types'
 
 export interface TransactionDayGroup {
   dayKey: string
   dayLabel: string
   transactions: Transaction[]
+}
+
+// Day grouping only makes sense when the server ordered the list by
+// occurred_at; under amount sort the same day would fragment into many groups.
+export function shouldGroupByDay(filters: Pick<TransactionFilters, 'sort'>): boolean {
+  return (filters.sort ?? 'occurred_at') === 'occurred_at'
 }
 
 // Groups an already-ordered list (server returns occurred_at DESC) into

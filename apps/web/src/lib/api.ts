@@ -94,6 +94,10 @@ export const transactionsApi = {
   ...transactionsResource,
   list: () =>
     request<TransactionListResponse>('/transactions?limit=200').then((page) => page.items),
+  // The backend computes totals over the whole filtered set regardless of page
+  // size, so a single-item page is the cheapest way to fetch them.
+  totals: () =>
+    request<TransactionListResponse>('/transactions?limit=1').then((page) => page.totals),
 }
 
 export function listTransactionsPage(
