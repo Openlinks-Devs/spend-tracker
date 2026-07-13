@@ -1,7 +1,7 @@
 import type { Queryable } from '../db/pool.js'
 import type { ExchangeRate } from '../db/types.js'
 
-const DAILY_RATES_URL = 'https://moneymanagerex.github.io/currency/data/latest_USD.json'
+const DAILY_RATES_URL = 'https://moneymanagerex.org/currency/data/latest_USD.json'
 const HISTORICAL_RATES_URL = 'https://api.exchangerate.host/historical'
 
 // Manual rows always win: the guard makes DO UPDATE a no-op on them, and
@@ -13,10 +13,12 @@ ON CONFLICT (base_code, quote_code, date) DO UPDATE
   WHERE exchange_rates.source <> 'manual'
 RETURNING base_code, quote_code, date::text AS date, rate::float8 AS rate, source`
 
+// ExchangeRate-API v6 payload as served by the MMEX mirror: rates live in
+// conversion_rates and the snapshot date only exists as a unix timestamp.
 interface DailyRatesPayload {
-  base: string
-  date: string
-  rates: Record<string, number>
+  base_code: string
+  time_last_update_unix: number
+  conversion_rates: Record<string, number>
 }
 
 export async function fetchDailyRates(
@@ -28,6 +30,12 @@ export async function fetchDailyRates(
     throw new Error(`Daily rates fetch failed: HTTP ${response.status}`)
   }
   const payload = (await response.json()) as DailyRatesPayload
+  if (!payload.conversion_rates || typeof payload.time_last_update_unix !== 'number') {
+    throw new Error('Daily rates fetch failed: unexpected payload shape')
+  }
+  const snapshotDate = new Date(payload.time_last_update_unix * 1000)
+    .toISOString()
+    .slice(0, 10)
 
   const knownCurrencies = await db.query('SELECT code FROM currencies')
   const knownCodes = new Set<string>(
@@ -35,14 +43,14 @@ export async function fetchDailyRates(
   )
 
   let upserted = 0
-  for (const [quoteCode, rate] of Object.entries(payload.rates)) {
+  for (const [quoteCode, rate] of Object.entries(payload.conversion_rates)) {
     if (quoteCode === 'USD') continue
     if (!knownCodes.has(quoteCode)) continue
     if (!(rate > 0)) continue
     const result = await db.query(UPSERT_RATE_SQL, [
       'USD',
       quoteCode,
-      payload.date,
+      snapshotDate,
       rate,
       'exchangerate-api',
     ])
