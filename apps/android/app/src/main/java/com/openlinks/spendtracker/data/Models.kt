@@ -60,3 +60,12 @@ data class Category(
 data class ApiError(
     val error: String,
 )
+
+/** Paginated list envelope returned by GET /api/transactions. */
+@Serializable
+data class TransactionListResponse(
+    val items: List<Transaction> = emptyList(),
+    val total: Int = 0,
+    val limit: Int = 0,
+    val offset: Int = 0,
+)

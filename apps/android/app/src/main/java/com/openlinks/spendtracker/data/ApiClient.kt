@@ -83,7 +83,8 @@ class ApiClient(
         }
     }
 
-    override suspend fun getTransactions(): List<Transaction> = getJson("/api/transactions")
+    override suspend fun getTransactions(): List<Transaction> =
+        getJson<TransactionListResponse>("/api/transactions").items
 
     override suspend fun getTransaction(id: String): Transaction = getJson("/api/transactions/$id")
 

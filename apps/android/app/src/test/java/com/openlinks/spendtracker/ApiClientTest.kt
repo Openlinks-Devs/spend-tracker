@@ -39,25 +39,30 @@ class ApiClientTest {
     }
 
     @Test
-    fun parsesTransactionListAndSendsMockUserHeader() = runBlocking {
+    fun parsesTransactionListEnvelopeAndSendsMockUserHeader() = runBlocking {
         server.enqueue(
             MockResponse()
                 .setHeader("Content-Type", "application/json")
                 .setBody(
                     """
-                    [
-                      {
-                        "id": "t1",
-                        "description": "Coffee",
-                        "amount": -4.5,
-                        "currency": "USD",
-                        "account_id": "acc-1",
-                        "category_id": "cat-1",
-                        "tags": ["food"],
-                        "created_at": "2026-07-02T00:00:00Z",
-                        "updated_at": null
-                      }
-                    ]
+                    {
+                      "items": [
+                        {
+                          "id": "t1",
+                          "description": "Coffee",
+                          "amount": -4.5,
+                          "currency": "USD",
+                          "account_id": "acc-1",
+                          "category_id": "cat-1",
+                          "tags": ["food"],
+                          "created_at": "2026-07-02T00:00:00Z",
+                          "updated_at": null
+                        }
+                      ],
+                      "total": 1,
+                      "limit": 50,
+                      "offset": 0
+                    }
                     """.trimIndent(),
                 ),
         )
