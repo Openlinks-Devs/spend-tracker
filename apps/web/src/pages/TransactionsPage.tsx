@@ -1,21 +1,32 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IconPlus } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { AnalyticsSection } from '@/components/analytics/AnalyticsSection'
+import { FilterChips } from '@/components/filters/FilterChips'
+import { FilterPanel } from '@/components/filters/FilterPanel'
+import { SearchBar } from '@/components/filters/SearchBar'
 import { TransactionFormDialog } from '@/components/transactions/TransactionFormDialog'
 import { TransactionListItem } from '@/components/transactions/TransactionListItem'
 import {
   useCreateTransaction,
   useDeleteTransaction,
-  useTransactions,
   useUpdateTransaction,
 } from '@/hooks/useTransactions'
+import { useTransactionFilters } from '@/hooks/useTransactionFilters'
+import { useTransactionsQuery } from '@/hooks/useTransactionsQuery'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
+import { toSearchParams } from '@/lib/filterParams'
 import { formatCurrency, formatDayLabel, toDayKey, toNameById } from '@/lib/utils'
 import { toErrorMessage } from '@/lib/api'
 import type { NewTransaction, Transaction, TransactionUpdate } from '@/types'
+
+const PAGE_SIZE = 50
+// GET /api/transactions clamps limit to 200, so the growing-limit list tops out
+// there. Beyond that the user narrows the results with filters or search.
+const MAX_LOADED_TRANSACTIONS = 200
 
 interface DayGroup {
   dayKey: string
@@ -58,13 +69,23 @@ function formatDayNet(netByCurrency: Map<string, number>): string {
 }
 
 export function TransactionsPage() {
-  const transactionsQuery = useTransactions()
+  const { filters, setFilters } = useTransactionFilters()
   const accountsQuery = useAccounts()
   const categoriesQuery = useCategories()
 
   const createTransaction = useCreateTransaction()
   const updateTransaction = useUpdateTransaction()
   const deleteTransaction = useDeleteTransaction()
+
+  // Growing-limit pagination: "Load more" raises the requested limit, and the
+  // limit resets whenever the active filters change so a new query starts small.
+  const [limit, setLimit] = useState(PAGE_SIZE)
+  const queryString = useMemo(() => toSearchParams(filters).toString(), [filters])
+  useEffect(() => {
+    setLimit(PAGE_SIZE)
+  }, [queryString])
+
+  const listQuery = useTransactionsQuery(filters, { limit, offset: 0 })
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
@@ -74,13 +95,16 @@ export function TransactionsPage() {
 
   const accounts = accountsQuery.data ?? []
   const categories = categoriesQuery.data ?? []
-  const transactions = transactionsQuery.data ?? []
+  const transactions = listQuery.data?.items ?? []
+  const total = listQuery.data?.total ?? 0
 
   const accountNameById = useMemo(() => toNameById(accounts), [accounts])
-
   const categoryNameById = useMemo(() => toNameById(categories), [categories])
 
   const dayGroups = useMemo(() => groupTransactionsByDay(transactions), [transactions])
+
+  const canLoadMore = transactions.length < total && transactions.length < MAX_LOADED_TRANSACTIONS
+  const isCapReached = transactions.length >= MAX_LOADED_TRANSACTIONS && total > transactions.length
 
   function openCreateDialog() {
     setEditingTransaction(null)
@@ -134,7 +158,10 @@ export function TransactionsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
           <p className="text-sm text-muted-foreground">Create, edit, and remove transactions</p>
         </div>
-        <Button onClick={openCreateDialog} disabled={accounts.length === 0 || categories.length === 0}>
+        <Button
+          onClick={openCreateDialog}
+          disabled={accounts.length === 0 || categories.length === 0}
+        >
           <IconPlus className="h-4 w-4" />
           New transaction
         </Button>
@@ -146,14 +173,20 @@ export function TransactionsPage() {
         </p>
       ) : null}
 
+      <div className="space-y-3">
+        <SearchBar />
+        <FilterPanel />
+        <FilterChips />
+      </div>
+
+      <AnalyticsSection filters={filters} setFilters={setFilters} />
+
       <Card>
         <CardContent className="p-0">
-          {transactionsQuery.isLoading ? (
+          {listQuery.isLoading ? (
             <p className="p-6 text-sm text-muted-foreground">Loading transactions...</p>
-          ) : transactionsQuery.isError ? (
-            <p className="p-6 text-sm text-destructive">
-              {toErrorMessage(transactionsQuery.error)}
-            </p>
+          ) : listQuery.isError ? (
+            <p className="p-6 text-sm text-destructive">{toErrorMessage(listQuery.error)}</p>
           ) : transactions.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No transactions yet.</p>
           ) : (
@@ -188,6 +221,26 @@ export function TransactionsPage() {
           )}
         </CardContent>
       </Card>
+
+      {canLoadMore ? (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setLimit((previousLimit) => previousLimit + PAGE_SIZE)}
+            disabled={listQuery.isFetching}
+          >
+            {listQuery.isFetching ? 'Loading...' : 'Load more'}
+          </Button>
+        </div>
+      ) : null}
+
+      {isCapReached ? (
+        <p className="text-center text-xs text-muted-foreground">
+          Showing the first {MAX_LOADED_TRANSACTIONS} transactions. Refine the filters to narrow
+          the results.
+        </p>
+      ) : null}
 
       <ConfirmDialog
         open={deletingTransaction !== null}
