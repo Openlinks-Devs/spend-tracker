@@ -2,8 +2,12 @@ package com.openlinks.spendtracker
 
 import com.openlinks.spendtracker.data.Account
 import com.openlinks.spendtracker.data.AnalyticsPayload
+import com.openlinks.spendtracker.data.ApiException
+import com.openlinks.spendtracker.data.AuthState
 import com.openlinks.spendtracker.data.Category
+import com.openlinks.spendtracker.data.InMemoryKeyValueStore
 import com.openlinks.spendtracker.data.NewTransaction
+import com.openlinks.spendtracker.data.SessionStore
 import com.openlinks.spendtracker.data.SpendApi
 import com.openlinks.spendtracker.data.SummaryRow
 import com.openlinks.spendtracker.data.Transaction
@@ -11,7 +15,9 @@ import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.data.TransactionListResponse
 import com.openlinks.spendtracker.data.TransactionPage
 import com.openlinks.spendtracker.data.TransactionUpdate
+import com.openlinks.spendtracker.ui.GateDestination
 import com.openlinks.spendtracker.ui.SessionViewModel
+import com.openlinks.spendtracker.ui.authGateDestination
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -38,6 +44,9 @@ class SessionViewModelTest {
         var accounts = listOf(Account("acc-1", "Checking", "bank", "USD"))
         var categories = listOf(Category("cat-1", "Food", "expense"))
         var failTransactions = false
+        // When set, the filtered fetch mimics ApiClient's live 401 handling: it
+        // clears the session (as ApiClient does on a 401) and throws ApiException(401).
+        var sessionClearedOnUnauthorized: SessionStore? = null
         var created: NewTransaction? = null
         var deletedId: String? = null
         var analyticsPayload = AnalyticsPayload(
@@ -83,6 +92,10 @@ class SessionViewModelTest {
             page: TransactionPage,
         ): TransactionListResponse {
             recordedFilterCalls.add(filters)
+            sessionClearedOnUnauthorized?.let { session ->
+                session.clear()
+                throw ApiException(401, "Unauthorized")
+            }
             if (failTransactions) throw RuntimeException("boom")
             return TransactionListResponse(items = transactions.toList(), total = transactions.size)
         }
@@ -190,6 +203,29 @@ class SessionViewModelTest {
         val state = viewModel.state.value
         assertFalse(state.loading)
         assertNotNull(state.error)
+    }
+
+    @Test
+    fun refreshOnLiveUnauthorizedRoutesGateBackToAuth() = runTest(dispatcher) {
+        // Live-style setup: a signed-in session whose bearer token expires. The
+        // filtered fetch 401s, ApiClient clears the token (simulated by the fake),
+        // and the ViewModel must re-read auth state so the gate returns to AUTH.
+        val sessionStore = SessionStore(InMemoryKeyValueStore())
+        sessionStore.saveToken("expired-bearer-token")
+        val api = FakeApi().apply { sessionClearedOnUnauthorized = sessionStore }
+        val viewModel = SessionViewModel(api, dispatcher, sessionStore)
+
+        // Gate starts on the Shell for the signed-in live session.
+        assertEquals(GateDestination.SHELL, authGateDestination(false, viewModel.authState.value))
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        // The 401 cleared the token; the ViewModel re-read auth state to SignedOut so
+        // the gate (in live mode) now routes back to AuthScreen.
+        assertEquals(AuthState.SignedOut, viewModel.authState.value)
+        assertEquals(GateDestination.AUTH, authGateDestination(false, viewModel.authState.value))
+        assertNotNull(viewModel.state.value.error)
     }
 
     @Test

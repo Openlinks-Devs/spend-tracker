@@ -101,7 +101,11 @@ class SessionViewModel(
     private val mutableAuthUiState = MutableStateFlow(AuthUiState())
     val authUiState: StateFlow<AuthUiState> = mutableAuthUiState.asStateFlow()
 
-    /** Runs the Credential Manager sign-in, then re-reads the session and loads data. */
+    /**
+     * Runs the Credential Manager sign-in, then re-reads the session so the gate
+     * swaps to the Shell. The initial data load is owned by the Shell's
+     * LaunchedEffect(Unit) in SpendTrackerApp, so this does not call refresh().
+     */
     fun signInWithGoogle(context: Context) {
         val repository = authRepository ?: return
         viewModelScope.launch {
@@ -110,7 +114,6 @@ class SessionViewModel(
                 repository.signInWithGoogle(context)
                 mutableAuthUiState.value = AuthUiState(signingIn = false, error = null)
                 refreshAuthState()
-                refresh()
             } catch (cancelled: GetCredentialCancellationException) {
                 // User dismissed the Google chooser: no-op, not an error.
                 mutableAuthUiState.value = AuthUiState(signingIn = false, error = null)
@@ -183,6 +186,9 @@ class SessionViewModel(
                     loading = false,
                     error = error.message ?: "Something went wrong",
                 )
+                // A data-fetch 401 makes ApiClient clear the live session; re-read the
+                // auth state so the gate re-evaluates and routes back to AuthScreen.
+                refreshAuthState()
             }
         }
     }
@@ -196,6 +202,7 @@ class SessionViewModel(
                 reloadFilteredData()
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
             }
         }
     }
@@ -208,6 +215,7 @@ class SessionViewModel(
                 reloadFilteredData()
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
             }
         }
     }
@@ -236,6 +244,7 @@ class SessionViewModel(
                 onDone(true)
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
                 onDone(false)
             }
         }
@@ -249,6 +258,7 @@ class SessionViewModel(
                 onDone(true)
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
                 onDone(false)
             }
         }
@@ -262,6 +272,7 @@ class SessionViewModel(
                 onDone(true)
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
                 onDone(false)
             }
         }
