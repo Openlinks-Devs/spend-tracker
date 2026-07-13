@@ -12,6 +12,8 @@ const complete = {
   TELEGRAM_CHAT_ID: '123',
   TELEGRAM_WEBHOOK_SECRET: 'whsecret',
   TELEGRAM_WEBHOOK_URL: 'https://example.com/telegram/webhook',
+  BETTER_AUTH_SECRET: 'test-secret-value-at-least-32-chars-long',
+  BETTER_AUTH_URL: 'http://localhost:5173',
 }
 
 describe('loadEnv', () => {

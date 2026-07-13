@@ -12,6 +12,8 @@ const requiredEnvVars = {
   TELEGRAM_CHAT_ID: '123456',
   TELEGRAM_WEBHOOK_SECRET: 'webhook-secret',
   TELEGRAM_WEBHOOK_URL: 'https://example.com/telegram/webhook',
+  BETTER_AUTH_SECRET: 'test-secret-value-at-least-32-chars-long',
+  BETTER_AUTH_URL: 'http://localhost:5173',
 }
 
 describe('app wiring', () => {
