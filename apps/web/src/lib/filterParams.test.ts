@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseFilterParams, toSearchParams, EMPTY_FILTERS } from './filterParams'
+import { parseFilterParams, toSearchParams, toRequestParams, EMPTY_FILTERS } from './filterParams'
 
 describe('filterParams round-trip', () => {
   it('parses defaults from empty params', () => {
@@ -42,5 +42,27 @@ describe('filterParams round-trip', () => {
   it('never serializes an undefined min as NaN', () => {
     const state = parseFilterParams(new URLSearchParams('min=abc'))
     expect(toSearchParams({ ...EMPTY_FILTERS, min: state.min }).toString()).not.toContain('NaN')
+  })
+})
+
+describe('toRequestParams', () => {
+  it('omits currency but keeps other fields', () => {
+    const state = {
+      ...EMPTY_FILTERS,
+      q: 'coffee',
+      accounts: ['a1', 'a2'],
+      type: 'expense' as const,
+      currency: 'PEN',
+    }
+    const requestParams = toRequestParams(state)
+    expect(requestParams.has('currency')).toBe(false)
+    expect(requestParams.get('q')).toBe('coffee')
+    expect(requestParams.getAll('account')).toEqual(['a1', 'a2'])
+    expect(requestParams.get('type')).toBe('expense')
+  })
+
+  it('leaves toSearchParams currency intact', () => {
+    const state = { ...EMPTY_FILTERS, currency: 'PEN' }
+    expect(toSearchParams(state).get('currency')).toBe('PEN')
   })
 })

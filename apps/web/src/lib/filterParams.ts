@@ -63,3 +63,13 @@ export function toSearchParams(state: TransactionFilterState): URLSearchParams {
   if (state.currency) searchParams.set('currency', state.currency)
   return searchParams
 }
+
+// The backend ignores currency (it is a display-only concern selected client
+// side), so strip it from the params that build a network request and the React
+// Query keys. This keeps a currency switch from triggering a redundant refetch.
+// toSearchParams still carries currency so the browser URL persists the choice.
+export function toRequestParams(state: TransactionFilterState): URLSearchParams {
+  const requestParams = toSearchParams(state)
+  requestParams.delete('currency')
+  return requestParams
+}

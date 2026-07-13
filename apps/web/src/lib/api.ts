@@ -1,4 +1,4 @@
-import { toSearchParams } from '@/lib/filterParams'
+import { toRequestParams } from '@/lib/filterParams'
 import type { TransactionFilterState } from '@/lib/filterParams'
 import type {
   Account,
@@ -102,14 +102,14 @@ export interface TransactionListPage {
 // resource object alongside the CRUD transactionsApi.
 export const transactionsAnalyticsApi = {
   listFiltered(state: TransactionFilterState, page: TransactionListPage) {
-    const params = toSearchParams(state)
+    const params = toRequestParams(state)
     params.set('limit', String(page.limit))
     params.set('offset', String(page.offset))
     if (page.sort) params.set('sort', page.sort)
     return request<TransactionListResponse>(`/transactions?${params.toString()}`)
   },
   analytics(state: TransactionFilterState, bucket: 'day' | 'week' | 'month') {
-    const params = toSearchParams(state)
+    const params = toRequestParams(state)
     params.set('bucket', bucket)
     return request<AnalyticsPayload>(`/transactions/analytics?${params.toString()}`)
   },
