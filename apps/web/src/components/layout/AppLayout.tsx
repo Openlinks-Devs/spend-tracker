@@ -1,6 +1,8 @@
 import { NavLink, Outlet, useLocation } from 'react-router'
-import { IconLayoutDashboard, IconReceipt, IconWallet, IconTags } from '@tabler/icons-react'
+import { IconLayoutDashboard, IconReceipt, IconWallet, IconTags, IconLogout } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { signOut, useSession } from '@/lib/authClient'
 
 // Dashboard and Transactions share the same filter query string; carrying the
 // current location.search across those two links keeps filters applied when the
@@ -14,6 +16,8 @@ const navigationItems = [
 
 export function AppLayout() {
   const location = useLocation()
+  const { data: session } = useSession()
+  const userEmail = session?.user.email
   const navigationTarget = (navigationItem: (typeof navigationItems)[number]) =>
     navigationItem.preservesFilters
       ? { pathname: navigationItem.to, search: location.search }
@@ -48,6 +52,18 @@ export function AppLayout() {
             )
           })}
         </nav>
+        <div className="flex flex-col gap-2 border-t p-3">
+          {userEmail ? <span className="truncate px-3 text-sm text-muted-foreground">{userEmail}</span> : null}
+          <Button
+            type="button"
+            variant="ghost"
+            className="justify-start gap-3 px-3"
+            onClick={() => signOut()}
+          >
+            <IconLogout className="h-4 w-4" />
+            Sign out
+          </Button>
+        </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center gap-4 border-b bg-background px-6 md:hidden">
