@@ -199,6 +199,49 @@ class ApiClientTest {
     }
 
     @Test
+    fun exchangeGoogleIdTokenReturnsSetAuthTokenHeaderAndPostsProviderAndToken() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setHeader("set-auth-token", "tok123")
+                .setBody("""{"redirect":false,"token":"tok123"}"""),
+        )
+
+        val sessionToken = client().exchangeGoogleIdToken("id")
+
+        assertEquals("tok123", sessionToken)
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/api/auth/sign-in/social", recorded.path)
+        // No bearer header on the exchange itself: there is no session yet.
+        assertNull(recorded.getHeader("Authorization"))
+        assertEquals("application/json", recorded.getHeader("Accept"))
+        val sentBody = recorded.body.readUtf8()
+        assertTrue(sentBody.contains("\"provider\":\"google\""))
+        assertTrue(sentBody.contains("\"token\":\"id\""))
+    }
+
+    @Test
+    fun exchangeGoogleIdTokenThrowsApiExceptionOnUnauthorized() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(401)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"error":"INVALID_TOKEN"}"""),
+        )
+
+        try {
+            client().exchangeGoogleIdToken("bad")
+            fail("Expected ApiException")
+        } catch (error: ApiException) {
+            assertEquals(401, error.status)
+        }
+        Unit
+    }
+
+    @Test
     fun getTransactionsFilteredSendsFilterParamsAndParsesEnvelope() = runBlocking {
         server.enqueue(
             MockResponse()

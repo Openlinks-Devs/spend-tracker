@@ -1,11 +1,15 @@
 package com.openlinks.spendtracker.ui
 
+import android.content.Context
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openlinks.spendtracker.data.Account
 import com.openlinks.spendtracker.data.AnalyticsPayload
 import com.openlinks.spendtracker.data.ApiClient
+import com.openlinks.spendtracker.data.AuthRepository
+import com.openlinks.spendtracker.data.AuthState
 import com.openlinks.spendtracker.data.Category
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SessionStore
@@ -14,6 +18,8 @@ import com.openlinks.spendtracker.data.Transaction
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.data.TransactionPage
 import com.openlinks.spendtracker.data.TransactionUpdate
+import com.openlinks.spendtracker.i18n.StringKey
+import com.openlinks.spendtracker.i18n.Strings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -64,19 +70,72 @@ data class SpendUiState(
     fun categoryName(categoryId: String?): String? = categoryId?.let { id -> categoryNameById[id] }
 }
 
+/** Auth-flow UI status, separate from data-loading [SpendUiState]. */
+data class AuthUiState(
+    val signingIn: Boolean = false,
+    val error: String? = null,
+)
+
 /**
  * Owns the [SpendApi] and app state. Constructor-injectable ([api], [dispatcher])
  * so the logic is exercised with a fake API and a test dispatcher in plain JUnit,
  * no Robolectric required. The production path builds a real [ApiClient] via the
  * companion [factory].
+ *
+ * [sessionStore] and [authRepository] are only wired in live builds (the gate uses
+ * [authState]); they default to null so pure ViewModel tests need not supply them.
  */
 class SessionViewModel(
     private val api: SpendApi,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val sessionStore: SessionStore? = null,
+    private val authRepository: AuthRepository? = null,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(SpendUiState())
     val state: StateFlow<SpendUiState> = mutableState.asStateFlow()
+
+    private val mutableAuthState = MutableStateFlow(sessionStore?.authState() ?: AuthState.SignedOut)
+    val authState: StateFlow<AuthState> = mutableAuthState.asStateFlow()
+
+    private val mutableAuthUiState = MutableStateFlow(AuthUiState())
+    val authUiState: StateFlow<AuthUiState> = mutableAuthUiState.asStateFlow()
+
+    /** Runs the Credential Manager sign-in, then re-reads the session and loads data. */
+    fun signInWithGoogle(context: Context) {
+        val repository = authRepository ?: return
+        viewModelScope.launch {
+            mutableAuthUiState.value = AuthUiState(signingIn = true, error = null)
+            try {
+                repository.signInWithGoogle(context)
+                mutableAuthUiState.value = AuthUiState(signingIn = false, error = null)
+                refreshAuthState()
+                refresh()
+            } catch (cancelled: GetCredentialCancellationException) {
+                // User dismissed the Google chooser: no-op, not an error.
+                mutableAuthUiState.value = AuthUiState(signingIn = false, error = null)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableAuthUiState.value = AuthUiState(
+                    signingIn = false,
+                    error = error.message ?: Strings.get(StringKey.AuthError),
+                )
+            }
+        }
+    }
+
+    /** Signs out server-side + locally and returns the gate to the auth screen. */
+    fun signOut(context: Context) {
+        val repository = authRepository ?: return
+        viewModelScope.launch {
+            runCatching { repository.signOut(context) }
+            refreshAuthState()
+        }
+    }
+
+    private fun refreshAuthState() {
+        sessionStore?.let { mutableAuthState.value = it.authState() }
+    }
 
     fun refresh() {
         viewModelScope.launch {
@@ -240,12 +299,15 @@ class SessionViewModel(
     }
 
     companion object {
-        /** Builds a ViewModel backed by a real network [ApiClient]. */
+        /** Builds a ViewModel backed by a real network [ApiClient] and live auth. */
         fun factory(sessionStore: SessionStore): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    SessionViewModel(ApiClient(sessionStore), Dispatchers.IO) as T
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    val apiClient = ApiClient(sessionStore)
+                    val authRepository = AuthRepository(apiClient, sessionStore)
+                    return SessionViewModel(apiClient, Dispatchers.IO, sessionStore, authRepository) as T
+                }
             }
     }
 }

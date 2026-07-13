@@ -79,6 +79,12 @@ enum class StringKey {
     ChartHeatmapLess,
     ChartHeatmapMore,
     ChartNoData,
+    AuthTitle,
+    AuthSubtitle,
+    AuthSignInWithGoogle,
+    AuthSigningIn,
+    AuthError,
+    ActionSignOut,
 }
 
 /** Simple locale-aware lookup. English is the only bundled locale for now. */
@@ -158,6 +164,12 @@ object Strings {
         StringKey.ChartHeatmapLess to "Less",
         StringKey.ChartHeatmapMore to "More",
         StringKey.ChartNoData to "No data to chart yet",
+        StringKey.AuthTitle to "SpendTracker",
+        StringKey.AuthSubtitle to "Sign in with your Google account to continue.",
+        StringKey.AuthSignInWithGoogle to "Sign in with Google",
+        StringKey.AuthSigningIn to "Signing in...",
+        StringKey.AuthError to "Sign-in failed. Please try again.",
+        StringKey.ActionSignOut to "Sign out",
     )
 
     private val locales: Map<String, Map<StringKey, String>> = mapOf("en" to english)

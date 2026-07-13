@@ -15,4 +15,14 @@ interface SpendApi {
     suspend fun getTags(): List<String>
     suspend fun getTransactionsFiltered(filters: TransactionFilters, page: TransactionPage): TransactionListResponse
     suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload
+
+    /**
+     * Exchanges a Google ID token for a Better Auth session token. POSTs to
+     * /api/auth/sign-in/social without a bearer header (no session yet) and
+     * returns the session token read from the set-auth-token response header.
+     */
+    suspend fun exchangeGoogleIdToken(idToken: String): String
+
+    /** Best-effort server-side sign-out; callers ignore failures. */
+    suspend fun signOutRemote()
 }

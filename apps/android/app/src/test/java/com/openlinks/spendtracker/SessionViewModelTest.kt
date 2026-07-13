@@ -91,6 +91,8 @@ class SessionViewModelTest {
             recordedBucketCalls.add(bucket)
             return analyticsPayload
         }
+        override suspend fun exchangeGoogleIdToken(idToken: String): String = "session-token"
+        override suspend fun signOutRemote() {}
     }
 
     @Before

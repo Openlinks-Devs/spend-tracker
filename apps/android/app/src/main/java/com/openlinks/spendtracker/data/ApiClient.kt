@@ -4,6 +4,9 @@ import com.openlinks.spendtracker.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.serializer
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -154,4 +157,36 @@ class ApiClient(
                 .filterNot { (name, _) -> name == "limit" || name == "offset" || name == "sort" } +
                 ("bucket" to bucket),
         )
+
+    override suspend fun exchangeGoogleIdToken(idToken: String): String = withContext(Dispatchers.IO) {
+        val payload = json.encodeToString(
+            kotlinx.serialization.json.JsonObject.serializer(),
+            buildJsonObject {
+                put("provider", "google")
+                putJsonObject("idToken") { put("token", idToken) }
+            },
+        )
+        // No bearer header here: there is no session yet, the ID token IS the
+        // credential. Better Auth returns the session token in set-auth-token.
+        val request = Request.Builder()
+            .url("$root/api/auth/sign-in/social")
+            .header("Accept", "application/json")
+            .post(payload.toRequestBody(jsonMediaType))
+            .build()
+        http.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            checkSuccessful(response, body)
+            response.header("set-auth-token")
+                ?: throw ApiException(response.code, "Missing set-auth-token response header")
+        }
+    }
+
+    override suspend fun signOutRemote() {
+        withContext(Dispatchers.IO) {
+            val request = newRequest("/api/auth/sign-out")
+                .post("".toRequestBody(jsonMediaType))
+                .build()
+            runCatching { http.newCall(request).execute().use { } }
+        }
+    }
 }

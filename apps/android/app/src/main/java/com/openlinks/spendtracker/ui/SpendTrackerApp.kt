@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,7 +19,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.openlinks.spendtracker.BuildConfig
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -48,6 +51,7 @@ private object Routes {
 fun SpendTrackerApp(viewModel: SessionViewModel) {
     val navController = rememberNavController()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -73,6 +77,18 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = Strings.get(StringKey.ActionBack),
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    // Sign-out only exists in live builds; a mock build has no session
+                    // to end and stays exactly as before.
+                    if (!BuildConfig.USE_MOCK_AUTH && showBottomBar) {
+                        androidx.compose.material3.IconButton(onClick = { viewModel.signOut(context) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = Strings.get(StringKey.ActionSignOut),
                             )
                         }
                     }

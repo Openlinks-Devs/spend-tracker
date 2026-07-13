@@ -12,6 +12,9 @@ val apiBaseUrl: String = (project.findProperty("apiBaseUrl") as String?)
 val mockUser: String = (project.findProperty("mockUser") as String?) ?: "demo-user"
 val useMockAuth: Boolean =
     (project.findProperty("useMockAuth") as String?)?.toBoolean() ?: true
+// The Web OAuth client id (== backend GOOGLE_CLIENT_ID == the ID token audience).
+// Passed at build time via -PserverClientId for live builds; empty in mock builds.
+val serverClientId: String = (project.findProperty("serverClientId") as String?) ?: ""
 
 android {
     namespace = "com.openlinks.spendtracker"
@@ -29,6 +32,7 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "MOCK_USER", "\"$mockUser\"")
         buildConfigField("boolean", "USE_MOCK_AUTH", "$useMockAuth")
+        buildConfigField("String", "SERVER_CLIENT_ID", "\"$serverClientId\"")
     }
 
     buildTypes {
@@ -90,6 +94,12 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Native Google sign-in: Credential Manager yields a Google ID token that is
+    // exchanged for a Better Auth bearer session.
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
