@@ -1,12 +1,16 @@
+import { toSearchParams } from '@/lib/filterParams'
+import type { TransactionFilterState } from '@/lib/filterParams'
 import type {
   Account,
   AccountUpdate,
+  AnalyticsPayload,
   Category,
   CategoryUpdate,
   NewAccount,
   NewCategory,
   NewTransaction,
   Transaction,
+  TransactionListResponse,
   TransactionUpdate,
 } from '@/types'
 
@@ -85,6 +89,30 @@ export const categoriesApi = createResourceApi<Category, NewCategory, CategoryUp
 
 export const tagsApi = {
   list: () => request<string[]>('/tags'),
+}
+
+export interface TransactionListPage {
+  limit: number
+  offset: number
+  sort?: string
+}
+
+// Filtered list and analytics reads share the query-string-from-filters shape,
+// which does not fit the CRUD ResourceApi factory, so they live in their own
+// resource object alongside the CRUD transactionsApi.
+export const transactionsAnalyticsApi = {
+  listFiltered(state: TransactionFilterState, page: TransactionListPage) {
+    const params = toSearchParams(state)
+    params.set('limit', String(page.limit))
+    params.set('offset', String(page.offset))
+    if (page.sort) params.set('sort', page.sort)
+    return request<TransactionListResponse>(`/transactions?${params.toString()}`)
+  },
+  analytics(state: TransactionFilterState, bucket: 'day' | 'week' | 'month') {
+    const params = toSearchParams(state)
+    params.set('bucket', bucket)
+    return request<AnalyticsPayload>(`/transactions/analytics?${params.toString()}`)
+  },
 }
 
 export function toErrorMessage(error: unknown): string {
