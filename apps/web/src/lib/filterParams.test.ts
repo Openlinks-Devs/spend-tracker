@@ -1,0 +1,26 @@
+import { describe, it, expect } from 'vitest'
+import { parseFilterParams, toSearchParams, EMPTY_FILTERS } from './filterParams'
+
+describe('filterParams round-trip', () => {
+  it('parses defaults from empty params', () => {
+    const state = parseFilterParams(new URLSearchParams())
+    expect(state.range).toBe('this-month')
+    expect(state.type).toBe('all')
+    expect(state.accounts).toEqual([])
+  })
+
+  it('round-trips a populated state', () => {
+    const populated = { ...EMPTY_FILTERS, q: 'coffee', accounts: ['a1', 'a2'], tags: ['trip'], tagMatch: 'all' as const, min: 10, type: 'expense' as const }
+    const reparsed = parseFilterParams(toSearchParams(populated))
+    expect(reparsed.q).toBe('coffee')
+    expect(reparsed.accounts).toEqual(['a1', 'a2'])
+    expect(reparsed.tags).toEqual(['trip'])
+    expect(reparsed.tagMatch).toBe('all')
+    expect(reparsed.min).toBe(10)
+    expect(reparsed.type).toBe('expense')
+  })
+
+  it('omits default-valued keys from the query string', () => {
+    expect(toSearchParams(EMPTY_FILTERS).toString()).toBe('')
+  })
+})
