@@ -17,6 +17,7 @@ const schema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().min(1),
   ALLOWED_EMAILS: z.string().default('misaelabanto@gmail.com'),
+  APP_MODE: z.enum(['mock', 'live']).default('mock'),
 })
 
 export type Env = z.infer<typeof schema>
