@@ -32,6 +32,7 @@ export class ApiError extends Error {
 
 async function request<TResponse>(path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${baseUrl}${path}`, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
