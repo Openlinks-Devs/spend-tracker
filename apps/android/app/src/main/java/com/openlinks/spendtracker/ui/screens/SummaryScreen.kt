@@ -19,16 +19,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.openlinks.spendtracker.data.AccountRow
 import com.openlinks.spendtracker.data.SeriesRow
+import com.openlinks.spendtracker.data.TagRow
 import com.openlinks.spendtracker.data.Transaction
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
 import com.openlinks.spendtracker.ui.Formatting
 import com.openlinks.spendtracker.ui.SpendUiState
+import com.openlinks.spendtracker.ui.accountsForCurrency
+import com.openlinks.spendtracker.ui.screens.charts.AccountNetChart
 import com.openlinks.spendtracker.ui.screens.charts.IncomeExpenseChart
 import com.openlinks.spendtracker.ui.screens.charts.SpendingOverTimeChart
+import com.openlinks.spendtracker.ui.screens.charts.TagBarChart
 import com.openlinks.spendtracker.ui.seriesForCurrency
+import com.openlinks.spendtracker.ui.tagsForCurrency
 
 @Composable
 fun SummaryScreen(
@@ -86,13 +92,20 @@ fun SummaryScreen(
         )
 
         val chartRows = seriesForCurrency(state.analytics?.series ?: emptyList(), state.displayCurrency)
+        val tagRows = tagsForCurrency(state.analytics?.byTag ?: emptyList(), state.displayCurrency)
+        val accountRows = accountsForCurrency(state.analytics?.byAccount ?: emptyList(), state.displayCurrency)
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(top = 8.dp),
         ) {
             item {
-                ChartsSection(rows = chartRows)
+                ChartsSection(
+                    seriesRows = chartRows,
+                    tagRows = tagRows,
+                    accountRows = accountRows,
+                    accountName = { accountId -> state.accountName(accountId) },
+                )
             }
             item {
                 Text(
@@ -122,11 +135,17 @@ fun SummaryScreen(
 }
 
 /**
- * The analytics charts area: spending-over-time and income-vs-expense, each in a
- * titled card. [rows] are already filtered to the display currency by the caller.
+ * The analytics charts area: spending-over-time, income-vs-expense, spend-by-tag
+ * and net-by-account, each in a titled card. All row lists are already filtered
+ * to the display currency by the caller.
  */
 @Composable
-private fun ChartsSection(rows: List<SeriesRow>) {
+private fun ChartsSection(
+    seriesRows: List<SeriesRow>,
+    tagRows: List<TagRow>,
+    accountRows: List<AccountRow>,
+    accountName: (String) -> String?,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = Strings.get(StringKey.ChartsTitle),
@@ -134,10 +153,16 @@ private fun ChartsSection(rows: List<SeriesRow>) {
             modifier = Modifier.padding(top = 16.dp),
         )
         ChartCard(title = Strings.get(StringKey.ChartSpendingOverTime)) {
-            SpendingOverTimeChart(rows = rows)
+            SpendingOverTimeChart(rows = seriesRows)
         }
         ChartCard(title = Strings.get(StringKey.ChartIncomeVsExpense)) {
-            IncomeExpenseChart(rows = rows)
+            IncomeExpenseChart(rows = seriesRows)
+        }
+        ChartCard(title = Strings.get(StringKey.ChartTagBreakdown)) {
+            TagBarChart(rows = tagRows)
+        }
+        ChartCard(title = Strings.get(StringKey.ChartNetByAccount)) {
+            AccountNetChart(rows = accountRows, accountName = accountName)
         }
     }
 }

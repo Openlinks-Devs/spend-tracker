@@ -7,8 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.openlinks.spendtracker.data.SeriesRow
-import com.openlinks.spendtracker.ui.bucketLabel
+import com.openlinks.spendtracker.data.TagRow
 import com.openlinks.spendtracker.ui.theme.ChartColors
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
@@ -23,34 +22,37 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
 
+private const val MAX_TAGS_SHOWN = 8
+
 /**
- * A column chart of spend per time bucket. [rows] are already filtered to a
- * single currency and sorted chronologically by the backend, so the column at
- * index i corresponds to rows[i]. The bottom axis labels each column with
- * [bucketLabel]. Renders an empty-state Text (never an empty chart) when there
- * is no data, so it cannot crash on an empty model.
+ * A column chart of spend per tag. [rows] arrive already sorted by spend
+ * descending (per the backend), so only the top [MAX_TAGS_SHOWN] are plotted
+ * to keep the chart readable. The bottom axis labels each column with the tag
+ * name. Renders an empty-state Text (never an empty chart) when there is no
+ * data, so it cannot crash on an empty model.
  */
 @Composable
-fun SpendingOverTimeChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
+fun TagBarChart(rows: List<TagRow>, modifier: Modifier = Modifier) {
     if (rows.isEmpty()) {
         ChartEmptyState(modifier)
         return
     }
 
+    val topRows = rows.take(MAX_TAGS_SHOWN)
     val modelProducer = remember { CartesianChartModelProducer() }
-    LaunchedEffect(rows) {
+    LaunchedEffect(topRows) {
         modelProducer.runTransaction {
-            columnSeries { series(rows.map { row -> row.spend }) }
+            columnSeries { series(topRows.map { row -> row.spend }) }
         }
     }
 
-    val labels = rows.map { row -> bucketLabel(row.bucketStart) }
+    val labels = topRows.map { row -> row.tag }
 
     CartesianChartHost(
         chart = rememberCartesianChart(
             rememberColumnCartesianLayer(
                 columnProvider = ColumnCartesianLayer.ColumnProvider.series(
-                    rememberLineComponent(fill = fill(ChartColors.spendColor), thickness = 12.dp),
+                    rememberLineComponent(fill = fill(ChartColors.chartPalette[1]), thickness = 12.dp),
                 ),
             ),
             startAxis = VerticalAxis.rememberStart(),

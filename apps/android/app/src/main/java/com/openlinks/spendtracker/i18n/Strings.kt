@@ -72,6 +72,8 @@ enum class StringKey {
     ChartsTitle,
     ChartSpendingOverTime,
     ChartIncomeVsExpense,
+    ChartTagBreakdown,
+    ChartNetByAccount,
     ChartNoData,
 }
 
@@ -145,6 +147,8 @@ object Strings {
         StringKey.ChartsTitle to "Charts",
         StringKey.ChartSpendingOverTime to "Spending over time",
         StringKey.ChartIncomeVsExpense to "Income vs expense",
+        StringKey.ChartTagBreakdown to "Spend by tag",
+        StringKey.ChartNetByAccount to "Net by account",
         StringKey.ChartNoData to "No data to chart yet",
     )
 

@@ -37,7 +37,6 @@ import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
-import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
@@ -52,11 +51,7 @@ import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 @Composable
 fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
     if (rows.isEmpty()) {
-        Text(
-            text = Strings.get(StringKey.ChartNoData),
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = modifier,
-        )
+        ChartEmptyState(modifier)
         return
     }
 
@@ -73,9 +68,7 @@ fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
         }
     }
 
-    val bottomAxisFormatter = CartesianValueFormatter { _, value, _ ->
-        rows.getOrNull(value.toInt())?.let { row -> bucketLabel(row.bucketStart) } ?: ""
-    }
+    val labels = rows.map { row -> bucketLabel(row.bucketStart) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         CartesianChartHost(
@@ -95,7 +88,7 @@ fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
                     ),
                 ),
                 startAxis = VerticalAxis.rememberStart(),
-                bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = bottomAxisFormatter),
+                bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = labelIndexFormatter(labels)),
             ),
             modelProducer = modelProducer,
             modifier = Modifier.fillMaxWidth().height(220.dp),

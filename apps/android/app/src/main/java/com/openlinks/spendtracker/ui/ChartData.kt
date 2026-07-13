@@ -1,6 +1,8 @@
 package com.openlinks.spendtracker.ui
 
+import com.openlinks.spendtracker.data.AccountRow
 import com.openlinks.spendtracker.data.SeriesRow
+import com.openlinks.spendtracker.data.TagRow
 
 /**
  * Pure data-shaping helpers for the analytics charts. Kept free of Android and
@@ -15,6 +17,21 @@ import com.openlinks.spendtracker.data.SeriesRow
  */
 fun seriesForCurrency(series: List<SeriesRow>, currency: String?): List<SeriesRow> =
     series.filter { row -> row.currency == currency }
+
+/**
+ * The [byTag] rows for [currency], in their original order. The backend already
+ * sorts by spend descending, so filtering preserves that order. A null
+ * [currency] never matches, so the result is empty.
+ */
+fun tagsForCurrency(byTag: List<TagRow>, currency: String?): List<TagRow> =
+    byTag.filter { row -> row.currency == currency }
+
+/**
+ * The [byAccount] rows for [currency], in their original order. A null
+ * [currency] never matches, so the result is empty.
+ */
+fun accountsForCurrency(byAccount: List<AccountRow>, currency: String?): List<AccountRow> =
+    byAccount.filter { row -> row.currency == currency }
 
 private val monthAbbreviations = listOf(
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
