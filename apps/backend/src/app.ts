@@ -10,7 +10,10 @@ import { createAccountsRoute } from './routes/accounts.js'
 import { createCategoriesRoute } from './routes/categories.js'
 import { createTagsRoute } from './routes/tags.js'
 
-export function buildApp(): Hono {
+export function buildApp(
+  resolveSession: (headers: Headers) => Promise<unknown> = (headers) =>
+    getAuth().api.getSession({ headers }),
+): Hono {
   const app = new Hono()
 
   // Credentialed requests (session cookie) require a concrete origin, never '*',
@@ -34,12 +37,16 @@ export function buildApp(): Hono {
   // Health (never gated).
   app.route('/', healthRoute)
 
-  // Gate the data routes behind a valid session.
-  const guard = createSessionGuard((headers) => getAuth().api.getSession({ headers }))
-  for (const prefix of ['/api/transactions', '/api/accounts', '/api/categories', '/api/tags']) {
-    app.use(prefix, guard)
-    app.use(`${prefix}/*`, guard)
-  }
+  // Default-deny: gate every /api/* route behind a valid session, except
+  // /api/auth/* itself (login must never be gated). Any future data route
+  // ships gated automatically, no allowlist to remember to update.
+  const guard = createSessionGuard(resolveSession)
+  app.use('/api/*', async (context, next) => {
+    if (context.req.path.startsWith('/api/auth/')) {
+      return next()
+    }
+    return guard(context, next)
+  })
 
   app.route('/', oauthRoute)
   app.route('/', telegramRoute)
