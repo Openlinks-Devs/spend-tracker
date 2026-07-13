@@ -9,7 +9,8 @@ describe('analytics route', () => {
         .mockResolvedValueOnce({ rows: [{ currency: 'PEN', income: 100, spend: 40, net: 60, count: 3 }] })
         .mockResolvedValueOnce({ rows: [{ bucketStart: '2026-07-01T00:00:00.000Z', currency: 'PEN', income: 100, spend: 40, net: 60 }] })
         .mockResolvedValueOnce({ rows: [{ categoryId: 'c1', currency: 'PEN', spend: 40, income: 0, net: -40, count: 2 }] })
-        .mockResolvedValueOnce({ rows: [{ tag: 'coffee', currency: 'PEN', spend: 40, count: 2 }] }),
+        .mockResolvedValueOnce({ rows: [{ tag: 'coffee', currency: 'PEN', spend: 40, count: 2 }] })
+        .mockResolvedValueOnce({ rows: [{ accountId: 'a1', currency: 'PEN', income: 100, spend: 40, net: 60, count: 3 }] }),
     }
     const route = createTransactionsRoute(() => db)
     const response = await route.request('/api/transactions/analytics?bucket=month&type=expense')
@@ -19,6 +20,9 @@ describe('analytics route', () => {
     expect(body.series[0].bucketStart).toBe('2026-07-01T00:00:00.000Z')
     expect(body.byCategory[0].categoryId).toBe('c1')
     expect(body.byTag[0].tag).toBe('coffee')
+    expect(body.byAccount[0].accountId).toBe('a1')
+    expect(body.byAccount[0].net).toBe(60)
+    expect(db.query.mock.calls[4][0]).toMatch(/GROUP BY account_id, currency/)
     expect(db.query.mock.calls[1][0]).toMatch(/date_trunc\('month'/)
   })
 
