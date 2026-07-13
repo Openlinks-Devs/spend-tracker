@@ -50,3 +50,38 @@ describe('app wiring', () => {
     expect(response.status).toBe(401)
   })
 })
+
+describe('session gating (default-deny)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('returns 401 on a data route when there is no session', async () => {
+    for (const [key, value] of Object.entries(requiredEnvVars)) {
+      vi.stubEnv(key, value)
+    }
+    const app = buildApp(async () => null)
+    const response = await app.request('/api/transactions')
+    expect(response.status).toBe(401)
+  })
+
+  it('does not return 401 on a data route when a session is present', async () => {
+    for (const [key, value] of Object.entries(requiredEnvVars)) {
+      vi.stubEnv(key, value)
+    }
+    const app = buildApp(async () => ({ session: {}, user: {} }))
+    const response = await app.request('/api/transactions')
+    // The guard passed; the route itself may still fail (no real DB in this
+    // test), but that failure must not be a 401.
+    expect(response.status).not.toBe(401)
+  })
+
+  it('never gates /api/auth/* even when the injected resolver denies the session', async () => {
+    for (const [key, value] of Object.entries(requiredEnvVars)) {
+      vi.stubEnv(key, value)
+    }
+    const app = buildApp(async () => null)
+    const response = await app.request('/api/auth/anything')
+    expect(response.status).not.toBe(401)
+  })
+})
