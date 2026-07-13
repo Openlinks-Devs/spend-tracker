@@ -14,11 +14,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openlinks.spendtracker.data.Transaction
+import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
 import com.openlinks.spendtracker.ui.Formatting
@@ -28,39 +33,71 @@ import com.openlinks.spendtracker.ui.SpendUiState
 fun TransactionsListScreen(
     state: SpendUiState,
     onOpenTransaction: (String) -> Unit,
+    onUpdateFilters: ((TransactionFilters) -> TransactionFilters) -> Unit,
+    onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
-        when {
-            state.loading && state.transactions.isEmpty() -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            }
-            state.error != null && state.transactions.isEmpty() -> {
-                Text(
-                    text = state.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                )
-            }
-            state.transactions.isEmpty() -> {
-                Text(
-                    text = Strings.get(StringKey.TransactionsEmpty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                )
-            }
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(state.transactions) { transaction ->
-                        TransactionRow(
-                            transaction = transaction,
-                            categoryName = state.categoryName(transaction.categoryId),
-                            accountName = state.accountName(transaction.accountId),
-                            onClick = { onOpenTransaction(transaction.id) },
-                        )
+    var filtersExpanded by remember { mutableStateOf(false) }
+    val chips = activeFilterChips(
+        filters = state.filters,
+        accountName = { accountId -> state.accountName(accountId) },
+        categoryName = { categoryId -> state.categoryName(categoryId) },
+    )
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SearchField(
+                query = state.filters.query,
+                onQueryChange = { newQuery -> onUpdateFilters { it.copy(query = newQuery) } },
+            )
+            ActiveFilterChips(
+                chips = chips,
+                onRemove = { chip -> onUpdateFilters(removeChipTransform(chip)) },
+                onClearAll = onClearFilters,
+            )
+            FilterPanel(
+                state = state,
+                onUpdateFilters = onUpdateFilters,
+                expanded = filtersExpanded,
+                onToggle = { filtersExpanded = !filtersExpanded },
+            )
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            when {
+                state.loading && state.transactions.isEmpty() -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                state.error != null && state.transactions.isEmpty() -> {
+                    Text(
+                        text = state.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    )
+                }
+                state.transactions.isEmpty() -> {
+                    Text(
+                        text = Strings.get(StringKey.TransactionsEmpty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    )
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.transactions) { transaction ->
+                            TransactionRow(
+                                transaction = transaction,
+                                categoryName = state.categoryName(transaction.categoryId),
+                                accountName = state.accountName(transaction.accountId),
+                                onClick = { onOpenTransaction(transaction.id) },
+                            )
+                        }
                     }
                 }
             }
