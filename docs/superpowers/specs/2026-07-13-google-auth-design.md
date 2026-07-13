@@ -110,3 +110,7 @@ Google accepts `http://localhost:<port>` or a public https domain, not a LAN IP.
 
 - DB-backed allowlist / roles, invitations, multi-tenant data scoping.
 - Per-user data isolation (today all rows are shared; add `user_id` later).
+- `ALLOWED_EMAILS` is enforced at account-creation time only: removing an email
+  from the list does not revoke an already-provisioned user's sessions or
+  future logins. Per-request re-validation against the allowlist is the
+  upgrade path if revocation is needed.
