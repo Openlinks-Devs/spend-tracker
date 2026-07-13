@@ -5,10 +5,12 @@ function fakeResponse(payload: unknown, ok = true, status = 200) {
   return { ok, status, json: async () => payload } as unknown as Response
 }
 
+// ExchangeRate-API v6 shape as served by the MMEX mirror.
+// 1783814401 is 2026-07-12T00:00:01Z, so the snapshot date is 2026-07-12.
 const dailyPayload = {
-  base: 'USD',
-  date: '2026-07-10',
-  rates: { PEN: 3.74, EUR: 0.92, USD: 1, XXX: 5.5 },
+  base_code: 'USD',
+  time_last_update_unix: 1783814401,
+  conversion_rates: { PEN: 3.74, EUR: 0.92, USD: 1, XXX: 5.5 },
 }
 
 describe('fetchDailyRates', () => {
@@ -24,14 +26,14 @@ describe('fetchDailyRates', () => {
     const result = await fetchDailyRates(db, fetchImpl as unknown as typeof fetch)
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://moneymanagerex.github.io/currency/data/latest_USD.json',
+      'https://moneymanagerex.org/currency/data/latest_USD.json',
     )
     // 1 currencies select + 2 upserts (PEN, EUR); USD and unknown XXX skipped.
     expect(db.query).toHaveBeenCalledTimes(3)
     const [penSql, penParams] = db.query.mock.calls[1]
     expect(penSql).toMatch(/insert into exchange_rates/i)
     expect(penSql).toMatch(/on conflict \(base_code, quote_code, date\) do update/i)
-    expect(penParams).toEqual(['USD', 'PEN', '2026-07-10', 3.74, 'exchangerate-api'])
+    expect(penParams).toEqual(['USD', 'PEN', '2026-07-12', 3.74, 'exchangerate-api'])
     expect(result).toEqual({ upserted: 2 })
   })
 
