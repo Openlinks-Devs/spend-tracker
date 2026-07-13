@@ -12,10 +12,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openlinks.spendtracker.data.Transaction
+import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
 import com.openlinks.spendtracker.ui.Formatting
@@ -25,32 +30,57 @@ import com.openlinks.spendtracker.ui.SpendUiState
 fun SummaryScreen(
     state: SpendUiState,
     onOpenTransaction: (String) -> Unit,
+    onUpdateFilters: ((TransactionFilters) -> TransactionFilters) -> Unit,
+    onClearFilters: () -> Unit,
+    onSetCurrency: (String) -> Unit,
+    onSetBucket: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val summary = state.summary
+    var filtersExpanded by remember { mutableStateOf(false) }
+    val chips = activeFilterChips(
+        filters = state.filters,
+        accountName = { accountId -> state.accountName(accountId) },
+        categoryName = { categoryId -> state.categoryName(categoryId) },
+    )
+    val summary = state.analytics?.summary ?: emptyList()
+
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+        SearchField(
+            query = state.filters.query,
+            onQueryChange = { newQuery -> onUpdateFilters { it.copy(query = newQuery) } },
+        )
+        ActiveFilterChips(
+            chips = chips,
+            onRemove = { chip -> onUpdateFilters(removeChipTransform(chip)) },
+            onClearAll = onClearFilters,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        FilterPanel(
+            state = state,
+            onUpdateFilters = onUpdateFilters,
+            expanded = filtersExpanded,
+            onToggle = { filtersExpanded = !filtersExpanded },
+            modifier = Modifier.padding(top = 8.dp),
+        )
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            SummaryCard(
-                label = Strings.get(StringKey.SummaryTotalBalance),
-                value = Formatting.money(summary.netTotal, summary.currency),
-                modifier = Modifier.weight(1f),
-            )
-            SummaryCard(
-                label = Strings.get(StringKey.SummaryTotalSpend),
-                value = Formatting.money(summary.totalSpend, summary.currency),
-                modifier = Modifier.weight(1f),
+            BucketToggle(bucket = state.bucket, onChange = onSetBucket)
+            CurrencySwitcher(
+                currencies = currenciesIn(summary),
+                value = state.displayCurrency,
+                onChange = onSetCurrency,
             )
         }
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-            SummaryCard(
-                label = Strings.get(StringKey.SummaryTransactionCount),
-                value = summary.transactionCount.toString(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+
+        SummaryTiles(
+            summary = summary,
+            currency = state.displayCurrency,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+
         Text(
             text = Strings.get(StringKey.SummaryRecent),
             style = MaterialTheme.typography.titleMedium,
@@ -71,20 +101,6 @@ fun SummaryScreen(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun SummaryCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = label, style = MaterialTheme.typography.labelMedium)
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
     }
 }

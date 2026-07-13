@@ -149,6 +149,17 @@ class SessionViewModel(
         updateFilters { TransactionFilters() }
     }
 
+    /**
+     * Sets the display currency. Purely a rendering preference (per B1, currency
+     * is never sent to the backend), so this does NOT re-fetch transactions or
+     * analytics, unlike [updateFilters].
+     */
+    fun setCurrency(currency: String?) {
+        mutableState.value = mutableState.value.copy(
+            filters = mutableState.value.filters.copy(currency = currency),
+        )
+    }
+
     fun createTransaction(transaction: NewTransaction, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {

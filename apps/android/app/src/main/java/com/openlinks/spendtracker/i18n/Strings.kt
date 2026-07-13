@@ -62,6 +62,13 @@ enum class StringKey {
     FilterMaxAmount,
     FilterClearAll,
     FilterRemove,
+    SummaryIncome,
+    SummarySpend,
+    SummaryNet,
+    BucketDay,
+    BucketWeek,
+    BucketMonth,
+    CurrencyLabel,
 }
 
 /** Simple locale-aware lookup. English is the only bundled locale for now. */
@@ -124,6 +131,13 @@ object Strings {
         StringKey.FilterMaxAmount to "Max",
         StringKey.FilterClearAll to "Clear all",
         StringKey.FilterRemove to "Remove filter",
+        StringKey.SummaryIncome to "Income",
+        StringKey.SummarySpend to "Spend",
+        StringKey.SummaryNet to "Net",
+        StringKey.BucketDay to "Day",
+        StringKey.BucketWeek to "Week",
+        StringKey.BucketMonth to "Month",
+        StringKey.CurrencyLabel to "Currency",
     )
 
     private val locales: Map<String, Map<StringKey, String>> = mapOf("en" to english)

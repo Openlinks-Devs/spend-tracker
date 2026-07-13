@@ -194,6 +194,21 @@ class SessionViewModelTest {
     }
 
     @Test
+    fun setCurrencyUpdatesFiltersWithoutRefetching() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.refresh()
+        advanceUntilIdle()
+        val callCountBeforeSetCurrency = api.recordedFilterCalls.size
+
+        viewModel.setCurrency("EUR")
+        advanceUntilIdle()
+
+        assertEquals("EUR", viewModel.state.value.filters.currency)
+        assertEquals(callCountBeforeSetCurrency, api.recordedFilterCalls.size)
+    }
+
+    @Test
     fun clearFiltersResetsFiltersAndRefetches() = runTest(dispatcher) {
         val api = FakeApi()
         val viewModel = SessionViewModel(api, dispatcher)

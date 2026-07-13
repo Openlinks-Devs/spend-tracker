@@ -125,6 +125,10 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                 SummaryScreen(
                     state = state,
                     onOpenTransaction = { id -> navController.navigate(Routes.detail(id)) },
+                    onUpdateFilters = viewModel::updateFilters,
+                    onClearFilters = viewModel::clearFilters,
+                    onSetCurrency = viewModel::setCurrency,
+                    onSetBucket = viewModel::setBucket,
                 )
             }
             composable(Routes.TRANSACTIONS) {
