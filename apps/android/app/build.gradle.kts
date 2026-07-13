@@ -44,6 +44,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // The calendar heatmap uses java.time (LocalDate), which is only native
+        // from API 26. minSdk is 24, so desugar it to stay safe on API 24-25.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -81,6 +84,8 @@ dependencies {
 
     // Vico: Compose-native charting (column/line cartesian charts) for the analytics screen.
     implementation("com.patrykandpatrick.vico:compose-m3:2.1.3")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.openlinks.spendtracker.data.AccountRow
+import com.openlinks.spendtracker.data.CategoryRow
 import com.openlinks.spendtracker.data.SeriesRow
 import com.openlinks.spendtracker.data.TagRow
 import com.openlinks.spendtracker.data.Transaction
@@ -29,7 +30,10 @@ import com.openlinks.spendtracker.i18n.Strings
 import com.openlinks.spendtracker.ui.Formatting
 import com.openlinks.spendtracker.ui.SpendUiState
 import com.openlinks.spendtracker.ui.accountsForCurrency
+import com.openlinks.spendtracker.ui.categoriesForCurrency
 import com.openlinks.spendtracker.ui.screens.charts.AccountNetChart
+import com.openlinks.spendtracker.ui.screens.charts.CalendarHeatmap
+import com.openlinks.spendtracker.ui.screens.charts.CategoryDonutChart
 import com.openlinks.spendtracker.ui.screens.charts.IncomeExpenseChart
 import com.openlinks.spendtracker.ui.screens.charts.SpendingOverTimeChart
 import com.openlinks.spendtracker.ui.screens.charts.TagBarChart
@@ -94,6 +98,8 @@ fun SummaryScreen(
         val chartRows = seriesForCurrency(state.analytics?.series ?: emptyList(), state.displayCurrency)
         val tagRows = tagsForCurrency(state.analytics?.byTag ?: emptyList(), state.displayCurrency)
         val accountRows = accountsForCurrency(state.analytics?.byAccount ?: emptyList(), state.displayCurrency)
+        val categoryRows = categoriesForCurrency(state.analytics?.byCategory ?: emptyList(), state.displayCurrency)
+        val dayRows = seriesForCurrency(state.dayAnalytics?.series ?: emptyList(), state.displayCurrency)
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -104,7 +110,10 @@ fun SummaryScreen(
                     seriesRows = chartRows,
                     tagRows = tagRows,
                     accountRows = accountRows,
+                    categoryRows = categoryRows,
+                    dayRows = dayRows,
                     accountName = { accountId -> state.accountName(accountId) },
+                    categoryName = { categoryId -> state.categoryName(categoryId) },
                 )
             }
             item {
@@ -144,7 +153,10 @@ private fun ChartsSection(
     seriesRows: List<SeriesRow>,
     tagRows: List<TagRow>,
     accountRows: List<AccountRow>,
+    categoryRows: List<CategoryRow>,
+    dayRows: List<SeriesRow>,
     accountName: (String) -> String?,
+    categoryName: (String) -> String?,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -158,11 +170,17 @@ private fun ChartsSection(
         ChartCard(title = Strings.get(StringKey.ChartIncomeVsExpense)) {
             IncomeExpenseChart(rows = seriesRows)
         }
+        ChartCard(title = Strings.get(StringKey.ChartCategoryBreakdown)) {
+            CategoryDonutChart(categories = categoryRows, categoryName = categoryName)
+        }
         ChartCard(title = Strings.get(StringKey.ChartTagBreakdown)) {
             TagBarChart(rows = tagRows)
         }
         ChartCard(title = Strings.get(StringKey.ChartNetByAccount)) {
             AccountNetChart(rows = accountRows, accountName = accountName)
+        }
+        ChartCard(title = Strings.get(StringKey.ChartSpendingCalendar)) {
+            CalendarHeatmap(daySeries = dayRows)
         }
     }
 }

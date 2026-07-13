@@ -34,6 +34,9 @@ data class SpendUiState(
     val tags: List<String> = emptyList(),
     val filters: TransactionFilters = TransactionFilters(),
     val analytics: AnalyticsPayload? = null,
+    // Day-granularity analytics fetched alongside [analytics], used by the
+    // calendar heatmap which always needs per-day buckets regardless of [bucket].
+    val dayAnalytics: AnalyticsPayload? = null,
     val bucket: String = "month",
     val error: String? = null,
 ) {
@@ -87,6 +90,10 @@ class SessionViewModel(
                     coroutineScope {
                         val transactionsDeferred = async { api.getTransactionsFiltered(filters, TransactionPage()) }
                         val analyticsDeferred = async { api.getAnalytics(filters, bucket) }
+                        // The heatmap always needs day buckets. Skip the second call
+                        // when the primary bucket is already "day".
+                        val dayAnalyticsDeferred =
+                            if (bucket == "day") null else async { api.getAnalytics(filters, "day") }
                         val accountsDeferred = async { api.getAccounts() }
                         val categoriesDeferred = async { api.getCategories() }
                         val tagsDeferred = async {
@@ -96,10 +103,12 @@ class SessionViewModel(
                                 emptyList()
                             }
                         }
+                        val analytics = analyticsDeferred.await()
                         SpendUiState(
                             loading = false,
                             transactions = transactionsDeferred.await().items,
-                            analytics = analyticsDeferred.await(),
+                            analytics = analytics,
+                            dayAnalytics = dayAnalyticsDeferred?.await() ?: analytics,
                             accounts = accountsDeferred.await(),
                             categories = categoriesDeferred.await(),
                             tags = tagsDeferred.await(),
@@ -207,14 +216,27 @@ class SessionViewModel(
     private suspend fun reloadFilteredData() {
         val filters = mutableState.value.filters
         val bucket = mutableState.value.bucket
-        val (transactions, analytics) = withContext(dispatcher) {
+        val reloaded = withContext(dispatcher) {
             coroutineScope {
                 val transactionsDeferred = async { api.getTransactionsFiltered(filters, TransactionPage()) }
                 val analyticsDeferred = async { api.getAnalytics(filters, bucket) }
-                transactionsDeferred.await().items to analyticsDeferred.await()
+                // The heatmap always needs day buckets. Skip the second call when
+                // the primary bucket is already "day".
+                val dayAnalyticsDeferred =
+                    if (bucket == "day") null else async { api.getAnalytics(filters, "day") }
+                val transactions = transactionsDeferred.await().items
+                val analytics = analyticsDeferred.await()
+                val dayAnalytics = dayAnalyticsDeferred?.await() ?: analytics
+                Triple(transactions, analytics, dayAnalytics)
             }
         }
-        mutableState.value = mutableState.value.copy(transactions = transactions, analytics = analytics, error = null)
+        val (transactions, analytics, dayAnalytics) = reloaded
+        mutableState.value = mutableState.value.copy(
+            transactions = transactions,
+            analytics = analytics,
+            dayAnalytics = dayAnalytics,
+            error = null,
+        )
     }
 
     companion object {

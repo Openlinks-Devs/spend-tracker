@@ -1,25 +1,33 @@
 package com.openlinks.spendtracker
 
 import com.openlinks.spendtracker.data.AccountRow
+import com.openlinks.spendtracker.data.CategoryRow
 import com.openlinks.spendtracker.data.SeriesRow
 import com.openlinks.spendtracker.data.TagRow
 import com.openlinks.spendtracker.ui.accountsForCurrency
 import com.openlinks.spendtracker.ui.bucketLabel
+import com.openlinks.spendtracker.ui.categoriesForCurrency
+import com.openlinks.spendtracker.ui.donutSlices
+import com.openlinks.spendtracker.ui.heatmapCells
 import com.openlinks.spendtracker.ui.seriesForCurrency
 import com.openlinks.spendtracker.ui.tagsForCurrency
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChartDataTest {
 
-    private fun row(bucketStart: String, currency: String): SeriesRow =
-        SeriesRow(bucketStart = bucketStart, currency = currency, income = 10.0, spend = 4.0, net = 6.0)
+    private fun row(bucketStart: String, currency: String, spend: Double = 4.0): SeriesRow =
+        SeriesRow(bucketStart = bucketStart, currency = currency, income = 10.0, spend = spend, net = 6.0)
 
     private fun tagRow(tag: String, currency: String, spend: Double = 4.0): TagRow =
         TagRow(tag = tag, currency = currency, spend = spend, count = 1)
 
     private fun accountRow(accountId: String, currency: String, net: Double = 6.0): AccountRow =
         AccountRow(accountId = accountId, currency = currency, income = 10.0, spend = 4.0, net = net, count = 1)
+
+    private fun categoryRow(categoryId: String, currency: String, spend: Double): CategoryRow =
+        CategoryRow(categoryId = categoryId, currency = currency, spend = spend, income = 0.0, net = 0.0, count = 1)
 
     @Test
     fun seriesForCurrencyKeepsOnlyMatchingRows() {
@@ -161,5 +169,150 @@ class ChartDataTest {
         val byAccount = listOf(accountRow("checking", "USD"))
 
         assertEquals(emptyList<AccountRow>(), accountsForCurrency(byAccount, null))
+    }
+
+    @Test
+    fun categoriesForCurrencyKeepsOnlyMatchingRows() {
+        val byCategory = listOf(
+            categoryRow("food", "USD", 10.0),
+            categoryRow("rent", "EUR", 20.0),
+            categoryRow("travel", "USD", 30.0),
+        )
+
+        val filtered = categoriesForCurrency(byCategory, "USD")
+
+        assertEquals(listOf("food", "travel"), filtered.map { it.categoryId })
+    }
+
+    @Test
+    fun categoriesForCurrencyReturnsEmptyForNullCurrency() {
+        val byCategory = listOf(categoryRow("food", "USD", 10.0))
+
+        assertEquals(emptyList<CategoryRow>(), categoriesForCurrency(byCategory, null))
+    }
+
+    @Test
+    fun donutSlicesExcludesZeroSpendCategories() {
+        val categories = listOf(
+            categoryRow("food", "USD", 30.0),
+            categoryRow("rent", "USD", 0.0),
+            categoryRow("travel", "USD", 10.0),
+        )
+
+        val slices = donutSlices(categories) { id -> id }
+
+        assertEquals(listOf("food", "travel"), slices.map { it.label })
+    }
+
+    @Test
+    fun donutSlicesFractionsSumToOne() {
+        val categories = listOf(
+            categoryRow("food", "USD", 30.0),
+            categoryRow("travel", "USD", 10.0),
+        )
+
+        val slices = donutSlices(categories) { id -> id }
+
+        val fractionTotal = slices.sumOf { it.fraction.toDouble() }
+        assertEquals(1.0, fractionTotal, 1e-6)
+        assertEquals(0.75f, slices[0].fraction, 1e-6f)
+        assertEquals(0.25f, slices[1].fraction, 1e-6f)
+    }
+
+    @Test
+    fun donutSlicesAnglesAccumulateFromMinus90() {
+        val categories = listOf(
+            categoryRow("food", "USD", 30.0),
+            categoryRow("travel", "USD", 10.0),
+        )
+
+        val slices = donutSlices(categories) { id -> id }
+
+        assertEquals(-90f, slices[0].startAngle, 1e-4f)
+        assertEquals(270f, slices[0].sweepAngle, 1e-4f)
+        // Second slice starts where the first one ended.
+        assertEquals(-90f + slices[0].sweepAngle, slices[1].startAngle, 1e-4f)
+        assertEquals(90f, slices[1].sweepAngle, 1e-4f)
+    }
+
+    @Test
+    fun donutSlicesUsesCategoryNameFallbackToId() {
+        val categories = listOf(categoryRow("cat-1", "USD", 10.0))
+
+        val named = donutSlices(categories) { "Groceries" }
+        val unnamed = donutSlices(categories) { null }
+
+        assertEquals("Groceries", named[0].label)
+        assertEquals("cat-1", unnamed[0].label)
+    }
+
+    @Test
+    fun donutSlicesColorIndexIsSequential() {
+        val categories = listOf(
+            categoryRow("food", "USD", 30.0),
+            categoryRow("travel", "USD", 10.0),
+        )
+
+        val slices = donutSlices(categories) { id -> id }
+
+        assertEquals(listOf(0, 1), slices.map { it.colorIndex })
+    }
+
+    @Test
+    fun donutSlicesEmptyWhenAllZero() {
+        val categories = listOf(
+            categoryRow("food", "USD", 0.0),
+            categoryRow("rent", "USD", 0.0),
+        )
+
+        assertTrue(donutSlices(categories) { id -> id }.isEmpty())
+    }
+
+    @Test
+    fun donutSlicesEmptyWhenNoCategories() {
+        assertTrue(donutSlices(emptyList()) { id -> id }.isEmpty())
+    }
+
+    @Test
+    fun heatmapCellsExtractsDatePartOfBucketStart() {
+        val daySeries = listOf(
+            row("2026-07-01T00:00:00.000Z", "USD", spend = 4.0),
+            row("2026-07-02T00:00:00.000Z", "USD", spend = 8.0),
+        )
+
+        val cells = heatmapCells(daySeries)
+
+        assertEquals(listOf("2026-07-01", "2026-07-02"), cells.map { it.date })
+    }
+
+    @Test
+    fun heatmapCellsIntensityIsSpendOverMax() {
+        val daySeries = listOf(
+            row("2026-07-01T00:00:00.000Z", "USD", spend = 5.0),
+            row("2026-07-02T00:00:00.000Z", "USD", spend = 10.0),
+        )
+
+        val cells = heatmapCells(daySeries)
+
+        assertEquals(0.5f, cells[0].intensity, 1e-6f)
+        assertEquals(1.0f, cells[1].intensity, 1e-6f)
+        assertEquals(5.0, cells[0].spend, 1e-9)
+    }
+
+    @Test
+    fun heatmapCellsIntensityZeroWhenMaxSpendZero() {
+        val daySeries = listOf(
+            row("2026-07-01T00:00:00.000Z", "USD", spend = 0.0),
+            row("2026-07-02T00:00:00.000Z", "USD", spend = 0.0),
+        )
+
+        val cells = heatmapCells(daySeries)
+
+        assertEquals(listOf(0f, 0f), cells.map { it.intensity })
+    }
+
+    @Test
+    fun heatmapCellsEmptyOnEmpty() {
+        assertTrue(heatmapCells(emptyList()).isEmpty())
     }
 }

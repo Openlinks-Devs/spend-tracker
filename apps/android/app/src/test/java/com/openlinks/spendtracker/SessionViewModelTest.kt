@@ -24,6 +24,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -139,11 +140,41 @@ class SessionViewModelTest {
         assertEquals(1, state.transactions.size)
         assertNotNull(state.analytics)
         assertEquals(api.analyticsPayload, state.analytics)
-        // Both the filtered-transactions and analytics reads carry the default filters.
-        assertEquals(2, api.recordedFilterCalls.size)
-        assertEquals(TransactionFilters(), api.recordedFilterCalls[0])
-        assertEquals(TransactionFilters(), api.recordedFilterCalls[1])
-        assertEquals(listOf("month"), api.recordedBucketCalls)
+        // The filtered-transactions read plus the primary (month) and day-bucketed
+        // analytics reads all carry the default filters.
+        assertEquals(3, api.recordedFilterCalls.size)
+        assertTrue(api.recordedFilterCalls.all { filters -> filters == TransactionFilters() })
+        // Primary bucket plus a day-granularity fetch for the heatmap.
+        assertEquals(setOf("month", "day"), api.recordedBucketCalls.toSet())
+    }
+
+    @Test
+    fun refreshPopulatesDayAnalyticsForHeatmap() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertNotNull(state.dayAnalytics)
+        assertEquals(api.analyticsPayload, state.dayAnalytics)
+        assertTrue(api.recordedBucketCalls.contains("day"))
+    }
+
+    @Test
+    fun updateFiltersRefreshesDayAnalytics() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.refresh()
+        advanceUntilIdle()
+        api.recordedBucketCalls.clear()
+
+        viewModel.updateFilters { filters -> filters.copy(type = "expense") }
+        advanceUntilIdle()
+
+        assertNotNull(viewModel.state.value.dayAnalytics)
+        assertTrue(api.recordedBucketCalls.contains("day"))
     }
 
     @Test
@@ -174,7 +205,8 @@ class SessionViewModelTest {
         advanceUntilIdle()
 
         assertEquals("expense", viewModel.state.value.filters.type)
-        assertEquals(2, api.recordedFilterCalls.size)
+        // Filtered transactions plus the primary and day-bucketed analytics reads.
+        assertEquals(3, api.recordedFilterCalls.size)
         assertEquals(true, api.recordedFilterCalls.all { filters -> filters.type == "expense" })
     }
 
@@ -190,7 +222,8 @@ class SessionViewModelTest {
         advanceUntilIdle()
 
         assertEquals("week", viewModel.state.value.bucket)
-        assertEquals(listOf("week"), api.recordedBucketCalls)
+        // The primary (week) read plus the day-bucketed read for the heatmap.
+        assertEquals(setOf("week", "day"), api.recordedBucketCalls.toSet())
     }
 
     @Test
