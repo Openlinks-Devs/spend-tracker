@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mostUsedCurrency } from '@/components/analytics/AnalyticsSection'
+import { mostUsedCurrency, resolveDisplayCurrency } from '@/components/analytics/AnalyticsSection'
 import type { SummaryRow } from '@/types'
 
 function makeSummaryRow(overrides: Partial<SummaryRow> & { currency: string }): SummaryRow {
@@ -22,5 +22,28 @@ describe('mostUsedCurrency', () => {
       makeSummaryRow({ currency: 'EUR', count: 5 }),
     ]
     expect(mostUsedCurrency(summary)).toBe('PEN')
+  })
+})
+
+describe('resolveDisplayCurrency', () => {
+  const summary = [
+    makeSummaryRow({ currency: 'USD', count: 2 }),
+    makeSummaryRow({ currency: 'PEN', count: 9 }),
+  ]
+
+  it('respects a preference present in the summary', () => {
+    expect(resolveDisplayCurrency('USD', summary)).toBe('USD')
+  })
+
+  it('falls back to the highest-count currency when the preference is absent', () => {
+    expect(resolveDisplayCurrency('EUR', summary)).toBe('PEN')
+  })
+
+  it('falls back to the highest-count currency when no preference is set', () => {
+    expect(resolveDisplayCurrency(undefined, summary)).toBe('PEN')
+  })
+
+  it('falls back to USD for an empty summary', () => {
+    expect(resolveDisplayCurrency('EUR', [])).toBe('USD')
   })
 })

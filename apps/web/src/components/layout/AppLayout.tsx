@@ -1,15 +1,24 @@
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useLocation } from 'react-router'
 import { IconLayoutDashboard, IconReceipt, IconWallet, IconTags } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 
+// Dashboard and Transactions share the same filter query string; carrying the
+// current location.search across those two links keeps filters applied when the
+// user switches between them. Accounts and Categories stay bare.
 const navigationItems = [
-  { to: '/', label: 'Dashboard', icon: IconLayoutDashboard, end: true },
-  { to: '/transactions', label: 'Transactions', icon: IconReceipt, end: false },
-  { to: '/accounts', label: 'Accounts', icon: IconWallet, end: false },
-  { to: '/categories', label: 'Categories', icon: IconTags, end: false },
+  { to: '/', label: 'Dashboard', icon: IconLayoutDashboard, end: true, preservesFilters: true },
+  { to: '/transactions', label: 'Transactions', icon: IconReceipt, end: false, preservesFilters: true },
+  { to: '/accounts', label: 'Accounts', icon: IconWallet, end: false, preservesFilters: false },
+  { to: '/categories', label: 'Categories', icon: IconTags, end: false, preservesFilters: false },
 ]
 
 export function AppLayout() {
+  const location = useLocation()
+  const navigationTarget = (navigationItem: (typeof navigationItems)[number]) =>
+    navigationItem.preservesFilters
+      ? { pathname: navigationItem.to, search: location.search }
+      : navigationItem.to
+
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 flex-col border-r bg-background md:flex">
@@ -22,7 +31,7 @@ export function AppLayout() {
             return (
               <NavLink
                 key={navigationItem.to}
-                to={navigationItem.to}
+                to={navigationTarget(navigationItem)}
                 end={navigationItem.end}
                 className={({ isActive }) =>
                   cn(
@@ -47,7 +56,7 @@ export function AppLayout() {
             {navigationItems.map((navigationItem) => (
               <NavLink
                 key={navigationItem.to}
-                to={navigationItem.to}
+                to={navigationTarget(navigationItem)}
                 end={navigationItem.end}
                 className={({ isActive }) =>
                   cn(

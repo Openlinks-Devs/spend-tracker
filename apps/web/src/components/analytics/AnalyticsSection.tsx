@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CurrencySwitcher } from '@/components/analytics/CurrencySwitcher'
@@ -10,7 +11,7 @@ import { SpendingOverTimeChart } from '@/components/analytics/charts/SpendingOve
 import { TagBarChart } from '@/components/analytics/charts/TagBarChart'
 import { useCategories } from '@/hooks/useCategories'
 import { useTransactionAnalytics } from '@/hooks/useTransactionAnalytics'
-import type { TransactionFilterState } from '@/lib/filterParams'
+import { toSearchParams, type TransactionFilterState } from '@/lib/filterParams'
 import { toErrorMessage } from '@/lib/api'
 import { toNameById } from '@/lib/utils'
 import type { SummaryRow } from '@/types'
@@ -31,6 +32,20 @@ export function mostUsedCurrency(summary: SummaryRow[]): string {
   return mostUsedRow.currency
 }
 
+// Honors an explicit currency preference only while that currency still appears
+// in the summary. Another filter can remove the preferred currency entirely, so
+// falling back to the most-used currency keeps the charts populated instead of
+// stranding the view on an empty currency the switcher no longer offers.
+export function resolveDisplayCurrency(
+  currencyPreference: string | undefined,
+  summary: SummaryRow[],
+): string {
+  const hasPreferredCurrency =
+    currencyPreference !== undefined &&
+    summary.some((summaryRow) => summaryRow.currency === currencyPreference)
+  return hasPreferredCurrency ? currencyPreference : mostUsedCurrency(summary)
+}
+
 type AnalyticsBucket = 'day' | 'week' | 'month'
 
 const BUCKET_OPTIONS: { value: AnalyticsBucket; label: string }[] = [
@@ -42,6 +57,7 @@ const BUCKET_OPTIONS: { value: AnalyticsBucket; label: string }[] = [
 interface AnalyticsSectionProps {
   filters: TransactionFilterState
   setFilters: (next: Partial<TransactionFilterState>) => void
+  listRoute?: string
 }
 
 interface ChartCardProps {
@@ -61,8 +77,27 @@ function ChartCard({ title, className, children }: ChartCardProps) {
   )
 }
 
-export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps) {
+export function AnalyticsSection({
+  filters,
+  setFilters,
+  listRoute = '/transactions',
+}: AnalyticsSectionProps) {
   const [bucket, setBucket] = useState<AnalyticsBucket>('month')
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // A chart drill-down should land the user on the filtered list. When the list
+  // is already on-screen (the transactions page), filter in place; otherwise
+  // navigate to the list route carrying the merged filters in the URL so the
+  // full filtered view opens with them applied.
+  const applyDrillDown = (partial: Partial<TransactionFilterState>) => {
+    if (location.pathname === listRoute) {
+      setFilters(partial)
+      return
+    }
+    const nextFilters = { ...filters, ...partial }
+    navigate(`${listRoute}?${toSearchParams(nextFilters).toString()}`)
+  }
 
   // The over-time/income-expense series follow the selected bucket, while the
   // heatmap always needs day granularity. When bucket is already 'day' both
@@ -79,7 +114,7 @@ export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps)
 
   const summary = useMemo(() => primaryAnalytics.data?.summary ?? [], [primaryAnalytics.data])
 
-  const displayCurrency = filters.currency ?? mostUsedCurrency(summary)
+  const displayCurrency = resolveDisplayCurrency(filters.currency, summary)
 
   const currencies = useMemo(
     () => Array.from(new Set(summary.map((summaryRow) => summaryRow.currency))),
@@ -163,7 +198,7 @@ export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps)
               <SpendingOverTimeChart
                 rows={seriesForCurrency}
                 onSelect={(window) =>
-                  setFilters({ range: 'custom', from: window.from, to: window.to })
+                  applyDrillDown({ range: 'custom', from: window.from, to: window.to })
                 }
               />
             </ChartCard>
@@ -174,13 +209,13 @@ export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps)
               <CategoryPieChart
                 rows={categoriesForCurrency}
                 categoryNameById={categoryNameById}
-                onSelect={(categoryId) => setFilters({ categories: [categoryId] })}
+                onSelect={(categoryId) => applyDrillDown({ categories: [categoryId] })}
               />
             </ChartCard>
             <ChartCard title="Top tags">
               <TagBarChart
                 rows={tagsForCurrency}
-                onSelect={(tag) => setFilters({ tags: [tag], tagMatch: 'any' })}
+                onSelect={(tag) => applyDrillDown({ tags: [tag], tagMatch: 'any' })}
               />
             </ChartCard>
             <ChartCard title="Daily spending" className="lg:col-span-2">
