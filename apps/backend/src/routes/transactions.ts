@@ -1,3 +1,4 @@
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Queryable } from '../db/pool.js'
@@ -6,9 +7,11 @@ import {
   deleteTransaction,
   getTransactionById,
   getTransactions,
+  getTransactionsCount,
   insertTransaction,
   updateTransaction,
 } from '../db/queries.js'
+import { resolveDateRange, type TransactionFilter } from '../db/transactionFilter.js'
 import { parseJsonBody } from './validation.js'
 
 const newTransactionSchema = z.object({
@@ -31,13 +34,45 @@ const transactionUpdateSchema = z.object({
   created_at: z.string().min(1).optional(),
 })
 
+function parseListQuery(context: Context): {
+  filter: TransactionFilter
+  limit: number
+  offset: number
+  sort?: string
+} {
+  const query = context.req.query()
+  const many = (key: string) => context.req.queries(key) ?? []
+  const dateRange = resolveDateRange(query.range, query.from, query.to)
+  const filter: TransactionFilter = {
+    q: query.q,
+    from: dateRange.from,
+    to: dateRange.to,
+    accountIds: many('account'),
+    categoryIds: many('category'),
+    tags: many('tag'),
+    tagMatch: query.tagMatch === 'all' ? 'all' : 'any',
+    min: query.min ? Number(query.min) : undefined,
+    max: query.max ? Number(query.max) : undefined,
+    type: query.type === 'income' || query.type === 'expense' ? query.type : 'all',
+  }
+  return {
+    filter,
+    limit: Math.min(query.limit ? Number(query.limit) : 50, 200),
+    offset: query.offset ? Number(query.offset) : 0,
+    sort: query.sort,
+  }
+}
+
 export function createTransactionsRoute(resolveDb: () => Queryable = getPool): Hono {
   const route = new Hono()
 
   route.get('/api/transactions', async (context) => {
     try {
-      const transactions = await getTransactions(resolveDb())
-      return context.json(transactions)
+      const db = resolveDb()
+      const { filter, limit, offset, sort } = parseListQuery(context)
+      const items = await getTransactions(db, filter, { limit, offset, sort })
+      const total = await getTransactionsCount(db, filter)
+      return context.json({ items, total, limit, offset })
     } catch (error) {
       console.error('Failed to list transactions:', error)
       return context.json({ error: 'Failed to list transactions' }, 500)
