@@ -1,5 +1,5 @@
--- Idempotent schema + seed for SpendTracker CRUD entities.
--- Safe to run repeatedly against the same database.
+-- Idempotent schema for SpendTracker CRUD entities.
+-- Schema only: creates tables, inserts no data. Safe to run repeatedly.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -32,33 +32,6 @@ CREATE TABLE IF NOT EXISTS transactions (
   updated_at timestamptz
 );
 
--- Seed a single default account (guarded so re-running is safe).
-INSERT INTO accounts (name, type, currency)
-SELECT 'Cash', 'cash', 'PEN'
-WHERE NOT EXISTS (
-  SELECT 1 FROM accounts existing WHERE existing.name = 'Cash'
-);
-
--- Seed a few default categories, including the fallback 'Uncategorized'
--- (guarded so re-running is safe).
-INSERT INTO categories (name, type)
-SELECT seed.name, seed.type
-FROM (
-  VALUES
-    ('Food', 'expense'),
-    ('Transport', 'expense'),
-    ('Utilities', 'expense'),
-    ('Salary', 'income'),
-    ('Uncategorized', 'expense')
-) AS seed(name, type)
-WHERE NOT EXISTS (
-  SELECT 1 FROM categories existing WHERE existing.name = seed.name
-);
-
--- Category is required. Backfill any legacy null category_id to 'Uncategorized',
--- then enforce NOT NULL. Both steps are idempotent.
-UPDATE transactions
-SET category_id = (SELECT id FROM categories WHERE name = 'Uncategorized' LIMIT 1)
-WHERE category_id IS NULL;
-
+-- category_id is required at the application level. Enforcing NOT NULL is a
+-- schema constraint (no data backfill here; on a fresh database there are no rows).
 ALTER TABLE transactions ALTER COLUMN category_id SET NOT NULL;
