@@ -5,6 +5,7 @@ import com.openlinks.spendtracker.data.AnalyticsPayload
 import com.openlinks.spendtracker.data.Category
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SpendApi
+import com.openlinks.spendtracker.data.SummaryRow
 import com.openlinks.spendtracker.data.Transaction
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.data.TransactionListResponse
@@ -38,6 +39,12 @@ class SessionViewModelTest {
         var failTransactions = false
         var created: NewTransaction? = null
         var deletedId: String? = null
+        var analyticsPayload = AnalyticsPayload(
+            summary = listOf(SummaryRow(currency = "USD", income = 0.0, spend = 0.0, net = 0.0, count = 1)),
+        )
+
+        val recordedFilterCalls = mutableListOf<TransactionFilters>()
+        val recordedBucketCalls = mutableListOf<String>()
 
         override suspend fun getTransactions(): List<Transaction> {
             if (failTransactions) throw RuntimeException("boom")
@@ -73,9 +80,16 @@ class SessionViewModelTest {
         override suspend fun getTransactionsFiltered(
             filters: TransactionFilters,
             page: TransactionPage,
-        ): TransactionListResponse = TransactionListResponse(items = transactions.toList(), total = transactions.size)
-        override suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload =
-            AnalyticsPayload()
+        ): TransactionListResponse {
+            recordedFilterCalls.add(filters)
+            if (failTransactions) throw RuntimeException("boom")
+            return TransactionListResponse(items = transactions.toList(), total = transactions.size)
+        }
+        override suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload {
+            recordedFilterCalls.add(filters)
+            recordedBucketCalls.add(bucket)
+            return analyticsPayload
+        }
     }
 
     @Before
@@ -111,6 +125,28 @@ class SessionViewModelTest {
     }
 
     @Test
+    fun refreshPopulatesTransactionsAndAnalyticsFromFilteredCalls() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.transactions.add(
+            Transaction("t1", "Coffee", -4.5, "USD", "acc-1", "cat-1", emptyList(), "2026-07-02T00:00:00Z", null),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(1, state.transactions.size)
+        assertNotNull(state.analytics)
+        assertEquals(api.analyticsPayload, state.analytics)
+        // Both the filtered-transactions and analytics reads carry the default filters.
+        assertEquals(2, api.recordedFilterCalls.size)
+        assertEquals(TransactionFilters(), api.recordedFilterCalls[0])
+        assertEquals(TransactionFilters(), api.recordedFilterCalls[1])
+        assertEquals(listOf("month"), api.recordedBucketCalls)
+    }
+
+    @Test
     fun refreshFailureSetsError() = runTest(dispatcher) {
         val api = FakeApi().apply { failTransactions = true }
         val viewModel = SessionViewModel(api, dispatcher)
@@ -121,6 +157,58 @@ class SessionViewModelTest {
         val state = viewModel.state.value
         assertFalse(state.loading)
         assertNotNull(state.error)
+    }
+
+    @Test
+    fun updateFiltersCallsApiWithNewFiltersAndUpdatesState() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.transactions.add(
+            Transaction("t1", "Coffee", -4.5, "USD", "acc-1", "cat-1", emptyList(), "2026-07-02T00:00:00Z", null),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.refresh()
+        advanceUntilIdle()
+        api.recordedFilterCalls.clear()
+
+        viewModel.updateFilters { filters -> filters.copy(type = "expense") }
+        advanceUntilIdle()
+
+        assertEquals("expense", viewModel.state.value.filters.type)
+        assertEquals(2, api.recordedFilterCalls.size)
+        assertEquals(true, api.recordedFilterCalls.all { filters -> filters.type == "expense" })
+    }
+
+    @Test
+    fun setBucketCallsGetAnalyticsWithNewBucket() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.refresh()
+        advanceUntilIdle()
+        api.recordedBucketCalls.clear()
+
+        viewModel.setBucket("week")
+        advanceUntilIdle()
+
+        assertEquals("week", viewModel.state.value.bucket)
+        assertEquals(listOf("week"), api.recordedBucketCalls)
+    }
+
+    @Test
+    fun clearFiltersResetsFiltersAndRefetches() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.refresh()
+        advanceUntilIdle()
+        viewModel.updateFilters { filters -> filters.copy(type = "expense", query = "coffee") }
+        advanceUntilIdle()
+        api.recordedFilterCalls.clear()
+
+        viewModel.clearFilters()
+        advanceUntilIdle()
+
+        assertEquals(TransactionFilters(), viewModel.state.value.filters)
+        assertEquals(true, api.recordedFilterCalls.isNotEmpty())
+        assertEquals(true, api.recordedFilterCalls.all { filters -> filters == TransactionFilters() })
     }
 
     @Test

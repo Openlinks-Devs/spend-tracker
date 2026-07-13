@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.openlinks.spendtracker.data.Account
+import com.openlinks.spendtracker.data.AnalyticsPayload
 import com.openlinks.spendtracker.data.ApiClient
 import com.openlinks.spendtracker.data.Category
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SessionStore
 import com.openlinks.spendtracker.data.SpendApi
 import com.openlinks.spendtracker.data.Transaction
+import com.openlinks.spendtracker.data.TransactionFilters
+import com.openlinks.spendtracker.data.TransactionPage
 import com.openlinks.spendtracker.data.TransactionUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -29,9 +32,17 @@ data class SpendUiState(
     val accounts: List<Account> = emptyList(),
     val categories: List<Category> = emptyList(),
     val tags: List<String> = emptyList(),
+    val filters: TransactionFilters = TransactionFilters(),
+    val analytics: AnalyticsPayload? = null,
+    val bucket: String = "month",
     val error: String? = null,
 ) {
     val summary: SummaryTotals get() = SummaryCalculator.compute(transactions)
+
+    // Which currency the dashboard should render totals in: the filter's explicit
+    // choice when the analytics summary actually has data in it, otherwise
+    // whichever currency shows up most in the current filtered result set.
+    val displayCurrency: String? get() = resolveDisplayCurrency(filters.currency, analytics?.summary ?: emptyList())
 
     // Built once per state snapshot so per-row name lookups are O(1), not a
     // linear scan of accounts/categories for every rendered transaction row.
@@ -68,11 +79,14 @@ class SessionViewModel(
         viewModelScope.launch {
             mutableState.value = mutableState.value.copy(loading = true, error = null)
             try {
-                // The four reads are independent; run them concurrently so a load
-                // costs one round-trip, not four.
+                val filters = mutableState.value.filters
+                val bucket = mutableState.value.bucket
+                // The five reads are independent; run them concurrently so a load
+                // costs one round-trip, not five.
                 val loaded = withContext(dispatcher) {
                     coroutineScope {
-                        val transactionsDeferred = async { api.getTransactions() }
+                        val transactionsDeferred = async { api.getTransactionsFiltered(filters, TransactionPage()) }
+                        val analyticsDeferred = async { api.getAnalytics(filters, bucket) }
                         val accountsDeferred = async { api.getAccounts() }
                         val categoriesDeferred = async { api.getCategories() }
                         val tagsDeferred = async {
@@ -84,10 +98,13 @@ class SessionViewModel(
                         }
                         SpendUiState(
                             loading = false,
-                            transactions = transactionsDeferred.await(),
+                            transactions = transactionsDeferred.await().items,
+                            analytics = analyticsDeferred.await(),
                             accounts = accountsDeferred.await(),
                             categories = categoriesDeferred.await(),
                             tags = tagsDeferred.await(),
+                            filters = filters,
+                            bucket = bucket,
                             error = null,
                         )
                     }
@@ -102,11 +119,41 @@ class SessionViewModel(
         }
     }
 
+    /** Applies [transform] to the current filters and re-fetches the filtered transactions and analytics. */
+    fun updateFilters(transform: (TransactionFilters) -> TransactionFilters) {
+        val next = transform(mutableState.value.filters)
+        mutableState.value = mutableState.value.copy(filters = next)
+        viewModelScope.launch {
+            try {
+                reloadFilteredData()
+            } catch (error: Exception) {
+                mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+            }
+        }
+    }
+
+    /** Changes the analytics bucket granularity (e.g. "week", "month") and re-fetches. */
+    fun setBucket(bucket: String) {
+        mutableState.value = mutableState.value.copy(bucket = bucket)
+        viewModelScope.launch {
+            try {
+                reloadFilteredData()
+            } catch (error: Exception) {
+                mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+            }
+        }
+    }
+
+    /** Resets filters to their defaults and re-fetches. */
+    fun clearFilters() {
+        updateFilters { TransactionFilters() }
+    }
+
     fun createTransaction(transaction: NewTransaction, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 withContext(dispatcher) { api.createTransaction(transaction) }
-                reloadTransactions()
+                reloadFilteredData()
                 onDone(true)
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
@@ -119,7 +166,7 @@ class SessionViewModel(
         viewModelScope.launch {
             try {
                 withContext(dispatcher) { api.updateTransaction(id, update) }
-                reloadTransactions()
+                reloadFilteredData()
                 onDone(true)
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
@@ -132,7 +179,7 @@ class SessionViewModel(
         viewModelScope.launch {
             try {
                 withContext(dispatcher) { api.deleteTransaction(id) }
-                reloadTransactions()
+                reloadFilteredData()
                 onDone(true)
             } catch (error: Exception) {
                 mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
@@ -141,9 +188,22 @@ class SessionViewModel(
         }
     }
 
-    private suspend fun reloadTransactions() {
-        val transactions = withContext(dispatcher) { api.getTransactions() }
-        mutableState.value = mutableState.value.copy(transactions = transactions, error = null)
+    /**
+     * Re-fetches the transactions list and analytics for the current filters/bucket,
+     * without touching accounts/categories/tags (those don't depend on filters).
+     * Used after create/update/delete and after any filter or bucket change.
+     */
+    private suspend fun reloadFilteredData() {
+        val filters = mutableState.value.filters
+        val bucket = mutableState.value.bucket
+        val (transactions, analytics) = withContext(dispatcher) {
+            coroutineScope {
+                val transactionsDeferred = async { api.getTransactionsFiltered(filters, TransactionPage()) }
+                val analyticsDeferred = async { api.getAnalytics(filters, bucket) }
+                transactionsDeferred.await().items to analyticsDeferred.await()
+            }
+        }
+        mutableState.value = mutableState.value.copy(transactions = transactions, analytics = analytics, error = null)
     }
 
     companion object {
