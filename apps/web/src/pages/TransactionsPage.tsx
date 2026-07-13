@@ -3,7 +3,6 @@ import { IconPlus } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { AnalyticsSection } from '@/components/analytics/AnalyticsSection'
 import { FilterChips } from '@/components/filters/FilterChips'
 import { FilterPanel } from '@/components/filters/FilterPanel'
 import { SearchBar } from '@/components/filters/SearchBar'
@@ -69,7 +68,7 @@ function formatDayNet(netByCurrency: Map<string, number>): string {
 }
 
 export function TransactionsPage() {
-  const { filters, setFilters } = useTransactionFilters()
+  const { filters } = useTransactionFilters()
   const accountsQuery = useAccounts()
   const categoriesQuery = useCategories()
 
@@ -178,8 +177,6 @@ export function TransactionsPage() {
         <FilterPanel />
         <FilterChips />
       </div>
-
-      <AnalyticsSection filters={filters} setFilters={setFilters} />
 
       <Card>
         <CardContent className="p-0">
