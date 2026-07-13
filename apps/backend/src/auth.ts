@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { APIError } from 'better-auth/api'
+import { bearer } from 'better-auth/plugins'
 import { getPool } from './db/pool.js'
 import { loadEnv } from './config/env.js'
 import { parseAllowedEmails, isEmailAllowed } from './auth/allowlist.js'
@@ -31,6 +32,7 @@ function buildAuth() {
         },
       },
     },
+    plugins: [bearer()],
   })
 }
 
