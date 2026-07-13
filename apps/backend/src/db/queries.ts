@@ -12,6 +12,45 @@ import type {
   TransactionUpdate,
 } from './types.js'
 
+export interface SummaryRow {
+  currency: string
+  income: number
+  spend: number
+  net: number
+  count: number
+}
+
+export interface SeriesRow {
+  bucketStart: string
+  currency: string
+  income: number
+  spend: number
+  net: number
+}
+
+export interface CategoryRow {
+  categoryId: string
+  currency: string
+  spend: number
+  income: number
+  net: number
+  count: number
+}
+
+export interface TagRow {
+  tag: string
+  currency: string
+  spend: number
+  count: number
+}
+
+export interface AnalyticsPayload {
+  summary: SummaryRow[]
+  series: SeriesRow[]
+  byCategory: CategoryRow[]
+  byTag: TagRow[]
+}
+
 export async function getCategories(db: Queryable): Promise<Category[]> {
   const result = await db.query('SELECT id, name, type FROM categories ORDER BY name')
   return result.rows as Category[]
@@ -115,6 +154,52 @@ export async function getTransactionsCount(
   const { clause, params } = buildTransactionFilter(filter)
   const result = await db.query(`SELECT count(*)::int AS count FROM transactions ${clause}`, params)
   return Number(result.rows[0]?.count ?? 0)
+}
+
+const ANALYTICS_INCOME_EXPRESSION = 'sum(case when amount > 0 then amount else 0 end)::float8'
+const ANALYTICS_SPEND_EXPRESSION = 'sum(case when amount < 0 then -amount else 0 end)::float8'
+
+export async function getAnalytics(
+  db: Queryable,
+  filter: TransactionFilter,
+  bucket: 'day' | 'week' | 'month',
+): Promise<AnalyticsPayload> {
+  const safeBucket = bucket === 'day' || bucket === 'week' ? bucket : 'month'
+  const { clause, params } = buildTransactionFilter(filter)
+
+  const summary = await db.query(
+    `SELECT currency, ${ANALYTICS_INCOME_EXPRESSION} AS income, ${ANALYTICS_SPEND_EXPRESSION} AS spend,
+            sum(amount)::float8 AS net, count(*)::int AS count
+       FROM transactions ${clause} GROUP BY currency ORDER BY currency`,
+    params,
+  )
+  const series = await db.query(
+    `SELECT to_char(date_trunc('${safeBucket}', created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "bucketStart",
+            currency, ${ANALYTICS_INCOME_EXPRESSION} AS income, ${ANALYTICS_SPEND_EXPRESSION} AS spend,
+            sum(amount)::float8 AS net
+       FROM transactions ${clause}
+      GROUP BY 1, currency ORDER BY 1`,
+    params,
+  )
+  const byCategory = await db.query(
+    `SELECT category_id AS "categoryId", currency, ${ANALYTICS_SPEND_EXPRESSION} AS spend,
+            ${ANALYTICS_INCOME_EXPRESSION} AS income, sum(amount)::float8 AS net, count(*)::int AS count
+       FROM transactions ${clause} GROUP BY category_id, currency ORDER BY spend DESC`,
+    params,
+  )
+  const byTag = await db.query(
+    `SELECT tag, currency, ${ANALYTICS_SPEND_EXPRESSION} AS spend, count(*)::int AS count
+       FROM (SELECT unnest(tags) AS tag, amount, currency FROM transactions ${clause}) tagged
+      GROUP BY tag, currency ORDER BY spend DESC`,
+    params,
+  )
+
+  return {
+    summary: summary.rows as SummaryRow[],
+    series: series.rows as SeriesRow[],
+    byCategory: byCategory.rows as CategoryRow[],
+    byTag: byTag.rows as TagRow[],
+  }
 }
 
 export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
