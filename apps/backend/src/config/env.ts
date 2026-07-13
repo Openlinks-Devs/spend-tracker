@@ -14,6 +14,9 @@ const schema = z.object({
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1),
   TELEGRAM_WEBHOOK_URL: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(3000),
+  BETTER_AUTH_SECRET: z.string().min(32),
+  BETTER_AUTH_URL: z.string().min(1),
+  ALLOWED_EMAILS: z.string().default('misaelabanto@gmail.com'),
 })
 
 export type Env = z.infer<typeof schema>
