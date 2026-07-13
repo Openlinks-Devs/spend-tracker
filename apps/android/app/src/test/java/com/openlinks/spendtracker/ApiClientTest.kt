@@ -5,6 +5,8 @@ import com.openlinks.spendtracker.data.ApiException
 import com.openlinks.spendtracker.data.InMemoryKeyValueStore
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SessionStore
+import com.openlinks.spendtracker.data.TransactionFilters
+import com.openlinks.spendtracker.data.TransactionPage
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -144,5 +146,95 @@ class ApiClientTest {
             assertEquals("Transaction not found", error.message)
         }
         Unit
+    }
+
+    @Test
+    fun getAnalyticsParsesAllFiveRowArraysAndSendsBucketAndFilterParams() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {
+                      "summary": [
+                        {"currency": "USD", "income": 100.0, "spend": -40.0, "net": 60.0, "count": 5}
+                      ],
+                      "series": [
+                        {"bucketStart": "2026-07-01", "currency": "USD", "income": 100.0, "spend": -40.0, "net": 60.0}
+                      ],
+                      "byCategory": [
+                        {"categoryId": "cat-1", "currency": "USD", "spend": -40.0, "income": 0.0, "net": -40.0, "count": 3}
+                      ],
+                      "byTag": [
+                        {"tag": "food", "currency": "USD", "spend": -40.0, "count": 3}
+                      ],
+                      "byAccount": [
+                        {"accountId": "acc-1", "currency": "USD", "income": 100.0, "spend": -40.0, "net": 60.0, "count": 5}
+                      ]
+                    }
+                    """.trimIndent(),
+                ),
+        )
+
+        val filters = TransactionFilters(accountIds = listOf("acc-1"), categoryIds = listOf("cat-1"))
+        val payload = client().getAnalytics(filters, "day")
+
+        assertEquals(1, payload.summary.size)
+        assertEquals("USD", payload.summary.first().currency)
+        assertEquals(1, payload.series.size)
+        assertEquals("2026-07-01", payload.series.first().bucketStart)
+        assertEquals(1, payload.byCategory.size)
+        assertEquals("cat-1", payload.byCategory.first().categoryId)
+        assertEquals(1, payload.byTag.size)
+        assertEquals("food", payload.byTag.first().tag)
+        assertEquals(1, payload.byAccount.size)
+        assertEquals("acc-1", payload.byAccount.first().accountId)
+
+        val recorded = server.takeRequest()
+        assertEquals("/api/transactions/analytics", recorded.path?.substringBefore('?'))
+        val requestUrl = recorded.requestUrl!!
+        assertEquals("day", requestUrl.queryParameter("bucket"))
+        assertEquals(listOf("acc-1"), requestUrl.queryParameterValues("account"))
+        assertEquals(listOf("cat-1"), requestUrl.queryParameterValues("category"))
+    }
+
+    @Test
+    fun getTransactionsFilteredSendsFilterParamsAndParsesEnvelope() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {
+                      "items": [],
+                      "total": 0,
+                      "limit": 25,
+                      "offset": 10
+                    }
+                    """.trimIndent(),
+                ),
+        )
+
+        val filters = TransactionFilters(
+            query = "coffee",
+            tags = listOf("food", "drinks"),
+            currency = "USD",
+        )
+        val page = TransactionPage(limit = 25, offset = 10)
+
+        val response = client().getTransactionsFiltered(filters, page)
+
+        assertEquals(0, response.total)
+        assertEquals(25, response.limit)
+        assertEquals(10, response.offset)
+
+        val recorded = server.takeRequest()
+        assertEquals("/api/transactions", recorded.path?.substringBefore('?'))
+        val requestUrl = recorded.requestUrl!!
+        assertEquals("coffee", requestUrl.queryParameter("q"))
+        assertEquals(listOf("food", "drinks"), requestUrl.queryParameterValues("tag"))
+        assertEquals("25", requestUrl.queryParameter("limit"))
+        assertEquals("10", requestUrl.queryParameter("offset"))
+        assertNull(requestUrl.queryParameter("currency"))
     }
 }

@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -50,6 +51,21 @@ class ApiClient(
         return builder
     }
 
+    // Same auth/header wiring as newRequest, but for URLs carrying query params
+    // (repeatable keys like account/category/tag need HttpUrl.addQueryParameter
+    // rather than manual string concatenation for correct encoding).
+    private fun newRequest(path: String, queryParams: List<Pair<String, String>>): Request.Builder {
+        val urlBuilder = (root + path).toHttpUrl().newBuilder()
+        queryParams.forEach { (name, value) -> urlBuilder.addQueryParameter(name, value) }
+        val builder = Request.Builder()
+            .url(urlBuilder.build())
+            .header("Accept", "application/json")
+        authHeaders(useMockAuth, mockUser, session.authState()).forEach { (key, value) ->
+            builder.header(key, value)
+        }
+        return builder
+    }
+
     private fun errorMessage(body: String, status: Int): String = try {
         json.decodeFromString(ApiError.serializer(), body).error
     } catch (_: Exception) {
@@ -76,6 +92,13 @@ class ApiClient(
             decodeBody<T>(response)
         }
     }
+
+    private suspend inline fun <reified T> getJson(path: String, queryParams: List<Pair<String, String>>): T =
+        withContext(Dispatchers.IO) {
+            http.newCall(newRequest(path, queryParams).get().build()).execute().use { response ->
+                decodeBody<T>(response)
+            }
+        }
 
     private suspend fun execExpectingNoContent(request: Request) = withContext(Dispatchers.IO) {
         http.newCall(request).execute().use { response ->
@@ -115,4 +138,20 @@ class ApiClient(
     override suspend fun getCategories(): List<Category> = getJson("/api/categories")
 
     override suspend fun getTags(): List<String> = getJson("/api/tags")
+
+    override suspend fun getTransactionsFiltered(
+        filters: TransactionFilters,
+        page: TransactionPage,
+    ): TransactionListResponse =
+        getJson("/api/transactions", filtersToQueryParams(filters, page))
+
+    override suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload =
+        getJson(
+            "/api/transactions/analytics",
+            // The analytics endpoint returns fully aggregated bucketed rows, not a
+            // paginated list, so it ignores limit/offset/sort; only forward filters.
+            filtersToQueryParams(filters, TransactionPage())
+                .filterNot { (name, _) -> name == "limit" || name == "offset" || name == "sort" } +
+                ("bucket" to bucket),
+        )
 }

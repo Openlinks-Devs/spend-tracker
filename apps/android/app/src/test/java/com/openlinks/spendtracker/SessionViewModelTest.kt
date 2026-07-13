@@ -1,10 +1,14 @@
 package com.openlinks.spendtracker
 
 import com.openlinks.spendtracker.data.Account
+import com.openlinks.spendtracker.data.AnalyticsPayload
 import com.openlinks.spendtracker.data.Category
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SpendApi
 import com.openlinks.spendtracker.data.Transaction
+import com.openlinks.spendtracker.data.TransactionFilters
+import com.openlinks.spendtracker.data.TransactionListResponse
+import com.openlinks.spendtracker.data.TransactionPage
 import com.openlinks.spendtracker.data.TransactionUpdate
 import com.openlinks.spendtracker.ui.SessionViewModel
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +70,12 @@ class SessionViewModelTest {
         override suspend fun getAccounts(): List<Account> = accounts
         override suspend fun getCategories(): List<Category> = categories
         override suspend fun getTags(): List<String> = listOf("food", "rent")
+        override suspend fun getTransactionsFiltered(
+            filters: TransactionFilters,
+            page: TransactionPage,
+        ): TransactionListResponse = TransactionListResponse(items = transactions.toList(), total = transactions.size)
+        override suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload =
+            AnalyticsPayload()
     }
 
     @Before

@@ -69,3 +69,91 @@ data class TransactionListResponse(
     val limit: Int = 0,
     val offset: Int = 0,
 )
+
+/**
+ * Analytics wire models mirroring GET /api/transactions/analytics. Unlike the
+ * models above these rows are already camelCase on the wire, so no @SerialName
+ * is needed to keep Kotlin idiomatic.
+ */
+
+@Serializable
+data class SummaryRow(
+    val currency: String,
+    val income: Double,
+    val spend: Double,
+    val net: Double,
+    val count: Int,
+)
+
+@Serializable
+data class SeriesRow(
+    val bucketStart: String,
+    val currency: String,
+    val income: Double,
+    val spend: Double,
+    val net: Double,
+)
+
+@Serializable
+data class CategoryRow(
+    val categoryId: String,
+    val currency: String,
+    val spend: Double,
+    val income: Double,
+    val net: Double,
+    val count: Int,
+)
+
+@Serializable
+data class TagRow(
+    val tag: String,
+    val currency: String,
+    val spend: Double,
+    val count: Int,
+)
+
+@Serializable
+data class AccountRow(
+    val accountId: String,
+    val currency: String,
+    val income: Double,
+    val spend: Double,
+    val net: Double,
+    val count: Int,
+)
+
+@Serializable
+data class AnalyticsPayload(
+    val summary: List<SummaryRow> = emptyList(),
+    val series: List<SeriesRow> = emptyList(),
+    val byCategory: List<CategoryRow> = emptyList(),
+    val byTag: List<TagRow> = emptyList(),
+    val byAccount: List<AccountRow> = emptyList(),
+)
+
+/**
+ * App-side filter and pagination state for the transaction list/analytics
+ * screens. Not serialized directly; [filtersToQueryParams] maps these to the
+ * backend's query params. [currency] is display-only and deliberately never
+ * sent to the backend (mirrors the web client's request-vs-url split).
+ */
+data class TransactionFilters(
+    val query: String = "",
+    val range: String = "this-month",
+    val from: String? = null,
+    val to: String? = null,
+    val accountIds: List<String> = emptyList(),
+    val categoryIds: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
+    val tagMatch: String = "any",
+    val amountMin: Double? = null,
+    val amountMax: Double? = null,
+    val type: String = "all",
+    val currency: String? = null,
+)
+
+data class TransactionPage(
+    val limit: Int = 50,
+    val offset: Int = 0,
+    val sort: String? = null,
+)

@@ -13,4 +13,6 @@ interface SpendApi {
     suspend fun getAccounts(): List<Account>
     suspend fun getCategories(): List<Category>
     suspend fun getTags(): List<String>
+    suspend fun getTransactionsFiltered(filters: TransactionFilters, page: TransactionPage): TransactionListResponse
+    suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload
 }
