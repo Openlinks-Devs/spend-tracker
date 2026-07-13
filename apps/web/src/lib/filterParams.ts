@@ -24,7 +24,12 @@ export const EMPTY_FILTERS: TransactionFilterState = {
 }
 
 export function parseFilterParams(searchParams: URLSearchParams): TransactionFilterState {
-  const parseNumber = (key: string) => (searchParams.has(key) ? Number(searchParams.get(key)) : undefined)
+  const parseNumber = (key: string): number | undefined => {
+    const rawValue = searchParams.get(key)
+    if (rawValue === null || rawValue.trim() === '') return undefined
+    const parsedValue = Number(rawValue)
+    return Number.isFinite(parsedValue) ? parsedValue : undefined
+  }
   const typeParam = searchParams.get('type')
   return {
     q: searchParams.get('q') ?? '',

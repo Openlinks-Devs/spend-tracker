@@ -23,4 +23,24 @@ describe('filterParams round-trip', () => {
   it('omits default-valued keys from the query string', () => {
     expect(toSearchParams(EMPTY_FILTERS).toString()).toBe('')
   })
+
+  it('treats a non-numeric min as no filter', () => {
+    const state = parseFilterParams(new URLSearchParams('min=abc'))
+    expect(state.min).toBeUndefined()
+  })
+
+  it('treats an empty min as no filter', () => {
+    const state = parseFilterParams(new URLSearchParams('min='))
+    expect(state.min).toBeUndefined()
+  })
+
+  it('keeps an explicit zero min', () => {
+    const state = parseFilterParams(new URLSearchParams('min=0'))
+    expect(state.min).toBe(0)
+  })
+
+  it('never serializes an undefined min as NaN', () => {
+    const state = parseFilterParams(new URLSearchParams('min=abc'))
+    expect(toSearchParams({ ...EMPTY_FILTERS, min: state.min }).toString()).not.toContain('NaN')
+  })
 })
