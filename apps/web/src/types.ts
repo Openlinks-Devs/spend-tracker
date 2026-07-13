@@ -64,3 +64,49 @@ export interface TransactionUpdate {
   tags?: string[]
   created_at?: string
 }
+
+export interface TransactionListResponse {
+  items: Transaction[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface SummaryRow {
+  currency: string
+  income: number
+  spend: number
+  net: number
+  count: number
+}
+
+export interface SeriesRow {
+  bucketStart: string
+  currency: string
+  income: number
+  spend: number
+  net: number
+}
+
+export interface CategoryRow {
+  categoryId: string
+  currency: string
+  spend: number
+  income: number
+  net: number
+  count: number
+}
+
+export interface TagRow {
+  tag: string
+  currency: string
+  spend: number
+  count: number
+}
+
+export interface AnalyticsPayload {
+  summary: SummaryRow[]
+  series: SeriesRow[]
+  byCategory: CategoryRow[]
+  byTag: TagRow[]
+}
