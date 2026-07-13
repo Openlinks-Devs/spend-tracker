@@ -1,4 +1,5 @@
 import type { Queryable } from './pool.js'
+import { buildTransactionFilter, type TransactionFilter } from './transactionFilter.js'
 import type {
   Account,
   AccountUpdate,
@@ -78,16 +79,42 @@ export async function deleteAccount(db: Queryable, id: string): Promise<void> {
   await db.query('DELETE FROM accounts WHERE id = $1', [id])
 }
 
-export async function getTransactions(db: Queryable): Promise<Transaction[]> {
+// amount::float8 so node-postgres returns amount as a JS number (it returns
+// NUMERIC as a string by default), scoped to this column instead of a
+// process-global type parser.
+const TRANSACTION_COLUMNS =
+  'id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at'
+
+const SORT_COLUMNS: Record<string, string> = {
+  'created_at desc': 'created_at DESC',
+  'created_at asc': 'created_at ASC',
+  'amount desc': 'amount DESC',
+  'amount asc': 'amount ASC',
+}
+
+export async function getTransactions(
+  db: Queryable,
+  filter: TransactionFilter = {},
+  page: { limit: number; offset: number; sort?: string } = { limit: 50, offset: 0 },
+): Promise<Transaction[]> {
+  const { clause, params } = buildTransactionFilter(filter)
+  const orderBy = SORT_COLUMNS[page.sort ?? 'created_at desc'] ?? 'created_at DESC'
+  const limitPlaceholder = params.length + 1
+  const offsetPlaceholder = params.length + 2
   const result = await db.query(
-    // amount::float8 so node-postgres returns amount as a JS number (it returns
-    // NUMERIC as a string by default), scoped to this column instead of a
-    // process-global type parser.
-    `SELECT id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at
-       FROM transactions
-      ORDER BY created_at DESC`,
+    `SELECT ${TRANSACTION_COLUMNS} FROM transactions ${clause} ORDER BY ${orderBy} LIMIT $${limitPlaceholder} OFFSET $${offsetPlaceholder}`,
+    [...params, page.limit, page.offset],
   )
   return result.rows as Transaction[]
+}
+
+export async function getTransactionsCount(
+  db: Queryable,
+  filter: TransactionFilter = {},
+): Promise<number> {
+  const { clause, params } = buildTransactionFilter(filter)
+  const result = await db.query(`SELECT count(*)::int AS count FROM transactions ${clause}`, params)
+  return Number(result.rows[0]?.count ?? 0)
 }
 
 export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
