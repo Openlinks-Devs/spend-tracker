@@ -69,6 +69,10 @@ enum class StringKey {
     BucketWeek,
     BucketMonth,
     CurrencyLabel,
+    ChartsTitle,
+    ChartSpendingOverTime,
+    ChartIncomeVsExpense,
+    ChartNoData,
 }
 
 /** Simple locale-aware lookup. English is the only bundled locale for now. */
@@ -138,6 +142,10 @@ object Strings {
         StringKey.BucketWeek to "Week",
         StringKey.BucketMonth to "Month",
         StringKey.CurrencyLabel to "Currency",
+        StringKey.ChartsTitle to "Charts",
+        StringKey.ChartSpendingOverTime to "Spending over time",
+        StringKey.ChartIncomeVsExpense to "Income vs expense",
+        StringKey.ChartNoData to "No data to chart yet",
     )
 
     private val locales: Map<String, Map<StringKey, String>> = mapOf("en" to english)

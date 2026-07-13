@@ -19,12 +19,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.openlinks.spendtracker.data.SeriesRow
 import com.openlinks.spendtracker.data.Transaction
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
 import com.openlinks.spendtracker.ui.Formatting
 import com.openlinks.spendtracker.ui.SpendUiState
+import com.openlinks.spendtracker.ui.screens.charts.IncomeExpenseChart
+import com.openlinks.spendtracker.ui.screens.charts.SpendingOverTimeChart
+import com.openlinks.spendtracker.ui.seriesForCurrency
 
 @Composable
 fun SummaryScreen(
@@ -81,18 +85,30 @@ fun SummaryScreen(
             modifier = Modifier.padding(top = 12.dp),
         )
 
-        Text(
-            text = Strings.get(StringKey.SummaryRecent),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
-        )
-        if (state.transactions.isEmpty()) {
-            Text(
-                text = Strings.get(StringKey.SummaryEmpty),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val chartRows = seriesForCurrency(state.analytics?.series ?: emptyList(), state.displayCurrency)
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            item {
+                ChartsSection(rows = chartRows)
+            }
+            item {
+                Text(
+                    text = Strings.get(StringKey.SummaryRecent),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                )
+            }
+            if (state.transactions.isEmpty()) {
+                item {
+                    Text(
+                        text = Strings.get(StringKey.SummaryEmpty),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            } else {
                 items(state.transactions.take(5)) { transaction ->
                     RecentRow(
                         transaction = transaction,
@@ -101,6 +117,41 @@ fun SummaryScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The analytics charts area: spending-over-time and income-vs-expense, each in a
+ * titled card. [rows] are already filtered to the display currency by the caller.
+ */
+@Composable
+private fun ChartsSection(rows: List<SeriesRow>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = Strings.get(StringKey.ChartsTitle),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 16.dp),
+        )
+        ChartCard(title = Strings.get(StringKey.ChartSpendingOverTime)) {
+            SpendingOverTimeChart(rows = rows)
+        }
+        ChartCard(title = Strings.get(StringKey.ChartIncomeVsExpense)) {
+            IncomeExpenseChart(rows = rows)
+        }
+    }
+}
+
+@Composable
+private fun ChartCard(title: String, content: @Composable () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            content()
         }
     }
 }
