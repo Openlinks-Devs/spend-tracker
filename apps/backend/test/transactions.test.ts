@@ -15,12 +15,51 @@ const sampleTransaction = {
 
 describe('transactions route', () => {
   it('GET /api/transactions returns the list', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [sampleTransaction] }) }
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [sampleTransaction] })
+        .mockResolvedValueOnce({ rows: [{ count: '1' }] }),
+    }
     const route = createTransactionsRoute(() => db)
     const response = await route.request('/api/transactions')
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body[0].id).toBe('tx1')
+    expect(body.items[0].id).toBe('tx1')
+    expect(body.total).toBe(1)
+  })
+
+  it('GET /api/transactions applies filters and pagination', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 't1',
+              description: 'Coffee',
+              amount: -5,
+              currency: 'PEN',
+              account_id: 'a1',
+              category_id: 'c1',
+              tags: [],
+              created_at: 'x',
+              updated_at: null,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ count: '1' }] }),
+    }
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions?q=coffee&type=expense&limit=10&offset=0')
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.total).toBe(1)
+    expect(body.items[0].id).toBe('t1')
+    const listSql = db.query.mock.calls[0][0]
+    expect(listSql).toMatch(/description ILIKE/i)
+    expect(listSql).toMatch(/amount < 0/)
+    expect(listSql).toMatch(/LIMIT/i)
   })
 
   it('GET /api/transactions/:id returns 404 when missing', async () => {
