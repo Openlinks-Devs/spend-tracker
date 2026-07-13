@@ -104,9 +104,19 @@ export interface TagRow {
   count: number
 }
 
+export interface AccountRow {
+  accountId: string
+  currency: string
+  income: number
+  spend: number
+  net: number
+  count: number
+}
+
 export interface AnalyticsPayload {
   summary: SummaryRow[]
   series: SeriesRow[]
   byCategory: CategoryRow[]
   byTag: TagRow[]
+  byAccount: AccountRow[]
 }
