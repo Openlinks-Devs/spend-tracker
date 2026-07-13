@@ -44,11 +44,21 @@ export interface TagRow {
   count: number
 }
 
+export interface AccountRow {
+  accountId: string
+  currency: string
+  income: number
+  spend: number
+  net: number
+  count: number
+}
+
 export interface AnalyticsPayload {
   summary: SummaryRow[]
   series: SeriesRow[]
   byCategory: CategoryRow[]
   byTag: TagRow[]
+  byAccount: AccountRow[]
 }
 
 export async function getCategories(db: Queryable): Promise<Category[]> {
@@ -193,12 +203,19 @@ export async function getAnalytics(
       GROUP BY tag, currency ORDER BY spend DESC`,
     params,
   )
+  const byAccount = await db.query(
+    `SELECT account_id AS "accountId", currency, ${ANALYTICS_INCOME_EXPRESSION} AS income,
+            ${ANALYTICS_SPEND_EXPRESSION} AS spend, sum(amount)::float8 AS net, count(*)::int AS count
+       FROM transactions ${clause} GROUP BY account_id, currency ORDER BY net DESC`,
+    params,
+  )
 
   return {
     summary: summary.rows as SummaryRow[],
     series: series.rows as SeriesRow[],
     byCategory: byCategory.rows as CategoryRow[],
     byTag: byTag.rows as TagRow[],
+    byAccount: byAccount.rows as AccountRow[],
   }
 }
 
