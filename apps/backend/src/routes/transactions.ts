@@ -5,6 +5,7 @@ import type { Queryable } from '../db/pool.js'
 import { getPool } from '../db/pool.js'
 import {
   deleteTransaction,
+  getAnalytics,
   getTransactionById,
   getTransactions,
   getTransactionsCount,
@@ -76,6 +77,19 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
     } catch (error) {
       console.error('Failed to list transactions:', error)
       return context.json({ error: 'Failed to list transactions' }, 500)
+    }
+  })
+
+  route.get('/api/transactions/analytics', async (context) => {
+    try {
+      const { filter } = parseListQuery(context)
+      const requestedBucket = context.req.query('bucket')
+      const bucket = requestedBucket === 'day' || requestedBucket === 'week' ? requestedBucket : 'month'
+      const analytics = await getAnalytics(resolveDb(), filter, bucket)
+      return context.json(analytics)
+    } catch (error) {
+      console.error('Failed to compute analytics:', error)
+      return context.json({ error: 'Failed to compute analytics' }, 500)
     }
   })
 
