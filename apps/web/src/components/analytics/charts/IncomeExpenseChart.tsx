@@ -13,7 +13,7 @@ export function IncomeExpenseChart({ rows }: IncomeExpenseChartProps) {
     () => ({
       color: palette,
       tooltip: { trigger: 'axis' as const },
-      legend: { data: ['Income', 'Spend', 'Net'] },
+      legend: { data: ['Income', 'Spend', 'Net'], top: 0 },
       grid: { left: 48, right: 16, top: 48, bottom: 40 },
       xAxis: {
         type: 'category' as const,

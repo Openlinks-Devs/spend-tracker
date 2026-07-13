@@ -1,17 +1,18 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CurrencySwitcher } from '@/components/analytics/CurrencySwitcher'
 import { SummaryTiles } from '@/components/analytics/SummaryTiles'
+import { AccountNetChart } from '@/components/analytics/charts/AccountNetChart'
 import { CategoryPieChart } from '@/components/analytics/charts/CategoryPieChart'
 import { IncomeExpenseChart } from '@/components/analytics/charts/IncomeExpenseChart'
 import { SpendCalendarHeatmap } from '@/components/analytics/charts/SpendCalendarHeatmap'
 import { SpendingOverTimeChart } from '@/components/analytics/charts/SpendingOverTimeChart'
 import { TagBarChart } from '@/components/analytics/charts/TagBarChart'
+import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
 import { useTransactionAnalytics } from '@/hooks/useTransactionAnalytics'
-import { toSearchParams, type TransactionFilterState } from '@/lib/filterParams'
+import { type TransactionFilterState } from '@/lib/filterParams'
 import { toErrorMessage } from '@/lib/api'
 import { toNameById } from '@/lib/utils'
 import type { SummaryRow } from '@/types'
@@ -57,7 +58,6 @@ const BUCKET_OPTIONS: { value: AnalyticsBucket; label: string }[] = [
 interface AnalyticsSectionProps {
   filters: TransactionFilterState
   setFilters: (next: Partial<TransactionFilterState>) => void
-  listRoute?: string
 }
 
 interface ChartCardProps {
@@ -77,27 +77,8 @@ function ChartCard({ title, className, children }: ChartCardProps) {
   )
 }
 
-export function AnalyticsSection({
-  filters,
-  setFilters,
-  listRoute = '/transactions',
-}: AnalyticsSectionProps) {
+export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps) {
   const [bucket, setBucket] = useState<AnalyticsBucket>('month')
-  const location = useLocation()
-  const navigate = useNavigate()
-
-  // A chart drill-down should land the user on the filtered list. When the list
-  // is already on-screen (the transactions page), filter in place; otherwise
-  // navigate to the list route carrying the merged filters in the URL so the
-  // full filtered view opens with them applied.
-  const applyDrillDown = (partial: Partial<TransactionFilterState>) => {
-    if (location.pathname === listRoute) {
-      setFilters(partial)
-      return
-    }
-    const nextFilters = { ...filters, ...partial }
-    navigate(`${listRoute}?${toSearchParams(nextFilters).toString()}`)
-  }
 
   // The over-time/income-expense series follow the selected bucket, while the
   // heatmap always needs day granularity. When bucket is already 'day' both
@@ -111,6 +92,9 @@ export function AnalyticsSection({
     () => toNameById(categoriesQuery.data),
     [categoriesQuery.data],
   )
+
+  const accountsQuery = useAccounts()
+  const accountNameById = useMemo(() => toNameById(accountsQuery.data), [accountsQuery.data])
 
   const summary = useMemo(() => primaryAnalytics.data?.summary ?? [], [primaryAnalytics.data])
 
@@ -140,6 +124,13 @@ export function AnalyticsSection({
   const tagsForCurrency = useMemo(
     () =>
       (primaryAnalytics.data?.byTag ?? []).filter((tagRow) => tagRow.currency === displayCurrency),
+    [primaryAnalytics.data, displayCurrency],
+  )
+  const accountsForCurrency = useMemo(
+    () =>
+      (primaryAnalytics.data?.byAccount ?? []).filter(
+        (accountRow) => accountRow.currency === displayCurrency,
+      ),
     [primaryAnalytics.data, displayCurrency],
   )
   const daySeriesForCurrency = useMemo(
@@ -195,12 +186,7 @@ export function AnalyticsSection({
 
           <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard title="Spending over time">
-              <SpendingOverTimeChart
-                rows={seriesForCurrency}
-                onSelect={(window) =>
-                  applyDrillDown({ range: 'custom', from: window.from, to: window.to })
-                }
-              />
+              <SpendingOverTimeChart rows={seriesForCurrency} />
             </ChartCard>
             <ChartCard title="Income vs spend">
               <IncomeExpenseChart rows={seriesForCurrency} />
@@ -209,14 +195,13 @@ export function AnalyticsSection({
               <CategoryPieChart
                 rows={categoriesForCurrency}
                 categoryNameById={categoryNameById}
-                onSelect={(categoryId) => applyDrillDown({ categories: [categoryId] })}
               />
             </ChartCard>
             <ChartCard title="Top tags">
-              <TagBarChart
-                rows={tagsForCurrency}
-                onSelect={(tag) => applyDrillDown({ tags: [tag], tagMatch: 'any' })}
-              />
+              <TagBarChart rows={tagsForCurrency} />
+            </ChartCard>
+            <ChartCard title="Net by account">
+              <AccountNetChart rows={accountsForCurrency} accountNameById={accountNameById} />
             </ChartCard>
             <ChartCard title="Daily spending" className="lg:col-span-2">
               <SpendCalendarHeatmap rows={daySeriesForCurrency} />

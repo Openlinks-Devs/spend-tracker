@@ -14,8 +14,8 @@ export function TagBarChart({ rows, onSelect }: TagBarChartProps) {
     return {
       color: palette,
       tooltip: { trigger: 'item' as const },
-      grid: { left: 96, right: 24, top: 24, bottom: 40 },
-      xAxis: { type: 'value' as const },
+      grid: { left: 96, right: 24, top: 24, bottom: 64 },
+      xAxis: { type: 'value' as const, axisLabel: { rotate: 60 } },
       yAxis: {
         type: 'category' as const,
         inverse: true,
