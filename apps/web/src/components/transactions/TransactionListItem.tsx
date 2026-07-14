@@ -1,4 +1,4 @@
-import { IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconCopy, IconPencil, IconTrash } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { cn, formatCurrency, formatDate, formatTime } from '@/lib/utils'
 import type { Transaction } from '@/types'
@@ -10,6 +10,7 @@ interface TransactionListItemProps {
   /** Show the calendar date instead of the time of day (for ungrouped lists). */
   showDate?: boolean
   onEdit?: (transaction: Transaction) => void
+  onDuplicate?: (transaction: Transaction) => void
   onDelete?: (transaction: Transaction) => void
 }
 
@@ -19,13 +20,14 @@ export function TransactionListItem({
   categoryName,
   showDate = false,
   onEdit,
+  onDuplicate,
   onDelete,
 }: TransactionListItemProps) {
   const isIncome = transaction.amount > 0
   const whenLabel = showDate
     ? formatDate(transaction.created_at)
     : formatTime(transaction.created_at)
-  const hasActions = Boolean(onEdit || onDelete)
+  const hasActions = Boolean(onEdit || onDuplicate || onDelete)
 
   return (
     <li className="flex items-start justify-between gap-4 px-6 py-3">
@@ -61,6 +63,17 @@ export function TransactionListItem({
                 aria-label="Edit transaction"
               >
                 <IconPencil className="h-4 w-4" />
+              </Button>
+            ) : null}
+            {onDuplicate ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => onDuplicate(transaction)}
+                aria-label="Duplicate transaction"
+              >
+                <IconCopy className="h-4 w-4" />
               </Button>
             ) : null}
             {onDelete ? (

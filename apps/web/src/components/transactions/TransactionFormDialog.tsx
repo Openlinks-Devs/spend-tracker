@@ -27,6 +27,8 @@ interface TransactionFormDialogProps {
   accounts: Account[]
   categories: Category[]
   transaction: Transaction | null
+  /** Source to pre-fill a NEW transaction from (duplicate). Ignored when editing. */
+  template?: Transaction | null
   isSubmitting: boolean
   errorMessage: string | null
   onCreate: (payload: NewTransaction) => void
@@ -66,25 +68,29 @@ export function TransactionFormDialog({
   accounts,
   categories,
   transaction,
+  template = null,
   isSubmitting,
   errorMessage,
   onCreate,
   onUpdate,
 }: TransactionFormDialogProps) {
   const isEditing = transaction !== null
+  // Editing edits the transaction in place; a template pre-fills a brand new
+  // transaction (duplicate). Both reuse the same field mapping.
+  const source = transaction ?? template
   const [formState, setFormState] = useState<TransactionFormState>(emptyFormState)
 
   useEffect(() => {
     if (!open) return
-    if (transaction) {
+    if (source) {
       setFormState({
-        description: transaction.description,
-        amount: String(transaction.amount ?? ''),
-        currency: transaction.currency,
-        accountId: transaction.account_id,
-        categoryId: transaction.category_id,
-        tags: transaction.tags.join(', '),
-        date: toDatetimeLocalValue(transaction.created_at),
+        description: source.description,
+        amount: String(source.amount ?? ''),
+        currency: source.currency,
+        accountId: source.account_id,
+        categoryId: source.category_id,
+        tags: source.tags.join(', '),
+        date: toDatetimeLocalValue(source.created_at),
       })
     } else {
       setFormState({
@@ -95,7 +101,7 @@ export function TransactionFormDialog({
         date: toDatetimeLocalValue(new Date()),
       })
     }
-  }, [open, transaction, accounts, categories])
+  }, [open, source, accounts, categories])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -127,11 +133,15 @@ export function TransactionFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit transaction' : 'New transaction'}</DialogTitle>
+          <DialogTitle>
+            {isEditing ? 'Edit transaction' : template ? 'Duplicate transaction' : 'New transaction'}
+          </DialogTitle>
           <DialogDescription>
             {isEditing
               ? 'Update any detail of this transaction.'
-              : 'Record a new transaction with amount, account, and category.'}
+              : template
+                ? 'Review the copied details, adjust anything, then save as a new transaction.'
+                : 'Record a new transaction with amount, account, and category.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

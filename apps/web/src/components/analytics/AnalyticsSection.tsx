@@ -204,7 +204,7 @@ export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps)
               <AccountNetChart rows={accountsForCurrency} accountNameById={accountNameById} />
             </ChartCard>
             <ChartCard title="Daily spending" className="lg:col-span-2">
-              <SpendCalendarHeatmap rows={daySeriesForCurrency} />
+              <SpendCalendarHeatmap rows={daySeriesForCurrency} currency={displayCurrency} />
             </ChartCard>
           </div>
         </>
