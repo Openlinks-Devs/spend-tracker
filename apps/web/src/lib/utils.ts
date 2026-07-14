@@ -19,6 +19,13 @@ function currencyFormatter(currency: string): Intl.NumberFormat {
   return formatter
 }
 
+// Peruvian soles amounts are shown with the "S/" symbol instead of the "PEN"
+// currency code, so soles amounts use a plain grouped decimal formatter.
+const decimalFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
   month: 'short',
@@ -54,6 +61,12 @@ function isSameDay(first: Date, second: Date): boolean {
 export function formatCurrency(amount: number, currency: string): string {
   const safeAmount = Number.isFinite(amount) ? amount : 0
   const currencyCode = currency || 'USD'
+  // Soles: show "S/ 1,234.56" (sign ahead of the symbol, like Intl's currency
+  // style) instead of "PEN 1,234.56".
+  if (currencyCode === 'PEN') {
+    const sign = safeAmount < 0 ? '-' : ''
+    return `${sign}S/ ${decimalFormatter.format(Math.abs(safeAmount))}`
+  }
   try {
     return currencyFormatter(currencyCode).format(safeAmount)
   } catch {

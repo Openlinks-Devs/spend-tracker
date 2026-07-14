@@ -12,6 +12,8 @@ import type {
   Transaction,
   TransactionListResponse,
   TransactionUpdate,
+  TransferInput,
+  TransferResult,
 } from '@/types'
 
 const baseUrl = import.meta.env.VITE_API_URL ?? '/api'
@@ -90,6 +92,11 @@ export const categoriesApi = createResourceApi<Category, NewCategory, CategoryUp
 
 export const tagsApi = {
   list: () => request<string[]>('/tags'),
+}
+
+export const transfersApi = {
+  create: (payload: TransferInput) =>
+    request<TransferResult>('/transfers', { method: 'POST', body: JSON.stringify(payload) }),
 }
 
 export interface TransactionListPage {
