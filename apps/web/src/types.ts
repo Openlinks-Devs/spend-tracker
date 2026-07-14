@@ -65,6 +65,26 @@ export interface TransactionUpdate {
   created_at?: string
 }
 
+export interface TransferInput {
+  from_account_id: string
+  to_account_id: string
+  from_amount: number
+  to_amount: number
+  from_currency: string
+  to_currency: string
+  from_category_id: string
+  to_category_id: string
+  from_description: string
+  to_description: string
+  tags: string[]
+  created_at?: string
+}
+
+export interface TransferResult {
+  from: Transaction
+  to: Transaction
+}
+
 export interface TransactionListResponse {
   items: Transaction[]
   total: number

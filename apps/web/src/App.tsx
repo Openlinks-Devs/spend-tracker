@@ -7,10 +7,16 @@ import { CategoriesPage } from '@/pages/CategoriesPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { useSession } from '@/lib/authClient'
 
+// In mock mode the backend synthesizes a demo session for every request, so
+// there is no real Better Auth session for the web app to check. Skip the login
+// gate entirely (e.g. for LAN preview from a phone, where Google sign-in cannot
+// complete against a raw LAN IP).
+const isMockMode = import.meta.env.VITE_APP_MODE === 'mock'
+
 export function App() {
   return (
     <BrowserRouter>
-      <AuthenticatedApp />
+      {isMockMode ? <MainRoutes /> : <AuthenticatedApp />}
     </BrowserRouter>
   )
 }
@@ -31,6 +37,10 @@ function AuthenticatedApp() {
       </Routes>
     )
   }
+  return <MainRoutes />
+}
+
+function MainRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
