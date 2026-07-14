@@ -256,6 +256,39 @@ export async function insertTransaction(
   return { id: result.rows[0].id as string }
 }
 
+// A transfer is two transactions (money out of one account, into another) that
+// must both land or neither does, so they run in a single DB transaction on a
+// dedicated client. pg.Pool satisfies TransactionalPool.
+interface PoolClientLike extends Queryable {
+  release: () => void
+}
+
+export interface TransactionalPool {
+  connect: () => Promise<PoolClientLike>
+}
+
+export async function createTransfer(
+  pool: TransactionalPool,
+  legs: { from: NewTransaction; to: NewTransaction },
+): Promise<{ from: Transaction; to: Transaction }> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const outLeg = await insertTransaction(client, legs.from)
+    const inLeg = await insertTransaction(client, legs.to)
+    await client.query('COMMIT')
+    const from = await getTransactionById(client, outLeg.id)
+    const to = await getTransactionById(client, inLeg.id)
+    if (!from || !to) throw new Error('Transfer legs missing after insert')
+    return { from, to }
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
 export async function updateTransaction(db: Queryable, update: TransactionUpdate): Promise<void> {
   await db.query(
     `UPDATE transactions
