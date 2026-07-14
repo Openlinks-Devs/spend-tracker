@@ -7,6 +7,7 @@ import { healthRoute } from './routes/health.js'
 import { oauthRoute } from './routes/oauth.js'
 import { telegramRoute } from './telegram/webhook.js'
 import { createTransactionsRoute } from './routes/transactions.js'
+import { createTransfersRoute } from './routes/transfers.js'
 import { createAccountsRoute } from './routes/accounts.js'
 import { createCategoriesRoute } from './routes/categories.js'
 import { createTagsRoute } from './routes/tags.js'
@@ -52,6 +53,7 @@ export function buildApp(
   app.route('/', oauthRoute)
   app.route('/', telegramRoute)
   app.route('/', createTransactionsRoute())
+  app.route('/', createTransfersRoute())
   app.route('/', createAccountsRoute())
   app.route('/', createCategoriesRoute())
   app.route('/', createTagsRoute())
