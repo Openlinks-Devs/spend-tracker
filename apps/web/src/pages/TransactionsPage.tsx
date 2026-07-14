@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { IconPlus } from '@tabler/icons-react'
+import { IconArrowsExchange, IconPlus } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -7,12 +7,14 @@ import { FilterChips } from '@/components/filters/FilterChips'
 import { FilterPanel } from '@/components/filters/FilterPanel'
 import { SearchBar } from '@/components/filters/SearchBar'
 import { TransactionFormDialog } from '@/components/transactions/TransactionFormDialog'
+import { TransferFormDialog } from '@/components/transactions/TransferFormDialog'
 import { TransactionListItem } from '@/components/transactions/TransactionListItem'
 import {
   useCreateTransaction,
   useDeleteTransaction,
   useUpdateTransaction,
 } from '@/hooks/useTransactions'
+import { useCreateTransfer } from '@/hooks/useTransfer'
 import { useTransactionFilters } from '@/hooks/useTransactionFilters'
 import { useTransactionsQuery } from '@/hooks/useTransactionsQuery'
 import { useAccounts } from '@/hooks/useAccounts'
@@ -20,7 +22,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { toSearchParams } from '@/lib/filterParams'
 import { formatCurrency, formatDayLabel, toDayKey, toNameById } from '@/lib/utils'
 import { toErrorMessage } from '@/lib/api'
-import type { NewTransaction, Transaction, TransactionUpdate } from '@/types'
+import type { NewTransaction, Transaction, TransactionUpdate, TransferInput } from '@/types'
 
 const PAGE_SIZE = 50
 // GET /api/transactions clamps limit to 200, so the growing-limit list tops out
@@ -75,6 +77,7 @@ export function TransactionsPage() {
   const createTransaction = useCreateTransaction()
   const updateTransaction = useUpdateTransaction()
   const deleteTransaction = useDeleteTransaction()
+  const createTransfer = useCreateTransfer()
 
   // Growing-limit pagination: "Load more" raises the requested limit, and the
   // limit resets whenever the active filters change so a new query starts small.
@@ -88,9 +91,12 @@ export function TransactionsPage() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [duplicatingTransaction, setDuplicatingTransaction] = useState<Transaction | null>(null)
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [isTransferOpen, setIsTransferOpen] = useState(false)
+  const [transferError, setTransferError] = useState<string | null>(null)
 
   const accounts = accountsQuery.data ?? []
   const categories = categoriesQuery.data ?? []
@@ -107,12 +113,21 @@ export function TransactionsPage() {
 
   function openCreateDialog() {
     setEditingTransaction(null)
+    setDuplicatingTransaction(null)
     setFormError(null)
     setIsDialogOpen(true)
   }
 
   function openEditDialog(transaction: Transaction) {
     setEditingTransaction(transaction)
+    setDuplicatingTransaction(null)
+    setFormError(null)
+    setIsDialogOpen(true)
+  }
+
+  function openDuplicateDialog(transaction: Transaction) {
+    setEditingTransaction(null)
+    setDuplicatingTransaction(transaction)
     setFormError(null)
     setIsDialogOpen(true)
   }
@@ -136,6 +151,19 @@ export function TransactionsPage() {
     )
   }
 
+  function openTransferDialog() {
+    setTransferError(null)
+    setIsTransferOpen(true)
+  }
+
+  function handleTransfer(payload: TransferInput) {
+    setTransferError(null)
+    createTransfer.mutate(payload, {
+      onSuccess: () => setIsTransferOpen(false),
+      onError: (error) => setTransferError(toErrorMessage(error)),
+    })
+  }
+
   function openDeleteDialog(transaction: Transaction) {
     setDeleteError(null)
     setDeletingTransaction(transaction)
@@ -157,13 +185,23 @@ export function TransactionsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Transactions</h1>
           <p className="text-sm text-muted-foreground">Create, edit, and remove transactions</p>
         </div>
-        <Button
-          onClick={openCreateDialog}
-          disabled={accounts.length === 0 || categories.length === 0}
-        >
-          <IconPlus className="h-4 w-4" />
-          New transaction
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={openTransferDialog}
+            disabled={accounts.length < 2 || categories.length === 0}
+          >
+            <IconArrowsExchange className="h-4 w-4" />
+            Transfer
+          </Button>
+          <Button
+            onClick={openCreateDialog}
+            disabled={accounts.length === 0 || categories.length === 0}
+          >
+            <IconPlus className="h-4 w-4" />
+            New transaction
+          </Button>
+        </div>
       </div>
 
       {accounts.length === 0 || categories.length === 0 ? (
@@ -208,6 +246,7 @@ export function TransactionsPage() {
                           categoryNameById.get(transaction.category_id) ?? 'Uncategorized'
                         }
                         onEdit={openEditDialog}
+                        onDuplicate={openDuplicateDialog}
                         onDelete={openDeleteDialog}
                       />
                     ))}
@@ -262,10 +301,21 @@ export function TransactionsPage() {
         accounts={accounts}
         categories={categories}
         transaction={editingTransaction}
+        template={duplicatingTransaction}
         isSubmitting={createTransaction.isPending || updateTransaction.isPending}
         errorMessage={formError}
         onCreate={handleCreate}
         onUpdate={handleUpdate}
+      />
+
+      <TransferFormDialog
+        open={isTransferOpen}
+        onOpenChange={setIsTransferOpen}
+        accounts={accounts}
+        categories={categories}
+        isSubmitting={createTransfer.isPending}
+        errorMessage={transferError}
+        onSubmit={handleTransfer}
       />
     </div>
   )
