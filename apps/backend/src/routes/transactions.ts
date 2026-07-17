@@ -55,6 +55,7 @@ function parseListQuery(context: Context): {
     min: query.min ? Number(query.min) : undefined,
     max: query.max ? Number(query.max) : undefined,
     type: query.type === 'income' || query.type === 'expense' ? query.type : 'all',
+    currency: query.currency,
   }
   return {
     filter,
