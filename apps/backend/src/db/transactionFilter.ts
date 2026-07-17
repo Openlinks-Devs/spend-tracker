@@ -9,6 +9,7 @@ export interface TransactionFilter {
   min?: number
   max?: number
   type?: 'all' | 'income' | 'expense'
+  currency?: string
 }
 
 // Escape LIKE metacharacters so a user's literal % or _ is not treated as a wildcard.
@@ -43,6 +44,11 @@ export function buildTransactionFilter(
   if (filter.categoryIds && filter.categoryIds.length > 0) {
     conditions.push(`category_id = ANY($${placeholder})`)
     params.push(filter.categoryIds)
+    placeholder += 1
+  }
+  if (filter.currency && filter.currency.trim() !== '') {
+    conditions.push(`currency = $${placeholder}`)
+    params.push(filter.currency)
     placeholder += 1
   }
   if (filter.type === 'expense') conditions.push('amount < 0')
