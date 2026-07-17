@@ -64,12 +64,19 @@ export function toSearchParams(state: TransactionFilterState): URLSearchParams {
   return searchParams
 }
 
-// The backend ignores currency (it is a display-only concern selected client
-// side), so strip it from the params that build a network request and the React
-// Query keys. This keeps a currency switch from triggering a redundant refetch.
-// toSearchParams still carries currency so the browser URL persists the choice.
+// Analytics is intentionally currency-agnostic: the dashboard fetches every
+// currency at once so its currency switcher has all options to offer and does
+// display-side filtering. So strip currency from the analytics request params
+// (and their React Query keys) to avoid a redundant refetch on a currency
+// switch. toSearchParams still carries currency so the browser URL persists it.
 export function toRequestParams(state: TransactionFilterState): URLSearchParams {
   const requestParams = toSearchParams(state)
   requestParams.delete('currency')
   return requestParams
+}
+
+// The transactions list, unlike analytics, filters by currency server-side, so
+// it keeps currency in its request params (and thus its React Query key).
+export function toListRequestParams(state: TransactionFilterState): URLSearchParams {
+  return toSearchParams(state)
 }

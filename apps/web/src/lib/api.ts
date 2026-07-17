@@ -1,4 +1,4 @@
-import { toRequestParams } from '@/lib/filterParams'
+import { toListRequestParams, toRequestParams } from '@/lib/filterParams'
 import type { TransactionFilterState } from '@/lib/filterParams'
 import type {
   Account,
@@ -110,7 +110,7 @@ export interface TransactionListPage {
 // resource object alongside the CRUD transactionsApi.
 export const transactionsAnalyticsApi = {
   listFiltered(state: TransactionFilterState, page: TransactionListPage) {
-    const params = toRequestParams(state)
+    const params = toListRequestParams(state)
     params.set('limit', String(page.limit))
     params.set('offset', String(page.offset))
     if (page.sort) params.set('sort', page.sort)
