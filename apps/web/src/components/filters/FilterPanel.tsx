@@ -60,6 +60,9 @@ export function FilterPanel() {
   const accounts = useAccounts().data ?? []
   const categories = useCategories().data ?? []
   const tags = useTags().data ?? []
+  // Distinct currencies across the user's accounts, so the filter only offers
+  // currencies that actually exist in the ledger.
+  const currencyOptions = Array.from(new Set(accounts.map((account) => account.currency))).sort()
 
   function handleRangeChange(range: string) {
     // Leaving a preset behind clears any lingering custom bounds so the two
@@ -270,6 +273,28 @@ export function FilterPanel() {
                 )}
               </PopoverContent>
             </Popover>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Currency</Label>
+            <Select
+              value={filters.currency ?? 'all'}
+              onValueChange={(value) =>
+                setFilters({ currency: value === 'all' ? undefined : value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All currencies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All currencies</SelectItem>
+                {currencyOptions.map((currency) => (
+                  <SelectItem key={currency} value={currency}>
+                    {currency}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1.5">

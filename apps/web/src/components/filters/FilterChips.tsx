@@ -56,7 +56,8 @@ export function FilterChips() {
     filters.tags.length > 0 ||
     typeof filters.min === 'number' ||
     typeof filters.max === 'number' ||
-    filters.type !== 'all'
+    filters.type !== 'all' ||
+    Boolean(filters.currency)
 
   if (!hasActiveFilter) return null
 
@@ -119,6 +120,13 @@ export function FilterChips() {
         <FilterChip
           label={TYPE_LABELS[filters.type]}
           onRemove={() => setFilters({ type: 'all' })}
+        />
+      ) : null}
+
+      {filters.currency ? (
+        <FilterChip
+          label={`Currency: ${filters.currency}`}
+          onRemove={() => setFilters({ currency: undefined })}
         />
       ) : null}
 
