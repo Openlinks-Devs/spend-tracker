@@ -62,6 +62,21 @@ describe('transactions route', () => {
     expect(listSql).toMatch(/LIMIT/i)
   })
 
+  it('GET /api/transactions filters by currency', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ count: '0' }] }),
+    }
+    const route = createTransactionsRoute(() => db)
+    const response = await route.request('/api/transactions?currency=USD')
+    expect(response.status).toBe(200)
+    const listSql = db.query.mock.calls[0][0]
+    expect(listSql).toMatch(/currency = \$/)
+    expect(db.query.mock.calls[0][1]).toContain('USD')
+  })
+
   it('GET /api/transactions/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createTransactionsRoute(() => db)

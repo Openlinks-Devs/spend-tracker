@@ -46,6 +46,13 @@ describe('buildTransactionFilter', () => {
     expect(params).toEqual([10, 100, '2026-01-01T00:00:00Z', '2026-02-01T00:00:00Z'])
   })
 
+  it('filters by exact currency', () => {
+    const { clause, params } = buildTransactionFilter({ currency: 'USD' })
+    expect(clause).toMatch(/currency = \$1/)
+    expect(params).toEqual(['USD'])
+    expect(buildTransactionFilter({ currency: '' }).clause).toBe('')
+  })
+
   it('honors a custom startIndex for placeholder numbering', () => {
     const { clause } = buildTransactionFilter({ q: 'coffee' }, 5)
     expect(clause).toMatch(/\$5/)
