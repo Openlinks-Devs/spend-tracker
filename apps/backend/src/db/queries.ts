@@ -61,37 +61,53 @@ export interface AnalyticsPayload {
   byAccount: AccountRow[]
 }
 
-export async function getCategories(db: Queryable): Promise<Category[]> {
-  const result = await db.query('SELECT id, name, type FROM categories ORDER BY name')
+export async function getCategories(db: Queryable, userId: string): Promise<Category[]> {
+  const result = await db.query(
+    'SELECT id, name, type FROM categories WHERE user_id = $1 ORDER BY name',
+    [userId],
+  )
   return result.rows as Category[]
 }
 
-export async function getCategoryById(db: Queryable, id: string): Promise<Category | null> {
-  const result = await db.query('SELECT id, name, type FROM categories WHERE id = $1', [id])
+export async function getCategoryById(
+  db: Queryable,
+  userId: string,
+  id: string,
+): Promise<Category | null> {
+  const result = await db.query(
+    'SELECT id, name, type FROM categories WHERE id = $1 AND user_id = $2',
+    [id, userId],
+  )
   return result.rows.length ? (result.rows[0] as Category) : null
 }
 
 export async function insertCategory(
   db: Queryable,
+  userId: string,
   category: NewCategory,
 ): Promise<{ id: string }> {
   const result = await db.query(
-    'INSERT INTO categories (name, type) VALUES ($1, $2) RETURNING id',
-    [category.name, category.type],
+    'INSERT INTO categories (name, type, user_id) VALUES ($1, $2, $3) RETURNING id',
+    [category.name, category.type, userId],
   )
   return { id: result.rows[0].id as string }
 }
 
-export async function updateCategory(db: Queryable, update: CategoryUpdate): Promise<void> {
-  await db.query('UPDATE categories SET name = $2, type = $3 WHERE id = $1', [
+export async function updateCategory(
+  db: Queryable,
+  userId: string,
+  update: CategoryUpdate,
+): Promise<void> {
+  await db.query('UPDATE categories SET name = $2, type = $3 WHERE id = $1 AND user_id = $4', [
     update.id,
     update.name,
     update.type,
+    userId,
   ])
 }
 
-export async function deleteCategory(db: Queryable, id: string): Promise<void> {
-  await db.query('DELETE FROM categories WHERE id = $1', [id])
+export async function deleteCategory(db: Queryable, userId: string, id: string): Promise<void> {
+  await db.query('DELETE FROM categories WHERE id = $1 AND user_id = $2', [id, userId])
 }
 
 export async function getAccounts(db: Queryable, userId: string): Promise<Account[]> {
