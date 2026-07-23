@@ -1,6 +1,18 @@
 import { loadEnv } from '../config/env.js'
 
+// Carries the HTTP status so callers can react to it: a 403 means the user
+// blocked or removed the bot, which should flip their connection to needs_reauth.
+export class TelegramSendError extends Error {
+  status: number
+  constructor(status: number, body: string) {
+    super(`Telegram sendMessage failed with ${status}: ${body}`)
+    this.name = 'TelegramSendError'
+    this.status = status
+  }
+}
+
 export async function sendMessage(
+  chatId: string,
   text: string,
   options: { replyToMessageId?: number } = {},
 ): Promise<void> {
@@ -10,13 +22,13 @@ export async function sendMessage(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      chat_id: env.TELEGRAM_CHAT_ID,
+      chat_id: chatId,
       text,
       parse_mode: 'HTML',
-      reply_to_message_id: options.replyToMessageId,
+      ...(options.replyToMessageId ? { reply_to_message_id: options.replyToMessageId } : {}),
     }),
   })
   if (!response.ok) {
-    throw new Error(`Telegram sendMessage failed: ${response.status}`)
+    throw new TelegramSendError(response.status, await response.text())
   }
 }
