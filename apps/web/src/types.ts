@@ -140,3 +140,11 @@ export interface AnalyticsPayload {
   byTag: TagRow[]
   byAccount: AccountRow[]
 }
+
+export interface Connection {
+  id: string
+  provider: 'gmail' | 'telegram'
+  status: 'active' | 'needs_reauth' | 'disabled'
+  external_id: string
+  created_at: string
+}

@@ -4,6 +4,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { TransactionsPage } from '@/pages/TransactionsPage'
 import { AccountsPage } from '@/pages/AccountsPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
+import { IntegrationsPage } from '@/pages/IntegrationsPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { useSession } from '@/lib/authClient'
 
@@ -48,6 +49,7 @@ function MainRoutes() {
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
+        <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
