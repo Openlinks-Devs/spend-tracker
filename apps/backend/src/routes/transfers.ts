@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getPool } from '../db/pool.js'
 import { createTransfer, type TransactionalPool } from '../db/queries.js'
+import type { AppVariables } from '../http/context.js'
+import { getUserId } from '../http/context.js'
 import { parseJsonBody } from './validation.js'
 
 // A transfer moves money between two accounts. The client sends both legs fully
@@ -23,8 +25,10 @@ const transferSchema = z.object({
   created_at: z.string().min(1).optional(),
 })
 
-export function createTransfersRoute(resolvePool: () => TransactionalPool = getPool): Hono {
-  const route = new Hono()
+export function createTransfersRoute(
+  resolvePool: () => TransactionalPool = getPool,
+): Hono<{ Variables: AppVariables }> {
+  const route = new Hono<{ Variables: AppVariables }>()
 
   route.post('/api/transfers', async (context) => {
     const parsed = await parseJsonBody(context, transferSchema)
@@ -34,7 +38,8 @@ export function createTransfersRoute(resolvePool: () => TransactionalPool = getP
     const data = parsed.data
     const createdAt = data.created_at ?? new Date().toISOString()
     try {
-      const result = await createTransfer(resolvePool(), {
+      const userId = getUserId(context)
+      const result = await createTransfer(resolvePool(), userId, {
         from: {
           description: data.from_description,
           amount: -Math.abs(data.from_amount),

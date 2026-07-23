@@ -13,6 +13,8 @@ import {
   updateTransaction,
 } from '../db/queries.js'
 import { resolveDateRange, type TransactionFilter } from '../db/transactionFilter.js'
+import type { AppVariables } from '../http/context.js'
+import { getUserId } from '../http/context.js'
 import { parseJsonBody } from './validation.js'
 
 const newTransactionSchema = z.object({
@@ -35,7 +37,7 @@ const transactionUpdateSchema = z.object({
   created_at: z.string().min(1).optional(),
 })
 
-function parseListQuery(context: Context): {
+function parseListQuery(context: Context<{ Variables: AppVariables }>): {
   filter: TransactionFilter
   limit: number
   offset: number
@@ -45,6 +47,7 @@ function parseListQuery(context: Context): {
   const many = (key: string) => context.req.queries(key) ?? []
   const dateRange = resolveDateRange(query.range, query.from, query.to)
   const filter: TransactionFilter = {
+    userId: getUserId(context),
     q: query.q,
     from: dateRange.from,
     to: dateRange.to,
@@ -65,8 +68,10 @@ function parseListQuery(context: Context): {
   }
 }
 
-export function createTransactionsRoute(resolveDb: () => Queryable = getPool): Hono {
-  const route = new Hono()
+export function createTransactionsRoute(
+  resolveDb: () => Queryable = getPool,
+): Hono<{ Variables: AppVariables }> {
+  const route = new Hono<{ Variables: AppVariables }>()
 
   route.get('/api/transactions', async (context) => {
     try {
@@ -96,7 +101,8 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
 
   route.get('/api/transactions/:id', async (context) => {
     try {
-      const transaction = await getTransactionById(resolveDb(), context.req.param('id'))
+      const userId = getUserId(context)
+      const transaction = await getTransactionById(resolveDb(), userId, context.req.param('id'))
       if (!transaction) return context.json({ error: 'Transaction not found' }, 404)
       return context.json(transaction)
     } catch (error) {
@@ -111,8 +117,9 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       return context.json({ error: parsed.error }, 400)
     }
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const { id } = await insertTransaction(db, {
+      const { id } = await insertTransaction(db, userId, {
         description: parsed.data.description,
         amount: parsed.data.amount,
         currency: parsed.data.currency,
@@ -121,7 +128,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
         tags: parsed.data.tags,
         created_at: parsed.data.created_at ?? new Date().toISOString(),
       })
-      const transaction = await getTransactionById(db, id)
+      const transaction = await getTransactionById(db, userId, id)
       return context.json(transaction, 201)
     } catch (error) {
       console.error('Failed to create transaction:', error)
@@ -136,10 +143,11 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
       return context.json({ error: parsed.error }, 400)
     }
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const existing = await getTransactionById(db, id)
+      const existing = await getTransactionById(db, userId, id)
       if (!existing) return context.json({ error: 'Transaction not found' }, 404)
-      await updateTransaction(db, {
+      await updateTransaction(db, userId, {
         id,
         description: parsed.data.description ?? existing.description,
         amount: parsed.data.amount ?? existing.amount,
@@ -149,7 +157,7 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
         tags: parsed.data.tags ?? existing.tags,
         created_at: parsed.data.created_at ?? existing.created_at,
       })
-      const transaction = await getTransactionById(db, id)
+      const transaction = await getTransactionById(db, userId, id)
       return context.json(transaction)
     } catch (error) {
       console.error('Failed to update transaction:', error)
@@ -160,10 +168,11 @@ export function createTransactionsRoute(resolveDb: () => Queryable = getPool): H
   route.delete('/api/transactions/:id', async (context) => {
     const id = context.req.param('id')
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const existing = await getTransactionById(db, id)
+      const existing = await getTransactionById(db, userId, id)
       if (!existing) return context.json({ error: 'Transaction not found' }, 404)
-      await deleteTransaction(db, id)
+      await deleteTransaction(db, userId, id)
       return context.json({ success: true })
     } catch (error) {
       console.error('Failed to delete transaction:', error)
