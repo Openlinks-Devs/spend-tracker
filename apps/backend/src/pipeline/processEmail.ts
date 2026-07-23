@@ -1,41 +1,70 @@
 import type { Queryable } from '../db/pool.js'
-import { getAccounts, getCategories, getDistinctTags, insertTransaction } from '../db/queries.js'
+import {
+  getAccounts,
+  getCategories,
+  getDistinctTags,
+  insertTransaction,
+  type TransactionalPool,
+} from '../db/queries.js'
 import { detectTransaction } from '../ai/detect.js'
 import { extractTransaction } from '../ai/extract.js'
-import { sendMessage } from '../telegram/client.js'
-import { formatError, formatNewTransaction } from '../telegram/format.js'
+import { formatNewTransaction } from '../telegram/format.js'
+import { hasImportSource, recordImportSource } from '../connections/importSource.js'
 
 export interface ProcessDeps {
   db: Queryable
+  // A transactional pool so the transaction insert and its import_source dedupe
+  // row land atomically, mirroring createTransfer in db/queries.ts.
+  pool: TransactionalPool
   now: () => string
   detect: typeof detectTransaction
   extract: typeof extractTransaction
-  notify: typeof sendMessage
+  // Already chat-resolved by the caller (the poller builds it per connection);
+  // a no-op when the owner has no Telegram connection.
+  notify: (text: string) => Promise<void>
 }
 
-export const defaultProcessDeps: Omit<ProcessDeps, 'db'> = {
+// The static AI/time deps that every import shares. The per-connection deps
+// (db, pool, notify) are supplied by the caller because they vary per user.
+export const defaultProcessDeps: Pick<ProcessDeps, 'now' | 'detect' | 'extract'> = {
   now: () => new Date().toISOString(),
   detect: detectTransaction,
   extract: extractTransaction,
-  notify: sendMessage,
 }
 
-// The import runs server-side with no session, so the caller must pass the owner
-// user id explicitly. Per-user connections will supply this from the linked
-// account (see docs/superpowers/specs/2026-07-17-per-user-connections-design.md).
+// The import runs server-side with no session, so the caller passes the owner
+// user id and the source connection explicitly. Per-user connections supply
+// these from the linked account (see
+// docs/superpowers/specs/2026-07-17-per-user-connections-design.md).
 export async function processEmail(
-  email: { subject: string; text: string },
-  userId: string,
+  email: { subject: string; text: string; messageId: string },
+  importContext: { userId: string; connectionId: string },
   deps: ProcessDeps,
 ): Promise<void> {
+  const { userId, connectionId } = importContext
+
+  // Dedupe before any AI work: a crash-replay must cost no tokens and send no
+  // duplicate notification.
+  if (await hasImportSource(deps.db, connectionId, email.messageId)) return
+
   const isTransaction = await deps.detect({ subject: email.subject, text: email.text })
-  if (!isTransaction) return
+  if (!isTransaction) {
+    await recordImportSource(deps.db, connectionId, email.messageId, null)
+    return
+  }
 
   const [categories, accounts, tags] = await Promise.all([
     getCategories(deps.db, userId),
     getAccounts(deps.db, userId),
     getDistinctTags(deps.db, userId),
   ])
+
+  // Onboarding guard: with no accounts or categories nothing can be attributed;
+  // record the message so it is never retried, and skip without error.
+  if (accounts.length === 0 || categories.length === 0) {
+    await recordImportSource(deps.db, connectionId, email.messageId, null)
+    return
+  }
 
   const extracted = await deps.extract({
     text: email.text,
@@ -46,23 +75,43 @@ export async function processEmail(
   })
 
   if (!extracted) {
-    await deps.notify(formatError(`No se pudo determinar la cuenta para: ${email.subject}`))
+    await recordImportSource(deps.db, connectionId, email.messageId, null)
     return
   }
 
-  const { id } = await insertTransaction(deps.db, userId, extracted)
+  // Insert transaction + dedupe row atomically, mirroring createTransfer's
+  // client/BEGIN/COMMIT pattern in db/queries.ts.
+  const client = await deps.pool.connect()
+  let insertedId: string
+  try {
+    await client.query('BEGIN')
+    const inserted = await insertTransaction(client, userId, extracted)
+    insertedId = inserted.id
+    await recordImportSource(client, connectionId, email.messageId, inserted.id)
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
+
   const account = accounts.find((candidate) => candidate.id === extracted.account_id)
   const category = categories.find((candidate) => candidate.id === extracted.category_id)
-  await deps.notify(
-    formatNewTransaction({
-      id,
-      description: extracted.description,
-      accountName: account?.name ?? extracted.account_id,
-      categoryName: category?.name ?? extracted.category_id,
-      tags: extracted.tags,
-      currency: extracted.currency,
-      amount: extracted.amount,
-      created_at: extracted.created_at,
-    }),
-  )
+  try {
+    await deps.notify(
+      formatNewTransaction({
+        id: insertedId,
+        description: extracted.description,
+        accountName: account?.name ?? extracted.account_id,
+        categoryName: category?.name ?? extracted.category_id,
+        tags: extracted.tags,
+        currency: extracted.currency,
+        amount: extracted.amount,
+        created_at: extracted.created_at,
+      }),
+    )
+  } catch (error) {
+    console.error('Import notify failed (import kept):', error)
+  }
 }
