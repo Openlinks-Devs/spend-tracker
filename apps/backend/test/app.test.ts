@@ -14,6 +14,9 @@ const requiredEnvVars = {
   TELEGRAM_WEBHOOK_URL: 'https://example.com/telegram/webhook',
   BETTER_AUTH_SECRET: 'test-secret-value-at-least-32-chars-long',
   BETTER_AUTH_URL: 'http://localhost:5173',
+  CONNECTION_ENCRYPTION_KEYS: '1:dGVzdC1rZXktMzItYnl0ZXMtYWFhYWFhYWFhYWFhYWE=',
+  TELEGRAM_BOT_USERNAME: 'SpendTrackerBot',
+  APP_BASE_URL: 'http://localhost:5173',
 }
 
 describe('app wiring', () => {
