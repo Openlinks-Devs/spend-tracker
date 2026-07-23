@@ -9,6 +9,8 @@ import {
   insertCategory,
   updateCategory,
 } from '../db/queries.js'
+import type { AppVariables } from '../http/context.js'
+import { getUserId } from '../http/context.js'
 import { parseJsonBody } from './validation.js'
 
 const newCategorySchema = z.object({
@@ -21,12 +23,15 @@ const categoryUpdateSchema = z.object({
   type: z.string().min(1).optional(),
 })
 
-export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hono {
-  const route = new Hono()
+export function createCategoriesRoute(
+  resolveDb: () => Queryable = getPool,
+): Hono<{ Variables: AppVariables }> {
+  const route = new Hono<{ Variables: AppVariables }>()
 
   route.get('/api/categories', async (context) => {
     try {
-      const categories = await getCategories(resolveDb())
+      const userId = getUserId(context)
+      const categories = await getCategories(resolveDb(), userId)
       return context.json(categories)
     } catch (error) {
       console.error('Failed to list categories:', error)
@@ -36,7 +41,8 @@ export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hon
 
   route.get('/api/categories/:id', async (context) => {
     try {
-      const category = await getCategoryById(resolveDb(), context.req.param('id'))
+      const userId = getUserId(context)
+      const category = await getCategoryById(resolveDb(), userId, context.req.param('id'))
       if (!category) return context.json({ error: 'Category not found' }, 404)
       return context.json(category)
     } catch (error) {
@@ -51,9 +57,10 @@ export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hon
       return context.json({ error: parsed.error }, 400)
     }
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const { id } = await insertCategory(db, parsed.data)
-      const category = await getCategoryById(db, id)
+      const { id } = await insertCategory(db, userId, parsed.data)
+      const category = await getCategoryById(db, userId, id)
       return context.json(category, 201)
     } catch (error) {
       console.error('Failed to create category:', error)
@@ -68,15 +75,16 @@ export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hon
       return context.json({ error: parsed.error }, 400)
     }
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const existing = await getCategoryById(db, id)
+      const existing = await getCategoryById(db, userId, id)
       if (!existing) return context.json({ error: 'Category not found' }, 404)
-      await updateCategory(db, {
+      await updateCategory(db, userId, {
         id,
         name: parsed.data.name ?? existing.name,
         type: parsed.data.type ?? existing.type,
       })
-      const category = await getCategoryById(db, id)
+      const category = await getCategoryById(db, userId, id)
       return context.json(category)
     } catch (error) {
       console.error('Failed to update category:', error)
@@ -87,10 +95,11 @@ export function createCategoriesRoute(resolveDb: () => Queryable = getPool): Hon
   route.delete('/api/categories/:id', async (context) => {
     const id = context.req.param('id')
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const existing = await getCategoryById(db, id)
+      const existing = await getCategoryById(db, userId, id)
       if (!existing) return context.json({ error: 'Category not found' }, 404)
-      await deleteCategory(db, id)
+      await deleteCategory(db, userId, id)
       return context.json({ success: true })
     } catch (error) {
       console.error('Failed to delete category:', error)
