@@ -94,38 +94,51 @@ export async function deleteCategory(db: Queryable, id: string): Promise<void> {
   await db.query('DELETE FROM categories WHERE id = $1', [id])
 }
 
-export async function getAccounts(db: Queryable): Promise<Account[]> {
-  const result = await db.query('SELECT id, name, type, currency FROM accounts ORDER BY name')
+export async function getAccounts(db: Queryable, userId: string): Promise<Account[]> {
+  const result = await db.query(
+    'SELECT id, name, type, currency FROM accounts WHERE user_id = $1 ORDER BY name',
+    [userId],
+  )
   return result.rows as Account[]
 }
 
-export async function getAccountById(db: Queryable, id: string): Promise<Account | null> {
+export async function getAccountById(
+  db: Queryable,
+  userId: string,
+  id: string,
+): Promise<Account | null> {
   const result = await db.query(
-    'SELECT id, name, type, currency FROM accounts WHERE id = $1',
-    [id],
+    'SELECT id, name, type, currency FROM accounts WHERE id = $1 AND user_id = $2',
+    [id, userId],
   )
   return result.rows.length ? (result.rows[0] as Account) : null
 }
 
-export async function insertAccount(db: Queryable, account: NewAccount): Promise<{ id: string }> {
+export async function insertAccount(
+  db: Queryable,
+  userId: string,
+  account: NewAccount,
+): Promise<{ id: string }> {
   const result = await db.query(
-    'INSERT INTO accounts (name, type, currency) VALUES ($1, $2, $3) RETURNING id',
-    [account.name, account.type, account.currency],
+    'INSERT INTO accounts (name, type, currency, user_id) VALUES ($1, $2, $3, $4) RETURNING id',
+    [account.name, account.type, account.currency, userId],
   )
   return { id: result.rows[0].id as string }
 }
 
-export async function updateAccount(db: Queryable, update: AccountUpdate): Promise<void> {
-  await db.query('UPDATE accounts SET name = $2, type = $3, currency = $4 WHERE id = $1', [
-    update.id,
-    update.name,
-    update.type,
-    update.currency,
-  ])
+export async function updateAccount(
+  db: Queryable,
+  userId: string,
+  update: AccountUpdate,
+): Promise<void> {
+  await db.query(
+    'UPDATE accounts SET name = $2, type = $3, currency = $4 WHERE id = $1 AND user_id = $5',
+    [update.id, update.name, update.type, update.currency, userId],
+  )
 }
 
-export async function deleteAccount(db: Queryable, id: string): Promise<void> {
-  await db.query('DELETE FROM accounts WHERE id = $1', [id])
+export async function deleteAccount(db: Queryable, userId: string, id: string): Promise<void> {
+  await db.query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [id, userId])
 }
 
 // amount::float8 so node-postgres returns amount as a JS number (it returns
