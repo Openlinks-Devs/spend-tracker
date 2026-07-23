@@ -248,29 +248,37 @@ export async function getAnalytics(
   }
 }
 
-export async function getTransactionById(db: Queryable, id: string): Promise<Transaction | null> {
+export async function getTransactionById(
+  db: Queryable,
+  userId: string,
+  id: string,
+): Promise<Transaction | null> {
   const result = await db.query(
     `SELECT id, description, amount::float8 AS amount, currency, account_id, category_id, tags, created_at, updated_at
        FROM transactions
-      WHERE id = $1`,
-    [id],
+      WHERE id = $1 AND user_id = $2`,
+    [id, userId],
   )
   return result.rows.length ? (result.rows[0] as Transaction) : null
 }
 
-export async function getDistinctTags(db: Queryable): Promise<string[]> {
-  const result = await db.query('SELECT DISTINCT unnest(tags) AS tag FROM transactions')
+export async function getDistinctTags(db: Queryable, userId: string): Promise<string[]> {
+  const result = await db.query(
+    'SELECT DISTINCT unnest(tags) AS tag FROM transactions WHERE user_id = $1',
+    [userId],
+  )
   return result.rows.map((row: { tag: string }) => row.tag)
 }
 
 export async function insertTransaction(
   db: Queryable,
+  userId: string,
   transaction: NewTransaction,
 ): Promise<{ id: string }> {
   const result = await db.query(
     `INSERT INTO transactions
-       (description, amount, currency, account_id, category_id, tags, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (description, amount, currency, account_id, category_id, tags, created_at, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
     [
       transaction.description,
@@ -280,6 +288,7 @@ export async function insertTransaction(
       transaction.category_id,
       transaction.tags,
       transaction.created_at,
+      userId,
     ],
   )
   return { id: result.rows[0].id as string }
@@ -298,16 +307,17 @@ export interface TransactionalPool {
 
 export async function createTransfer(
   pool: TransactionalPool,
+  userId: string,
   legs: { from: NewTransaction; to: NewTransaction },
 ): Promise<{ from: Transaction; to: Transaction }> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const outLeg = await insertTransaction(client, legs.from)
-    const inLeg = await insertTransaction(client, legs.to)
+    const outLeg = await insertTransaction(client, userId, legs.from)
+    const inLeg = await insertTransaction(client, userId, legs.to)
     await client.query('COMMIT')
-    const from = await getTransactionById(client, outLeg.id)
-    const to = await getTransactionById(client, inLeg.id)
+    const from = await getTransactionById(client, userId, outLeg.id)
+    const to = await getTransactionById(client, userId, inLeg.id)
     if (!from || !to) throw new Error('Transfer legs missing after insert')
     return { from, to }
   } catch (error) {
@@ -318,12 +328,16 @@ export async function createTransfer(
   }
 }
 
-export async function updateTransaction(db: Queryable, update: TransactionUpdate): Promise<void> {
+export async function updateTransaction(
+  db: Queryable,
+  userId: string,
+  update: TransactionUpdate,
+): Promise<void> {
   await db.query(
     `UPDATE transactions
        SET description = $2, amount = $3, currency = $4, account_id = $5,
            category_id = $6, tags = $7, created_at = $8, updated_at = now()
-     WHERE id = $1`,
+     WHERE id = $1 AND user_id = $9`,
     [
       update.id,
       update.description,
@@ -333,12 +347,13 @@ export async function updateTransaction(db: Queryable, update: TransactionUpdate
       update.category_id,
       update.tags,
       update.created_at,
+      userId,
     ],
   )
 }
 
-export async function deleteTransaction(db: Queryable, id: string): Promise<void> {
-  await db.query('DELETE FROM transactions WHERE id = $1', [id])
+export async function deleteTransaction(db: Queryable, userId: string, id: string): Promise<void> {
+  await db.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [id, userId])
 }
 
 export async function ensureStateTable(db: Queryable): Promise<void> {
