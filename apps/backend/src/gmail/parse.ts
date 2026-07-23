@@ -22,10 +22,18 @@ function findTextPart(part: gmail_v1.Schema$MessagePart | undefined): string {
   return ''
 }
 
-export function parseMessage(message: GmailMessage): { subject: string; text: string } {
+export function parseMessage(message: GmailMessage): {
+  subject: string
+  text: string
+  internalDateSeconds: string
+} {
   const headers = message.payload?.headers ?? []
   const subjectHeader = headers.find((header) => header.name?.toLowerCase() === 'subject')
   const rawText = findTextPart(message.payload ?? undefined)
   const text = rawText.replace(/\s*\n+\s*/g, ' ').trim()
-  return { subject: subjectHeader?.value ?? '', text }
+  // Gmail's internalDate is milliseconds since epoch as a string; the poller
+  // cursor works in seconds to match the messages.list after: query.
+  const internalDateMillis = message.internalDate ?? '0'
+  const internalDateSeconds = String(Math.floor(Number(internalDateMillis) / 1000))
+  return { subject: subjectHeader?.value ?? '', text, internalDateSeconds }
 }

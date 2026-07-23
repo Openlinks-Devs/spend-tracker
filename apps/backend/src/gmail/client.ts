@@ -51,3 +51,37 @@ export async function fetchMessage(gmail: gmail_v1.Gmail, id: string): Promise<G
   const response = await gmail.users.messages.get({ userId: 'me', id, format: 'full' })
   return response.data
 }
+
+export function createGmailClientForToken(refreshToken: string): gmail_v1.Gmail {
+  const env = loadEnv()
+  const auth = new google.auth.OAuth2(
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+    env.GOOGLE_REDIRECT_URI,
+  )
+  auth.setCredentials({ refresh_token: refreshToken })
+  return google.gmail({ version: 'v1', auth })
+}
+
+// n8n-style listing: a timestamp query instead of the history API, whose
+// cursor expires after about a week. after: is inclusive at the boundary
+// second; import_source dedupe absorbs the reappearing edge message.
+export async function listMessageIdsSince(
+  gmail: gmail_v1.Gmail,
+  afterEpochSeconds: string,
+): Promise<string[]> {
+  const messageIds: string[] = []
+  let pageToken: string | undefined
+  do {
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      q: `after:${afterEpochSeconds} -in:scheduled`,
+      pageToken,
+    })
+    for (const message of response.data.messages ?? []) {
+      if (message.id) messageIds.push(message.id)
+    }
+    pageToken = response.data.nextPageToken ?? undefined
+  } while (pageToken)
+  return messageIds
+}
