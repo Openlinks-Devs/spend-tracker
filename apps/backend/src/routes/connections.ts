@@ -66,11 +66,13 @@ export function createConnectionsRoute(
       if (!connection) return context.json({ error: 'Connection not found' }, 404)
       if (connection.provider === 'gmail' && connection.secret_encrypted && connection.key_version) {
         const keys = parseEncryptionKeys(loadEnv().CONNECTION_ENCRYPTION_KEYS)
+        // AAD must match the callback's encrypt AAD: "<userId>:<email>", where
+        // the connection's external_id is the linked Gmail address.
         const refreshToken = decryptSecret(
           connection.secret_encrypted,
           connection.key_version,
           keys,
-          connection.id,
+          `${userId}:${connection.external_id}`,
         )
         await revokeGoogleToken(refreshToken)
       }
