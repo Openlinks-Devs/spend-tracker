@@ -6,6 +6,7 @@ import type {
   AnalyticsPayload,
   Category,
   CategoryUpdate,
+  Connection,
   NewAccount,
   NewCategory,
   NewTransaction,
@@ -97,6 +98,14 @@ export const tagsApi = {
 export const transfersApi = {
   create: (payload: TransferInput) =>
     request<TransferResult>('/transfers', { method: 'POST', body: JSON.stringify(payload) }),
+}
+
+export const connectionsApi = {
+  list: () => request<Connection[]>('/connections'),
+  remove: (id: string) => request<{ success: boolean }>(`/connections/${id}`, { method: 'DELETE' }),
+  gmailLinkUrl: () => request<{ url: string }>('/connections/gmail/link-url', { method: 'POST' }),
+  telegramPairCode: () =>
+    request<{ deepLink: string }>('/connections/telegram/pair-code', { method: 'POST' }),
 }
 
 export interface TransactionListPage {
