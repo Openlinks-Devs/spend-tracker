@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import type { Queryable } from '../db/pool.js'
-import { getPool } from '../db/pool.js'
 import {
   getCategories,
   getDistinctTags,
@@ -23,9 +22,10 @@ interface TelegramUpdate {
 
 export interface WebhookDeps {
   db: Queryable
-  // The Telegram webhook runs server-side with no session, so edits/deletes
-  // are attributed to this explicit owner user id (resolved per request from
-  // ALLOWED_EMAILS; see the route handler below).
+  // The Telegram webhook runs server-side with no session, so edits/deletes must
+  // be scoped to an explicit user id. The route is disabled until per-user
+  // connections can supply this from a linked account (see
+  // docs/superpowers/specs/2026-07-17-per-user-connections-design.md).
   userId: string
   classify: typeof classifyEdit
   notify: typeof sendMessage
@@ -40,21 +40,21 @@ export async function handleTelegramUpdate(update: TelegramUpdate, deps: Webhook
   if (!transactionId) return
 
   if (message.text.trim() === '/delete') {
-    await deleteTransaction(deps.db, transactionId)
+    await deleteTransaction(deps.db, deps.userId, transactionId)
     await deps.notify(formatDeleted(), { replyToMessageId: message.reply_to_message?.message_id })
     return
   }
 
   const edit = parseEdit(message.text)
   const [existing, categories, tags] = await Promise.all([
-    getTransactionById(deps.db, transactionId),
+    getTransactionById(deps.db, deps.userId, transactionId),
     getCategories(deps.db, deps.userId),
-    getDistinctTags(deps.db),
+    getDistinctTags(deps.db, deps.userId),
   ])
   if (!existing) return
   const classified = await deps.classify({ description: edit.description, categories, tags })
   const finalTags = edit.tags.length ? edit.tags : classified.tags
-  await updateTransaction(deps.db, {
+  await updateTransaction(deps.db, deps.userId, {
     id: transactionId,
     description: edit.description,
     amount: existing.amount,
@@ -83,27 +83,11 @@ telegramRoute.post('/telegram/webhook', async (context) => {
   if (secret !== env.TELEGRAM_WEBHOOK_SECRET) {
     return context.json({ ok: false }, 401)
   }
-  const db = getPool()
-  // Same owner-lookup pattern as the Gmail poller in index.ts: the webhook has
-  // no session, so edits/deletes are attributed to the owner (first entry of
-  // ALLOWED_EMAILS). Full per-user Telegram linking is a later milestone.
-  const ownerEmail = env.ALLOWED_EMAILS.split(',')[0]?.trim()
-  const ownerLookup = ownerEmail
-    ? await db.query('SELECT id FROM "user" WHERE email = $1', [ownerEmail])
-    : { rows: [] }
-  const ownerUserId = ownerLookup.rows[0]?.id as string | undefined
-  if (!ownerUserId) {
-    console.warn(
-      `No "user" row for ${ownerEmail ?? '(no ALLOWED_EMAILS)'}. Sign in once with Google before editing transactions from Telegram.`,
-    )
-    return context.json({ ok: true })
-  }
-  const update = await context.req.json()
-  await handleTelegramUpdate(update, {
-    db,
-    userId: ownerUserId,
-    classify: classifyEdit,
-    notify: sendMessage,
-  })
+  // Edit-by-reply is disabled until per-user connections land (see
+  // docs/superpowers/specs/2026-07-17-per-user-connections-design.md). The
+  // webhook runs with no session, so there is no user to scope edits/deletes to.
+  // handleTelegramUpdate stays intact for when a linked connection can supply the
+  // owner's user id; for now we validate the secret and accept the update as a
+  // no-op so Telegram stops retrying.
   return context.json({ ok: true })
 })
