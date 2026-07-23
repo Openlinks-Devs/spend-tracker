@@ -7,13 +7,16 @@ import { formatError, formatNewTransaction } from '../telegram/format.js'
 
 export interface ProcessDeps {
   db: Queryable
+  // The Gmail poller runs server-side with no session, so imported rows are
+  // attributed to this explicit owner user id (resolved at startup; see index.ts).
+  userId: string
   now: () => string
   detect: typeof detectTransaction
   extract: typeof extractTransaction
   notify: typeof sendMessage
 }
 
-export const defaultProcessDeps: Omit<ProcessDeps, 'db'> = {
+export const defaultProcessDeps: Omit<ProcessDeps, 'db' | 'userId'> = {
   now: () => new Date().toISOString(),
   detect: detectTransaction,
   extract: extractTransaction,
@@ -29,7 +32,7 @@ export async function processEmail(
 
   const [categories, accounts, tags] = await Promise.all([
     getCategories(deps.db),
-    getAccounts(deps.db),
+    getAccounts(deps.db, deps.userId),
     getDistinctTags(deps.db),
   ])
 
