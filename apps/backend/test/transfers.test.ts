@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
+import { Hono } from 'hono'
 import { createTransfersRoute } from '../src/routes/transfers.js'
+import type { AppVariables } from '../src/http/context.js'
 
 // A fake pool whose connect() returns a client backed by one query mock, so we
 // can assert the SQL/params the route runs inside its transaction.
@@ -23,9 +25,17 @@ const validBody = {
   created_at: '2026-07-13T12:00:00.000Z',
 }
 
+// The guard normally sets userId on the context; inject it here so both transfer
+// legs carry the owner's user id.
 function requestTransfer(pool: ReturnType<typeof fakePool>, body: unknown) {
   const route = createTransfersRoute(() => pool)
-  return route.request('/api/transfers', {
+  const app = new Hono<{ Variables: AppVariables }>()
+  app.use('*', async (context, next) => {
+    context.set('userId', 'user-1')
+    await next()
+  })
+  app.route('/', route)
+  return app.request('/api/transfers', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -54,13 +64,13 @@ describe('transfers route', () => {
     const calls = query.mock.calls
     expect(calls[0][0]).toBe('BEGIN')
     expect(calls[3][0]).toBe('COMMIT')
-    // Out leg: negative amount, source account/currency.
+    // Out leg: negative amount, source account/currency, scoped to the user.
     expect(calls[1][1]).toEqual([
-      'Transfer to BCP Soles', -100, 'USD', 'acc-usd', 'balance-minus', ['transfer'], '2026-07-13T12:00:00.000Z',
+      'Transfer to BCP Soles', -100, 'USD', 'acc-usd', 'balance-minus', ['transfer'], '2026-07-13T12:00:00.000Z', 'user-1',
     ])
-    // In leg: positive amount, destination account/currency.
+    // In leg: positive amount, destination account/currency, scoped to the user.
     expect(calls[2][1]).toEqual([
-      'Transfer from Deel dólares', 370, 'PEN', 'acc-pen', 'balance-plus', ['transfer'], '2026-07-13T12:00:00.000Z',
+      'Transfer from Deel dólares', 370, 'PEN', 'acc-pen', 'balance-plus', ['transfer'], '2026-07-13T12:00:00.000Z', 'user-1',
     ])
   })
 

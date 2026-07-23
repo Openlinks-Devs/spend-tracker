@@ -34,24 +34,25 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
 describe('processEmail', () => {
   it('skips non-transaction email', async () => {
     const deps = baseDeps({ detect: vi.fn().mockResolvedValue(false) })
-    await processEmail({ subject: 'Oferta', text: 'descuento' }, deps as never)
+    await processEmail({ subject: 'Oferta', text: 'descuento' }, 'user-1', deps as never)
     expect(deps.extract).not.toHaveBeenCalled()
     expect(deps.notify).not.toHaveBeenCalled()
   })
 
-  it('inserts and notifies for a valid transaction', async () => {
+  it('inserts scoped to the passed user and notifies for a valid transaction', async () => {
     const deps = baseDeps()
-    await processEmail({ subject: 'Consumo', text: 'S/ 35.00' }, deps as never)
+    await processEmail({ subject: 'Consumo', text: 'S/ 35.00' }, 'user-1', deps as never)
     const insertCall = deps.db.query.mock.calls.find((call: unknown[]) =>
       /insert into transactions/i.test(call[0] as string))
     expect(insertCall).toBeTruthy()
+    expect(insertCall?.[1]).toContain('user-1')
     expect(deps.notify).toHaveBeenCalledOnce()
     expect((deps.notify.mock.calls[0][0] as string)).toContain('ID: tx1')
   })
 
   it('sends an error notification when extraction yields no account', async () => {
     const deps = baseDeps({ extract: vi.fn().mockResolvedValue(null) })
-    await processEmail({ subject: 'Consumo', text: 'raro' }, deps as never)
+    await processEmail({ subject: 'Consumo', text: 'raro' }, 'user-1', deps as never)
     const insertCall = deps.db.query.mock.calls.find((call: unknown[]) =>
       /insert into transactions/i.test(call[0] as string))
     expect(insertCall).toBeUndefined()

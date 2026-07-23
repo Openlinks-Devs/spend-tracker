@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
+import { Hono } from 'hono'
 import { createTransactionsRoute } from '../src/routes/transactions.js'
+import type { AppVariables } from '../src/http/context.js'
 
 const sampleTransaction = {
   id: 'tx1',
@@ -13,8 +15,24 @@ const sampleTransaction = {
   updated_at: null,
 }
 
+// The guard normally sets userId on the context before the route runs. For these
+// unit tests, mount the route under a tiny parent app that sets it.
+function requestAsUser(
+  route: Hono<{ Variables: AppVariables }>,
+  path: string,
+  init?: RequestInit,
+) {
+  const app = new Hono<{ Variables: AppVariables }>()
+  app.use('*', async (context, next) => {
+    context.set('userId', 'user-1')
+    await next()
+  })
+  app.route('/', route)
+  return app.request(path, init)
+}
+
 describe('transactions route', () => {
-  it('GET /api/transactions returns the list', async () => {
+  it('GET /api/transactions returns the list scoped to the user', async () => {
     const db = {
       query: vi
         .fn()
@@ -22,11 +40,14 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ count: '1' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions')
+    const response = await requestAsUser(route, '/api/transactions')
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.items[0].id).toBe('tx1')
     expect(body.total).toBe(1)
+    const [listSql, listParams] = db.query.mock.calls[0]
+    expect(listSql).toMatch(/user_id = \$/)
+    expect(listParams).toContain('user-1')
   })
 
   it('GET /api/transactions applies filters and pagination', async () => {
@@ -51,18 +72,22 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ count: '1' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions?q=coffee&type=expense&limit=10&offset=0')
+    const response = await requestAsUser(
+      route,
+      '/api/transactions?q=coffee&type=expense&limit=10&offset=0',
+    )
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.total).toBe(1)
     expect(body.items[0].id).toBe('t1')
     const listSql = db.query.mock.calls[0][0]
+    expect(listSql).toMatch(/user_id = \$/)
     expect(listSql).toMatch(/description ILIKE/i)
     expect(listSql).toMatch(/amount < 0/)
     expect(listSql).toMatch(/LIMIT/i)
   })
 
-  it('GET /api/transactions filters by currency', async () => {
+  it('GET /api/transactions filters by currency and by user', async () => {
     const db = {
       query: vi
         .fn()
@@ -70,22 +95,24 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ count: '0' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions?currency=USD')
+    const response = await requestAsUser(route, '/api/transactions?currency=USD')
     expect(response.status).toBe(200)
-    const listSql = db.query.mock.calls[0][0]
+    const [listSql, listParams] = db.query.mock.calls[0]
     expect(listSql).toMatch(/currency = \$/)
-    expect(db.query.mock.calls[0][1]).toContain('USD')
+    expect(listSql).toMatch(/user_id = \$/)
+    expect(listParams).toContain('USD')
+    expect(listParams).toContain('user-1')
   })
 
   it('GET /api/transactions/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/nope')
+    const response = await requestAsUser(route, '/api/transactions/nope')
     expect(response.status).toBe(404)
     expect(await response.json()).toEqual({ error: 'Transaction not found' })
   })
 
-  it('POST /api/transactions creates and returns 201', async () => {
+  it('POST /api/transactions creates and returns 201 scoped to the user', async () => {
     const db = {
       query: vi
         .fn()
@@ -93,7 +120,7 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, id: 'tx-new' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions', {
+    const response = await requestAsUser(route, '/api/transactions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -108,14 +135,16 @@ describe('transactions route', () => {
     expect(response.status).toBe(201)
     const body = await response.json()
     expect(body.id).toBe('tx-new')
-    const [insertSql] = db.query.mock.calls[0]
+    const [insertSql, insertParams] = db.query.mock.calls[0]
     expect(insertSql).toMatch(/insert into transactions/i)
+    expect(insertSql).toMatch(/user_id/)
+    expect(insertParams).toContain('user-1')
   })
 
   it('POST /api/transactions returns 400 on invalid body', async () => {
     const db = { query: vi.fn() }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions', {
+    const response = await requestAsUser(route, '/api/transactions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ description: '' }),
@@ -133,7 +162,7 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
+    const response = await requestAsUser(route, '/api/transactions/tx1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ description: 'Tea' }),
@@ -141,6 +170,8 @@ describe('transactions route', () => {
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.description).toBe('Tea')
+    const [updateSql] = db.query.mock.calls[1]
+    expect(updateSql).toMatch(/user_id = \$/)
   })
 
   it('PATCH /api/transactions/:id preserves the existing category_id when the body omits it', async () => {
@@ -152,7 +183,7 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
+    const response = await requestAsUser(route, '/api/transactions/tx1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ description: 'Tea' }),
@@ -178,7 +209,7 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [updatedTransaction] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
+    const response = await requestAsUser(route, '/api/transactions/tx1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -201,6 +232,7 @@ describe('transactions route', () => {
       'c1',
       ['food'],
       '2026-07-01T08:30:00.000Z',
+      'user-1',
     ])
   })
 
@@ -213,7 +245,7 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [{ ...sampleTransaction, description: 'Tea' }] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', {
+    const response = await requestAsUser(route, '/api/transactions/tx1', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ description: 'Tea' }),
@@ -229,13 +261,14 @@ describe('transactions route', () => {
       'c1',
       ['food'],
       '2026-06-30T10:00:00.000Z',
+      'user-1',
     ])
   })
 
   it('PATCH /api/transactions/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/nope', {
+    const response = await requestAsUser(route, '/api/transactions/nope', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ description: 'Tea' }),
@@ -251,22 +284,25 @@ describe('transactions route', () => {
         .mockResolvedValueOnce({ rows: [] }),
     }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/tx1', { method: 'DELETE' })
+    const response = await requestAsUser(route, '/api/transactions/tx1', { method: 'DELETE' })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ success: true })
+    const [deleteSql, deleteParams] = db.query.mock.calls[1]
+    expect(deleteSql).toMatch(/user_id = \$/)
+    expect(deleteParams).toEqual(['tx1', 'user-1'])
   })
 
   it('DELETE /api/transactions/:id returns 404 when missing', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions/nope', { method: 'DELETE' })
+    const response = await requestAsUser(route, '/api/transactions/nope', { method: 'DELETE' })
     expect(response.status).toBe(404)
   })
 
   it('returns 500 with a JSON error when the query fails', async () => {
     const db = { query: vi.fn().mockRejectedValue(new Error('db down')) }
     const route = createTransactionsRoute(() => db)
-    const response = await route.request('/api/transactions')
+    const response = await requestAsUser(route, '/api/transactions')
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ error: 'Failed to list transactions' })
   })

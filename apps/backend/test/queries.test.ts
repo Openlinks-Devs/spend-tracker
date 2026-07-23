@@ -24,15 +24,18 @@ describe('queries', () => {
     expect(db.query.mock.calls[0][0]).toMatch(/from categories/i)
   })
 
-  it('getDistinctTags flattens to strings', async () => {
+  it('getDistinctTags flattens to strings scoped to the user', async () => {
     const db = fakeDb([{ tag: 'food' }, { tag: 'delivery' }])
-    const tags = await getDistinctTags(db)
+    const tags = await getDistinctTags(db, 'user-1')
     expect(tags).toEqual(['food', 'delivery'])
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/user_id = \$/)
+    expect(params).toEqual(['user-1'])
   })
 
   it('insertTransaction passes params and returns id', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'tx1' }] }) }
-    const result = await insertTransaction(db, {
+    const result = await insertTransaction(db, 'user-1', {
       description: 'PLIN', amount: -35, currency: 'PEN',
       account_id: 'a1', category_id: 'c1', tags: ['food', 'plin', 'transfer'],
       created_at: '2026-06-30T10:00:00.000Z',
@@ -40,16 +43,19 @@ describe('queries', () => {
     expect(result.id).toBe('tx1')
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/insert into transactions/i)
+    expect(sql).toMatch(/user_id/)
     expect(params).toContain('PLIN')
     expect(params).toContain(-35)
+    expect(params).toContain('user-1')
   })
 
-  it('deleteTransaction issues a delete with the id', async () => {
+  it('deleteTransaction issues a delete scoped by id and user', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
-    await deleteTransaction(db, 'tx1')
+    await deleteTransaction(db, 'user-1', 'tx1')
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/delete from transactions/i)
-    expect(params).toEqual(['tx1'])
+    expect(sql).toMatch(/user_id = \$/)
+    expect(params).toEqual(['tx1', 'user-1'])
   })
 
   it('setState upserts', async () => {
@@ -66,11 +72,12 @@ describe('queries', () => {
     expect(db.query.mock.calls[0][0]).toMatch(/order by created_at desc/i)
   })
 
-  it('getTransactionById returns null when no rows', async () => {
+  it('getTransactionById returns null when no rows and scopes by user', async () => {
     const db = fakeDb([])
-    const transaction = await getTransactionById(db, 'missing')
+    const transaction = await getTransactionById(db, 'user-1', 'missing')
     expect(transaction).toBeNull()
-    expect(db.query.mock.calls[0][1]).toEqual(['missing'])
+    expect(db.query.mock.calls[0][0]).toMatch(/user_id = \$/)
+    expect(db.query.mock.calls[0][1]).toEqual(['missing', 'user-1'])
   })
 
   it('getAccountById returns the row when present', async () => {

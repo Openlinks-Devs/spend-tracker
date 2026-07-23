@@ -1,55 +1,43 @@
 import { describe, it, expect, vi } from 'vitest'
-import { handleTelegramUpdate } from '../src/telegram/webhook.js'
 
-function deps(overrides: Record<string, unknown> = {}) {
-  const db = { query: vi.fn(async (sql: string, params?: unknown[]) => {
-    if (/from categories/i.test(sql)) return { rows: [{ id: 'c1', name: 'Food', type: 'expense' }] }
-    if (/unnest/i.test(sql)) return { rows: [{ tag: 'food' }] }
-    if (/select[\s\S]*from transactions/i.test(sql))
-      return { rows: [{
-        id: 'tx-1', description: 'Almuerzo viejo', amount: -25, currency: 'PEN',
-        account_id: 'a1', category_id: 'c1', tags: ['food'],
-        created_at: '2026-06-30T10:00:00.000Z', updated_at: null,
-      }] }
-    return { rows: [] }
-  }) }
-  return {
-    db,
-    classify: vi.fn().mockResolvedValue({ category_id: 'c1', tags: ['food'] }),
-    notify: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  }
+// Edit-by-reply is disabled until per-user connections land, so the webhook route
+// only validates the secret token and then accepts the update as a no-op. Stub
+// loadEnv to supply the expected secret, and spy on the pool so we can prove no
+// database query runs.
+const { poolQuery } = vi.hoisted(() => ({ poolQuery: vi.fn() }))
+vi.mock('../src/db/pool.js', () => ({ getPool: () => ({ query: poolQuery }) }))
+vi.mock('../src/config/env.js', () => ({
+  loadEnv: () => ({ TELEGRAM_WEBHOOK_SECRET: 'test-secret' }),
+}))
+
+import { telegramRoute } from '../src/telegram/webhook.js'
+
+function postWebhook(secret: string | undefined, body: unknown) {
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  if (secret !== undefined) headers['X-Telegram-Bot-Api-Secret-Token'] = secret
+  return telegramRoute.request('/telegram/webhook', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
 }
 
-const notification = 'Nueva transaccion\nID: tx-1\nAccount: BCP'
-
-describe('handleTelegramUpdate', () => {
-  it('deletes on /delete reply', async () => {
-    const d = deps()
-    await handleTelegramUpdate({ message: {
-      text: '/delete', reply_to_message: { text: notification, message_id: 5 },
-    } }, d as never)
-    const del = d.db.query.mock.calls.find((call: unknown[]) =>
-      /delete from transactions/i.test(call[0] as string))
-    expect(del?.[1]).toEqual(['tx-1'])
-    expect((d.notify.mock.calls[0][0] as string)).toMatch(/eliminada/i)
+describe('telegram webhook route', () => {
+  it('rejects a request with a bad secret token', async () => {
+    const response = await postWebhook('wrong-secret', {
+      message: { text: '/delete', reply_to_message: { text: 'ID: tx-1' } },
+    })
+    expect(response.status).toBe(401)
+    expect(await response.json()).toEqual({ ok: false })
+    expect(poolQuery).not.toHaveBeenCalled()
   })
 
-  it('reclassifies and updates on an edit reply', async () => {
-    const d = deps()
-    await handleTelegramUpdate({ message: {
-      text: 'Almuerzo\n[food]', reply_to_message: { text: notification, message_id: 5 },
-    } }, d as never)
-    const update = d.db.query.mock.calls.find((call: unknown[]) =>
-      /update transactions/i.test(call[0] as string))
-    expect(update?.[1]?.[0]).toBe('tx-1')
-    expect(d.classify).toHaveBeenCalledOnce()
-  })
-
-  it('ignores a message that is not a reply', async () => {
-    const d = deps()
-    await handleTelegramUpdate({ message: { text: 'hello' } }, d as never)
-    expect(d.db.query).not.toHaveBeenCalled()
-    expect(d.notify).not.toHaveBeenCalled()
+  it('accepts a valid update as a no-op without touching the database', async () => {
+    const response = await postWebhook('test-secret', {
+      message: { text: '/delete', reply_to_message: { text: 'ID: tx-1' } },
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true })
+    expect(poolQuery).not.toHaveBeenCalled()
   })
 })
