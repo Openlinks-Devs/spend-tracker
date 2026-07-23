@@ -18,6 +18,7 @@ const schema = z.object({
   BETTER_AUTH_URL: z.string().min(1),
   ALLOWED_EMAILS: z.string().default('misaelabanto@gmail.com'),
   APP_MODE: z.enum(['mock', 'live']).default('mock'),
+  NODE_ENV: z.string().optional(),
 })
 
 export type Env = z.infer<typeof schema>
@@ -28,5 +29,14 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     const missing = parsed.error.issues.map((issue) => issue.path.join('.')).join(', ')
     throw new Error(`Invalid or missing environment variables: ${missing}`)
   }
-  return parsed.data
+  const parsedEnv = parsed.data
+  if (parsedEnv.NODE_ENV === 'production') {
+    if (parsedEnv.APP_MODE === 'mock') {
+      throw new Error('APP_MODE=mock is not allowed in production (it bypasses auth).')
+    }
+    if (!source.ALLOWED_EMAILS || source.ALLOWED_EMAILS.trim() === '') {
+      throw new Error('ALLOWED_EMAILS must be set explicitly in production.')
+    }
+  }
+  return parsedEnv
 }
