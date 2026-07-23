@@ -24,8 +24,8 @@ These shipped on web/backend and need to be brought to the Android client:
 
 Tracked in `docs/superpowers/plans/` and `docs/superpowers/specs/`:
 
-1. **Multi-tenancy** — data scoped per user (`user_id` on `accounts`/`categories`/`transactions`), auth-gated. The Android client must send auth and only ever show the signed-in user's data.
-2. **Per-user integrations (connections)** — each user links their own Gmail account(s) and Telegram; premium (multiple Gmail accounts) is gated by an `is_premium` flag. Android needs the connection-management UI too.
+1. **Multi-tenancy** — data scoped per user (`user_id` on `accounts`/`categories`/`transactions`), auth-gated. Implemented on backend and web, pending deploy. Android parity still pending: the client must send auth and only ever show the signed-in user's data.
+2. **Per-user integrations (connections)** — each user links their own Gmail account(s) and Telegram; premium (multiple Gmail accounts) is gated by an `is_premium` flag. Implemented on backend and web, pending deploy. Android parity still pending: the connection-management UI needs to be built.
 3. **Mercado Pago (Mercado Libre) billing** — subscription flow that sets `is_premium`. Android needs the upgrade entry point.
 
 ## Conventions
