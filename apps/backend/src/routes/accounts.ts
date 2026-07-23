@@ -9,6 +9,8 @@ import {
   insertAccount,
   updateAccount,
 } from '../db/queries.js'
+import type { AppVariables } from '../http/context.js'
+import { getUserId } from '../http/context.js'
 import { parseJsonBody } from './validation.js'
 
 const newAccountSchema = z.object({
@@ -23,12 +25,15 @@ const accountUpdateSchema = z.object({
   currency: z.string().min(1).optional(),
 })
 
-export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono {
-  const route = new Hono()
+export function createAccountsRoute(
+  resolveDb: () => Queryable = getPool,
+): Hono<{ Variables: AppVariables }> {
+  const route = new Hono<{ Variables: AppVariables }>()
 
   route.get('/api/accounts', async (context) => {
     try {
-      const accounts = await getAccounts(resolveDb())
+      const userId = getUserId(context)
+      const accounts = await getAccounts(resolveDb(), userId)
       return context.json(accounts)
     } catch (error) {
       console.error('Failed to list accounts:', error)
@@ -38,7 +43,8 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
 
   route.get('/api/accounts/:id', async (context) => {
     try {
-      const account = await getAccountById(resolveDb(), context.req.param('id'))
+      const userId = getUserId(context)
+      const account = await getAccountById(resolveDb(), userId, context.req.param('id'))
       if (!account) return context.json({ error: 'Account not found' }, 404)
       return context.json(account)
     } catch (error) {
@@ -53,9 +59,10 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
       return context.json({ error: parsed.error }, 400)
     }
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const { id } = await insertAccount(db, parsed.data)
-      const account = await getAccountById(db, id)
+      const { id } = await insertAccount(db, userId, parsed.data)
+      const account = await getAccountById(db, userId, id)
       return context.json(account, 201)
     } catch (error) {
       console.error('Failed to create account:', error)
@@ -70,16 +77,17 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
       return context.json({ error: parsed.error }, 400)
     }
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const existing = await getAccountById(db, id)
+      const existing = await getAccountById(db, userId, id)
       if (!existing) return context.json({ error: 'Account not found' }, 404)
-      await updateAccount(db, {
+      await updateAccount(db, userId, {
         id,
         name: parsed.data.name ?? existing.name,
         type: parsed.data.type ?? existing.type,
         currency: parsed.data.currency ?? existing.currency,
       })
-      const account = await getAccountById(db, id)
+      const account = await getAccountById(db, userId, id)
       return context.json(account)
     } catch (error) {
       console.error('Failed to update account:', error)
@@ -90,10 +98,11 @@ export function createAccountsRoute(resolveDb: () => Queryable = getPool): Hono 
   route.delete('/api/accounts/:id', async (context) => {
     const id = context.req.param('id')
     try {
+      const userId = getUserId(context)
       const db = resolveDb()
-      const existing = await getAccountById(db, id)
+      const existing = await getAccountById(db, userId, id)
       if (!existing) return context.json({ error: 'Account not found' }, 404)
-      await deleteAccount(db, id)
+      await deleteAccount(db, userId, id)
       return context.json({ success: true })
     } catch (error) {
       console.error('Failed to delete account:', error)
