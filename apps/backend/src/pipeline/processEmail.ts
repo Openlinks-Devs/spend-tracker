@@ -31,7 +31,7 @@ export async function processEmail(
   if (!isTransaction) return
 
   const [categories, accounts, tags] = await Promise.all([
-    getCategories(deps.db),
+    getCategories(deps.db, deps.userId),
     getAccounts(deps.db, deps.userId),
     getDistinctTags(deps.db),
   ])
