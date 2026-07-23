@@ -1,5 +1,12 @@
 import { NavLink, Outlet, useLocation } from 'react-router'
-import { IconLayoutDashboard, IconReceipt, IconWallet, IconTags, IconLogout } from '@tabler/icons-react'
+import {
+  IconLayoutDashboard,
+  IconReceipt,
+  IconWallet,
+  IconTags,
+  IconPlug,
+  IconLogout,
+} from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { signOut, useSession } from '@/lib/authClient'
@@ -12,6 +19,7 @@ const navigationItems = [
   { to: '/transactions', label: 'Transactions', icon: IconReceipt, end: false, preservesFilters: true },
   { to: '/accounts', label: 'Accounts', icon: IconWallet, end: false, preservesFilters: false },
   { to: '/categories', label: 'Categories', icon: IconTags, end: false, preservesFilters: false },
+  { to: '/integrations', label: 'Integrations', icon: IconPlug, end: false, preservesFilters: false },
 ]
 
 export function AppLayout() {
