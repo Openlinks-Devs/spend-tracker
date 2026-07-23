@@ -57,6 +57,12 @@ describe('buildTransactionFilter', () => {
     const { clause } = buildTransactionFilter({ q: 'coffee' }, 5)
     expect(clause).toMatch(/\$5/)
   })
+
+  it('scopes by user_id when userId is set', () => {
+    const { clause, params } = buildTransactionFilter({ userId: 'user-1' })
+    expect(clause).toMatch(/user_id = \$1/)
+    expect(params).toEqual(['user-1'])
+  })
 })
 
 describe('resolveDateRange', () => {
