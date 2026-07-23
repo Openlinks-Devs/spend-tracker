@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { createSessionGuard } from './auth/sessionGuard.js'
 import { resolveSessionFromRequest } from './auth/resolveSession.js'
 import { getAuth } from './auth.js'
+import type { AppVariables } from './http/context.js'
 import { healthRoute } from './routes/health.js'
 import { oauthRoute } from './routes/oauth.js'
 import { telegramRoute } from './telegram/webhook.js'
@@ -14,8 +15,8 @@ import { createTagsRoute } from './routes/tags.js'
 
 export function buildApp(
   resolveSession: (headers: Headers) => Promise<unknown> = resolveSessionFromRequest,
-): Hono {
-  const app = new Hono()
+): Hono<{ Variables: AppVariables }> {
+  const app = new Hono<{ Variables: AppVariables }>()
 
   // Credentialed requests (session cookie) require a concrete origin, never '*',
   // or browsers refuse to expose the response. Default to the browser-facing
