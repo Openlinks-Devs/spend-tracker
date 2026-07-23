@@ -75,17 +75,24 @@ describe('queries', () => {
 
   it('getAccountById returns the row when present', async () => {
     const db = fakeDb([{ id: 'a1', name: 'Cash', type: 'cash', currency: 'PEN' }])
-    const account = await getAccountById(db, 'a1')
+    const account = await getAccountById(db, 'user-1', 'a1')
     expect(account?.name).toBe('Cash')
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toMatch(/user_id = \$/)
+    expect(params).toEqual(['a1', 'user-1'])
   })
 
   it('insertAccount passes params and returns id', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'a-new' }] }) }
-    const result = await insertAccount(db, { name: 'Savings', type: 'bank', currency: 'USD' })
+    const result = await insertAccount(db, 'user-1', {
+      name: 'Savings',
+      type: 'bank',
+      currency: 'USD',
+    })
     expect(result.id).toBe('a-new')
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/insert into accounts/i)
-    expect(params).toEqual(['Savings', 'bank', 'USD'])
+    expect(params).toEqual(['Savings', 'bank', 'USD', 'user-1'])
   })
 
   it('insertCategory passes params and returns id', async () => {
