@@ -5,7 +5,7 @@ import { resolveSessionFromRequest } from './auth/resolveSession.js'
 import { getAuth } from './auth.js'
 import type { AppVariables } from './http/context.js'
 import { healthRoute } from './routes/health.js'
-import { oauthRoute } from './routes/oauth.js'
+import { createGmailCallbackRoute } from './routes/gmailCallback.js'
 import { telegramRoute } from './telegram/webhook.js'
 import { createTransactionsRoute } from './routes/transactions.js'
 import { createTransfersRoute } from './routes/transfers.js'
@@ -52,7 +52,7 @@ export function buildApp(
     return guard(context, next)
   })
 
-  app.route('/', oauthRoute)
+  app.route('/', createGmailCallbackRoute())
   app.route('/', telegramRoute)
   app.route('/', createTransactionsRoute())
   app.route('/', createTransfersRoute())
