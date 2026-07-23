@@ -28,4 +28,16 @@ describe('loadEnv', () => {
     const { DATABASE_URL, ...incomplete } = complete
     expect(() => loadEnv(incomplete)).toThrow(/DATABASE_URL/)
   })
+
+  it('rejects mock mode in production', () => {
+    expect(() =>
+      loadEnv({ ...complete, NODE_ENV: 'production', APP_MODE: 'mock' }),
+    ).toThrow(/mock/i)
+  })
+
+  it('requires ALLOWED_EMAILS in production', () => {
+    expect(() =>
+      loadEnv({ ...complete, NODE_ENV: 'production', APP_MODE: 'live' }),
+    ).toThrow(/ALLOWED_EMAILS/i)
+  })
 })
