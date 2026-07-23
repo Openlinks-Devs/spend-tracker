@@ -23,6 +23,10 @@ interface TelegramUpdate {
 
 export interface WebhookDeps {
   db: Queryable
+  // The Telegram webhook runs server-side with no session, so edits/deletes
+  // are attributed to this explicit owner user id (resolved per request from
+  // ALLOWED_EMAILS; see the route handler below).
+  userId: string
   classify: typeof classifyEdit
   notify: typeof sendMessage
 }
@@ -44,7 +48,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate, deps: Webhook
   const edit = parseEdit(message.text)
   const [existing, categories, tags] = await Promise.all([
     getTransactionById(deps.db, transactionId),
-    getCategories(deps.db),
+    getCategories(deps.db, deps.userId),
     getDistinctTags(deps.db),
   ])
   if (!existing) return
@@ -79,9 +83,25 @@ telegramRoute.post('/telegram/webhook', async (context) => {
   if (secret !== env.TELEGRAM_WEBHOOK_SECRET) {
     return context.json({ ok: false }, 401)
   }
+  const db = getPool()
+  // Same owner-lookup pattern as the Gmail poller in index.ts: the webhook has
+  // no session, so edits/deletes are attributed to the owner (first entry of
+  // ALLOWED_EMAILS). Full per-user Telegram linking is a later milestone.
+  const ownerEmail = env.ALLOWED_EMAILS.split(',')[0]?.trim()
+  const ownerLookup = ownerEmail
+    ? await db.query('SELECT id FROM "user" WHERE email = $1', [ownerEmail])
+    : { rows: [] }
+  const ownerUserId = ownerLookup.rows[0]?.id as string | undefined
+  if (!ownerUserId) {
+    console.warn(
+      `No "user" row for ${ownerEmail ?? '(no ALLOWED_EMAILS)'}. Sign in once with Google before editing transactions from Telegram.`,
+    )
+    return context.json({ ok: true })
+  }
   const update = await context.req.json()
   await handleTelegramUpdate(update, {
-    db: getPool(),
+    db,
+    userId: ownerUserId,
     classify: classifyEdit,
     notify: sendMessage,
   })
