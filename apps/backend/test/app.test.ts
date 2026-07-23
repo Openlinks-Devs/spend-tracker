@@ -69,7 +69,7 @@ describe('session gating (default-deny)', () => {
     for (const [key, value] of Object.entries(requiredEnvVars)) {
       vi.stubEnv(key, value)
     }
-    const app = buildApp(async () => ({ session: {}, user: {} }))
+    const app = buildApp(async () => ({ session: {}, user: { id: 'user-1' } }))
     const response = await app.request('/api/transactions')
     // The guard passed; the route itself may still fail (no real DB in this
     // test), but that failure must not be a 401.
