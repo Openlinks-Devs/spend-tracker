@@ -10,6 +10,7 @@ export interface TransactionFilter {
   max?: number
   type?: 'all' | 'income' | 'expense'
   currency?: string
+  userId?: string
 }
 
 // Escape LIKE metacharacters so a user's literal % or _ is not treated as a wildcard.
@@ -25,6 +26,11 @@ export function buildTransactionFilter(
   const params: unknown[] = []
   let placeholder = startIndex
 
+  if (filter.userId) {
+    conditions.push(`user_id = $${placeholder}`)
+    params.push(filter.userId)
+    placeholder += 1
+  }
   if (filter.q && filter.q.trim() !== '') {
     conditions.push(`description ILIKE $${placeholder}`)
     params.push(`%${escapeLike(filter.q.trim())}%`)
