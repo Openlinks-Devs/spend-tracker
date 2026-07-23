@@ -7,33 +7,34 @@ import { formatError, formatNewTransaction } from '../telegram/format.js'
 
 export interface ProcessDeps {
   db: Queryable
-  // The Gmail poller runs server-side with no session, so imported rows are
-  // attributed to this explicit owner user id (resolved at startup; see index.ts).
-  userId: string
   now: () => string
   detect: typeof detectTransaction
   extract: typeof extractTransaction
   notify: typeof sendMessage
 }
 
-export const defaultProcessDeps: Omit<ProcessDeps, 'db' | 'userId'> = {
+export const defaultProcessDeps: Omit<ProcessDeps, 'db'> = {
   now: () => new Date().toISOString(),
   detect: detectTransaction,
   extract: extractTransaction,
   notify: sendMessage,
 }
 
+// The import runs server-side with no session, so the caller must pass the owner
+// user id explicitly. Per-user connections will supply this from the linked
+// account (see docs/superpowers/specs/2026-07-17-per-user-connections-design.md).
 export async function processEmail(
   email: { subject: string; text: string },
+  userId: string,
   deps: ProcessDeps,
 ): Promise<void> {
   const isTransaction = await deps.detect({ subject: email.subject, text: email.text })
   if (!isTransaction) return
 
   const [categories, accounts, tags] = await Promise.all([
-    getCategories(deps.db, deps.userId),
-    getAccounts(deps.db, deps.userId),
-    getDistinctTags(deps.db),
+    getCategories(deps.db, userId),
+    getAccounts(deps.db, userId),
+    getDistinctTags(deps.db, userId),
   ])
 
   const extracted = await deps.extract({
@@ -49,7 +50,7 @@ export async function processEmail(
     return
   }
 
-  const { id } = await insertTransaction(deps.db, extracted)
+  const { id } = await insertTransaction(deps.db, userId, extracted)
   const account = accounts.find((candidate) => candidate.id === extracted.account_id)
   const category = categories.find((candidate) => candidate.id === extracted.category_id)
   await deps.notify(
