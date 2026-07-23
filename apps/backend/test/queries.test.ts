@@ -97,10 +97,10 @@ describe('queries', () => {
 
   it('insertCategory passes params and returns id', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'c-new' }] }) }
-    const result = await insertCategory(db, { name: 'Transport', type: 'expense' })
+    const result = await insertCategory(db, 'user-1', { name: 'Transport', type: 'expense' })
     expect(result.id).toBe('c-new')
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/insert into categories/i)
-    expect(params).toEqual(['Transport', 'expense'])
+    expect(params).toEqual(['Transport', 'expense', 'user-1'])
   })
 })
