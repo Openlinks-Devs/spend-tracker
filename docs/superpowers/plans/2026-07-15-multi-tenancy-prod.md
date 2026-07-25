@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make SpendTracker safe for multiple real users by scoping all ledger data to the authenticated user, hardening the auth path against the mock-mode bypass, and enforcing an invite allowlist — so a second person can sign in and see only their own data.
+**Goal:** Make SpendTracker safe for multiple real users by scoping all ledger data to the authenticated user, hardening the auth path against the mock-mode bypass, and enforcing an invite allowlist - so a second person can sign in and see only their own data.
 
 **Architecture:** Add a `user_id` foreign key (to Better Auth's `"user"` table) on every ledger table (`accounts`, `categories`, `transactions`). Thread the authenticated user id from the session guard onto the Hono request context, and push it as an explicit parameter into every query so the SQL filters/inserts by owner. Reject mock mode in production and require the allowlist to be set.
 
@@ -27,23 +27,23 @@
 
 ## File Structure
 
-- `apps/backend/scripts/migrate.ts` — MODIFY: run every `NNN_*.sql` migration in sorted order (today it only runs `001_init.sql`), tracked in a `schema_migrations` table so re-runs are safe.
-- `apps/backend/migrations/003_user_scoping.sql` — CREATE: add nullable `user_id` + index to the three ledger tables.
-- `apps/backend/migrations/004_user_scoping_not_null.sql` — CREATE: set `user_id NOT NULL` (applied after backfill).
-- `apps/backend/scripts/backfill-owner.ts` — CREATE: assign every `user_id IS NULL` ledger row to the owner (looked up by email).
-- `apps/backend/src/auth/sessionGuard.ts` — MODIFY: store the authenticated user id on the Hono context.
-- `apps/backend/src/auth/resolveSession.ts` — MODIFY: return a typed `{ user: { id } }` session; the mock branch already does.
-- `apps/backend/src/http/context.ts` — CREATE: shared Hono `Variables` type + a `getUserId(context)` helper.
-- `apps/backend/src/app.ts` — MODIFY: guard sets `userId`; type the app with `Variables`.
-- `apps/backend/src/db/queries.ts` — MODIFY: add `userId` param to every ledger read/write and scope the SQL.
-- `apps/backend/src/db/transactionFilter.ts` — MODIFY: add `userId` to the always-on conditions.
-- `apps/backend/src/routes/accounts.ts`, `categories.ts`, `transactions.ts`, `transfers.ts`, `tags.ts` — MODIFY: read `userId` from context and pass it to queries.
-- `apps/backend/src/config/env.ts` — MODIFY: in production, reject `APP_MODE=mock` and require a non-default `ALLOWED_EMAILS`.
+- `apps/backend/scripts/migrate.ts` - MODIFY: run every `NNN_*.sql` migration in sorted order (today it only runs `001_init.sql`), tracked in a `schema_migrations` table so re-runs are safe.
+- `apps/backend/migrations/003_user_scoping.sql` - CREATE: add nullable `user_id` + index to the three ledger tables.
+- `apps/backend/migrations/004_user_scoping_not_null.sql` - CREATE: set `user_id NOT NULL` (applied after backfill).
+- `apps/backend/scripts/backfill-owner.ts` - CREATE: assign every `user_id IS NULL` ledger row to the owner (looked up by email).
+- `apps/backend/src/auth/sessionGuard.ts` - MODIFY: store the authenticated user id on the Hono context.
+- `apps/backend/src/auth/resolveSession.ts` - MODIFY: return a typed `{ user: { id } }` session; the mock branch already does.
+- `apps/backend/src/http/context.ts` - CREATE: shared Hono `Variables` type + a `getUserId(context)` helper.
+- `apps/backend/src/app.ts` - MODIFY: guard sets `userId`; type the app with `Variables`.
+- `apps/backend/src/db/queries.ts` - MODIFY: add `userId` param to every ledger read/write and scope the SQL.
+- `apps/backend/src/db/transactionFilter.ts` - MODIFY: add `userId` to the always-on conditions.
+- `apps/backend/src/routes/accounts.ts`, `categories.ts`, `transactions.ts`, `transfers.ts`, `tags.ts` - MODIFY: read `userId` from context and pass it to queries.
+- `apps/backend/src/config/env.ts` - MODIFY: in production, reject `APP_MODE=mock` and require a non-default `ALLOWED_EMAILS`.
 - Test files alongside each: `test/queries.test.ts`, `test/transactionFilter.test.ts`, `test/accounts.test.ts`, `test/categories.test.ts`, `test/transactions.test.ts`, `test/transfers.test.ts`, `test/tags.test.ts`, `test/sessionGuard.test.ts`, `test/env.test.ts`, plus a new `test/migrate.test.ts`.
 
 ---
 
-## Phase 1 — Migration runner and schema
+## Phase 1 - Migration runner and schema
 
 ### Task 1: Make the migration runner apply all migrations in order
 
@@ -53,7 +53,7 @@
 - Test: `apps/backend/test/migrate.test.ts`
 
 **Interfaces:**
-- Produces: `sortMigrationFileNames(fileNames: string[]): string[]` — returns only `NNN_*.sql` names, ascending by the numeric prefix.
+- Produces: `sortMigrationFileNames(fileNames: string[]): string[]` - returns only `NNN_*.sql` names, ascending by the numeric prefix.
 
 **Why:** `migrate.ts` today hardcodes `001_init.sql`, so `002_auth.sql` and every new migration never run. Deploys silently miss schema changes.
 
@@ -79,7 +79,7 @@ describe('sortMigrationFileNames', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter backend test -- migrate`
-Expected: FAIL — cannot find module `../src/db/migrationFiles.js`.
+Expected: FAIL - cannot find module `../src/db/migrationFiles.js`.
 
 - [ ] **Step 3: Write the helper**
 
@@ -287,7 +287,7 @@ commita --no-push -x "Add owner backfill script and the follow-up NOT NULL migra
 
 ---
 
-## Phase 2 — Thread the user id through the request
+## Phase 2 - Thread the user id through the request
 
 ### Task 4: Session guard stores the user id on the context
 
@@ -339,7 +339,7 @@ it('sets userId on the context from the resolved session', async () => {
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `pnpm --filter backend test -- sessionGuard`
-Expected: FAIL — `userId` is undefined (guard does not set it yet).
+Expected: FAIL - `userId` is undefined (guard does not set it yet).
 
 - [ ] **Step 4: Update the guard to read the user and set the context**
 
@@ -390,7 +390,7 @@ commita --no-push -x "Session guard now stores the authenticated user id on the 
 
 ---
 
-## Phase 3 — Scope queries by user (the bulk)
+## Phase 3 - Scope queries by user (the bulk)
 
 For each task in this phase the transformation is the same shape, applied to
 specific functions. The pattern:
@@ -436,7 +436,7 @@ Note for the implementer: route unit tests currently call `route.request(path)` 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter backend test -- accounts`
-Expected: FAIL — SQL has no `user_id`.
+Expected: FAIL - SQL has no `user_id`.
 
 - [ ] **Step 3: Scope the account queries**
 
@@ -503,10 +503,10 @@ commita --no-push -x "Scope account queries and route by the authenticated user_
 - Produces: `getCategories(db, userId)`, `getCategoryById(db, userId, id)`, `insertCategory(db, userId, category)`, `updateCategory(db, userId, update)`, `deleteCategory(db, userId, id)`.
 
 - [ ] **Step 1: Update `test/categories.test.ts`** the same way as Task 5 Step 1 (inject `userId`, assert `user_id = $` in the list SQL and the param array contains the id).
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- categories`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- categories`.
 - [ ] **Step 3: Scope the five category functions** in `queries.ts` using the read/write pattern (mirror the exact shape shown for accounts in Task 5 Step 3: `WHERE user_id = $1 ORDER BY name` for the list, `id = $1 AND user_id = $2` for by-id/update/delete, `user_id` added to the insert columns/values).
 - [ ] **Step 4: Pass `getUserId(context)`** into each call in `apps/backend/src/routes/categories.ts`.
-- [ ] **Step 5: Run to verify PASS** — `pnpm --filter backend test -- categories`.
+- [ ] **Step 5: Run to verify PASS** - `pnpm --filter backend test -- categories`.
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
@@ -539,7 +539,7 @@ it('scopes by user_id when userId is set', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- transactionFilter`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- transactionFilter`.
 
 - [ ] **Step 3: Add userId to the interface and the first condition**
 
@@ -553,7 +553,7 @@ if (filter.userId) {
 }
 ```
 
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- transactionFilter`.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- transactionFilter`.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -571,12 +571,12 @@ commita --no-push -x "Add user_id scoping to buildTransactionFilter so list, cou
 
 **Interfaces:**
 - Produces:
-  - `getTransactions(db, filter, page)` and `getTransactionsCount(db, filter)` and `getAnalytics(db, filter, bucket)` — unchanged signatures; the caller now sets `filter.userId`.
+  - `getTransactions(db, filter, page)` and `getTransactionsCount(db, filter)` and `getAnalytics(db, filter, bucket)` - unchanged signatures; the caller now sets `filter.userId`.
   - `getTransactionById(db, userId, id)`, `insertTransaction(db, userId, transaction)`, `updateTransaction(db, userId, update)`, `deleteTransaction(db, userId, id)`, `getDistinctTags(db, userId)`.
 
 - [ ] **Step 1: Update the route tests** in `test/transactions.test.ts` and `test/tags.test.ts` to inject `userId` (as in Task 5 Step 1) and assert the list/tags SQL contains `user_id = $`. The existing `?currency=USD` test keeps working; add that `user_id` is also present.
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- transactions tags`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- transactions tags`.
 
 - [ ] **Step 3: Scope the read aggregates via the filter.** In `apps/backend/src/routes/transactions.ts`, in `parseListQuery`, set `userId` on the returned `filter` object: add `const userId = getUserId(context)` in each handler and include `userId` when building the `TransactionFilter` (parseListQuery takes `context`, so add `userId: getUserId(context)` to the filter it returns). No SQL change is needed in `getTransactions`/`getTransactionsCount`/`getAnalytics` because they delegate to `buildTransactionFilter` (Task 7).
 
@@ -599,7 +599,7 @@ Add `user_id` to `insertTransaction` (extra column + `$8` value = `userId`, as t
 
 - [ ] **Step 5: Pass userId from the routes.** In `transactions.ts` handlers, pass `userId` to `getTransactionById`, `insertTransaction`, `updateTransaction`, `deleteTransaction`. In `tags.ts`, pass `getUserId(context)` to `getDistinctTags`.
 
-- [ ] **Step 6: Run to verify PASS** — `pnpm --filter backend test -- transactions tags analytics queries`.
+- [ ] **Step 6: Run to verify PASS** - `pnpm --filter backend test -- transactions tags analytics queries`.
 
 - [ ] **Step 7: Typecheck + commit**
 
@@ -613,17 +613,17 @@ commita --no-push -x "Scope every transaction read/write (list, count, analytics
 ### Task 9: Scope the transfer endpoint
 
 **Files:**
-- Modify: `apps/backend/src/db/queries.ts` (`createTransfer` — the two `insertTransaction` calls now pass `userId`)
+- Modify: `apps/backend/src/db/queries.ts` (`createTransfer` - the two `insertTransaction` calls now pass `userId`)
 - Modify: `apps/backend/src/routes/transfers.ts`
 - Test: `apps/backend/test/transfers.test.ts`
 
 **Interfaces:**
-- Produces: `createTransfer(pool, userId, legs)` — both inserted legs carry `user_id = userId`.
+- Produces: `createTransfer(pool, userId, legs)` - both inserted legs carry `user_id = userId`.
 
 - [ ] **Step 1: Update `test/transfers.test.ts`** to inject `userId` (parent middleware setting `context.set('userId', 'user-1')`) and assert both insert param arrays contain `'user-1'`.
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- transfers`.
-- [ ] **Step 3: Thread userId** — change `createTransfer(pool, legs)` to `createTransfer(pool, userId, legs)` and pass `userId` into both `insertTransaction(client, userId, legs.from)` / `insertTransaction(client, userId, legs.to)` calls. In `transfers.ts`, read `const userId = getUserId(context)` and pass it.
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- transfers`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- transfers`.
+- [ ] **Step 3: Thread userId** - change `createTransfer(pool, legs)` to `createTransfer(pool, userId, legs)` and pass `userId` into both `insertTransaction(client, userId, legs.from)` / `insertTransaction(client, userId, legs.to)` calls. In `transfers.ts`, read `const userId = getUserId(context)` and pass it.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- transfers`.
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
@@ -633,7 +633,7 @@ commita --no-push -x "Scope both legs of a transfer to the authenticated user_id
 
 ---
 
-## Phase 4 — Production safety
+## Phase 4 - Production safety
 
 ### Task 10: Reject mock mode and default allowlist in production
 
@@ -666,7 +666,7 @@ it('requires ALLOWED_EMAILS in production', () => {
 
 (Reuse or define `validEnv` as a complete valid env object in the test file, matching the existing env test's fixture.)
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- env`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- env`.
 
 - [ ] **Step 3: Add the production guards.** In `apps/backend/src/config/env.ts`, add `NODE_ENV: z.string().optional()` to the schema if absent, and after the successful `schema.safeParse`, before returning, add:
 
@@ -685,7 +685,7 @@ return parsedEnv
 
 Note: because `ALLOWED_EMAILS` has a schema default, check the raw `source.ALLOWED_EMAILS` (not the parsed value) so the owner-only default does not silently satisfy the production requirement.
 
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- env`.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- env`.
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
@@ -699,9 +699,9 @@ commita --no-push -x "Fail fast in production if APP_MODE=mock (auth bypass) or 
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Backend suite green** — `pnpm --filter backend test` → all pass.
-- [ ] **Step 2: Backend typecheck** — `pnpm --filter backend typecheck` → clean.
-- [ ] **Step 3: Web typecheck + tests** — `pnpm --filter web typecheck && pnpm --filter web test` → clean/pass (no web code changed, but confirm nothing broke).
+- [ ] **Step 1: Backend suite green** - `pnpm --filter backend test` → all pass.
+- [ ] **Step 2: Backend typecheck** - `pnpm --filter backend typecheck` → clean.
+- [ ] **Step 3: Web typecheck + tests** - `pnpm --filter web typecheck && pnpm --filter web test` → clean/pass (no web code changed, but confirm nothing broke).
 - [ ] **Step 4: Manual two-user smoke (against a scratch DB in live mode).** Sign in as two allowlisted Google accounts; create an account/transaction as user A; confirm user B sees an empty ledger and cannot GET/PATCH/DELETE user A's rows by id (expect 404). Document the result.
 - [ ] **Step 5: Commit any test fixups**
 
@@ -725,7 +725,7 @@ commita --no-push -x "Regression pass for multi-tenancy: full backend suite, typ
 - [ ] **Step 1: Add an owner-id resolver.** In `queries.ts` add `getUserIdByEmail(db, email): Promise<string | null>` (`SELECT id FROM "user" WHERE email = $1`). Unit test it in `queries.test.ts` with a mock db.
 - [ ] **Step 2: Resolve the owner id at startup** in `index.ts` (first entry of `ALLOWED_EMAILS`); if absent, log a clear warning and skip starting the poller (the owner has not signed in yet).
 - [ ] **Step 3: Thread the owner id** into `processEmail`/the poller `onEmail` and the Telegram webhook so their `insertTransaction` calls pass it. Update the two tests to pass and assert the owner id.
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- processEmail telegram-webhook queries`.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- processEmail telegram-webhook queries`.
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
@@ -743,7 +743,7 @@ commita --no-push -x "Attribute Gmail/Telegram auto-imports to the owner user id
 
 ---
 
-## Appendix A — Deployment checklist (not TDD tasks)
+## Appendix A - Deployment checklist (not TDD tasks)
 
 Do these when promoting to a real environment (Coolify):
 
@@ -756,6 +756,6 @@ Do these when promoting to a real environment (Coolify):
 - **Cookies/TLS:** HTTPS only; Better Auth secure cookies. Same-origin topology keeps `sameSite` simple.
 - **Operational:** managed Postgres backups; error monitoring (e.g. Sentry); rate limiting on `/api/auth/*`; the existing `/health` check as the container healthcheck; CI running `pnpm -r typecheck && pnpm -r test` before deploy.
 
-## Appendix B — Future plan: per-user integrations (premium)
+## Appendix B - Future plan: per-user integrations (premium)
 
 Not in this milestone. Sketch: a `connection` table (`user_id`, provider, encrypted OAuth tokens, status) so each user links their own Gmail (multiple allowed for premium) and Telegram; the poller iterates connections instead of one env-configured token; imported rows attribute to the connection's `user_id`. Requires its own spec and plan.

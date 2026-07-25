@@ -26,25 +26,25 @@
 
 ## File Structure
 
-- `apps/backend/migrations/005_connections.sql` — CREATE: `connection`, `import_source`, `pairing_code` tables; `user.is_premium`.
-- `apps/backend/src/connections/crypto.ts` — CREATE: versioned AES-256-GCM encrypt/decrypt + key parsing.
-- `apps/backend/src/connections/pairingCodes.ts` — CREATE: mint/consume/purge single-use codes.
-- `apps/backend/src/connections/queries.ts` — CREATE: connection CRUD, status/cursor updates, premium counting.
-- `apps/backend/src/connections/importSource.ts` — CREATE: dedupe guard queries.
-- `apps/backend/src/connections/poller.ts` — CREATE: per-connection Gmail polling loop.
-- `apps/backend/src/routes/connections.ts` — CREATE: session-gated management endpoints.
-- `apps/backend/src/routes/gmailCallback.ts` — CREATE: unguarded OAuth callback. `src/routes/oauth.ts` — DELETE.
-- `apps/backend/src/gmail/client.ts` — MODIFY: per-token client + `listMessageIdsSince`.
-- `apps/backend/src/telegram/client.ts` — MODIFY: `sendMessage(chatId, ...)` with status-carrying errors.
-- `apps/backend/src/telegram/webhook.ts` — MODIFY: `/start` pairing, chat→user resolution, user-scoped edits.
-- `apps/backend/src/pipeline/processEmail.ts` — MODIFY: userId + connection context, dedupe-first, notify routing.
-- `apps/backend/src/config/env.ts` — MODIFY: new vars; `GOOGLE_REFRESH_TOKEN`/`TELEGRAM_CHAT_ID` become optional.
-- `apps/backend/src/index.ts` — MODIFY: replace env poller with connection poller.
-- `apps/web/src/pages/IntegrationsPage.tsx`, `apps/web/src/hooks/useConnections.ts` — CREATE; `api.ts`, `types.ts`, `App.tsx`, `AppLayout.tsx` — MODIFY.
+- `apps/backend/migrations/005_connections.sql` - CREATE: `connection`, `import_source`, `pairing_code` tables; `user.is_premium`.
+- `apps/backend/src/connections/crypto.ts` - CREATE: versioned AES-256-GCM encrypt/decrypt + key parsing.
+- `apps/backend/src/connections/pairingCodes.ts` - CREATE: mint/consume/purge single-use codes.
+- `apps/backend/src/connections/queries.ts` - CREATE: connection CRUD, status/cursor updates, premium counting.
+- `apps/backend/src/connections/importSource.ts` - CREATE: dedupe guard queries.
+- `apps/backend/src/connections/poller.ts` - CREATE: per-connection Gmail polling loop.
+- `apps/backend/src/routes/connections.ts` - CREATE: session-gated management endpoints.
+- `apps/backend/src/routes/gmailCallback.ts` - CREATE: unguarded OAuth callback. `src/routes/oauth.ts` - DELETE.
+- `apps/backend/src/gmail/client.ts` - MODIFY: per-token client + `listMessageIdsSince`.
+- `apps/backend/src/telegram/client.ts` - MODIFY: `sendMessage(chatId, ...)` with status-carrying errors.
+- `apps/backend/src/telegram/webhook.ts` - MODIFY: `/start` pairing, chat→user resolution, user-scoped edits.
+- `apps/backend/src/pipeline/processEmail.ts` - MODIFY: userId + connection context, dedupe-first, notify routing.
+- `apps/backend/src/config/env.ts` - MODIFY: new vars; `GOOGLE_REFRESH_TOKEN`/`TELEGRAM_CHAT_ID` become optional.
+- `apps/backend/src/index.ts` - MODIFY: replace env poller with connection poller.
+- `apps/web/src/pages/IntegrationsPage.tsx`, `apps/web/src/hooks/useConnections.ts` - CREATE; `api.ts`, `types.ts`, `App.tsx`, `AppLayout.tsx` - MODIFY.
 
 ---
 
-## Phase 1 — Schema, crypto, codes
+## Phase 1 - Schema, crypto, codes
 
 ### Task 1: Migration 005 (connection, import_source, pairing_code, is_premium)
 
@@ -327,7 +327,7 @@ describe('pairing codes', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- pairingCodes`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- pairingCodes`.
 
 - [ ] **Step 3: Implement**
 
@@ -377,7 +377,7 @@ export async function purgeExpiredPairingCodes(db: Queryable): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- pairingCodes`.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- pairingCodes`.
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
@@ -387,7 +387,7 @@ commita --no-push -x "Add DB-backed single-use pairing codes (mint, atomic consu
 
 ---
 
-## Phase 2 — Connection model and routes
+## Phase 2 - Connection model and routes
 
 ### Task 4: Connection queries and premium counting
 
@@ -467,7 +467,7 @@ describe('connection queries', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- connectionQueries`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- connectionQueries`.
 
 - [ ] **Step 3: Implement**
 
@@ -630,7 +630,7 @@ export async function getUserIsPremium(db: Queryable, userId: string): Promise<b
 }
 ```
 
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- connectionQueries`.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- connectionQueries`.
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
@@ -747,7 +747,7 @@ describe('connections route', () => {
 
 Note for the implementer: if `loadEnv` caches or the existing tests set env differently, follow the pattern the current `env.test.ts` uses (pass a source object or reset the module) rather than mutating `process.env`, keeping these assertions intact.
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- connectionsRoute`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- connectionsRoute`.
 
 - [ ] **Step 3: Implement the route**
 
@@ -889,7 +889,7 @@ import { createConnectionsRoute } from './routes/connections.js'
 app.route('/', createConnectionsRoute())
 ```
 
-- [ ] **Step 4: Run to verify PASS** — `pnpm --filter backend test -- connectionsRoute`.
+- [ ] **Step 4: Run to verify PASS** - `pnpm --filter backend test -- connectionsRoute`.
 - [ ] **Step 5: Typecheck + commit**
 
 ```bash
@@ -975,7 +975,7 @@ describe('gmail oauth callback', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- gmailCallback`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- gmailCallback`.
 
 - [ ] **Step 3: Implement the callback**
 
@@ -1095,7 +1095,7 @@ import { createGmailCallbackRoute } from './routes/gmailCallback.js'
 app.route('/', createGmailCallbackRoute())
 ```
 
-- [ ] **Step 5: Run to verify PASS** — `pnpm --filter backend test -- gmailCallback connectionsRoute` (also fix any test referencing the deleted oauth route).
+- [ ] **Step 5: Run to verify PASS** - `pnpm --filter backend test -- gmailCallback connectionsRoute` (also fix any test referencing the deleted oauth route).
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
@@ -1105,7 +1105,7 @@ commita --no-push -x "Add the unguarded Gmail OAuth callback authenticated by a 
 
 ---
 
-## Phase 3 — Import pipeline, Telegram, poller
+## Phase 3 - Import pipeline, Telegram, poller
 
 ### Task 7: import_source dedupe + processEmail per-user refactor
 
@@ -1246,7 +1246,7 @@ export async function processEmail(
 
 - [ ] **Step 4: Update `test/processEmail.test.ts`** to the new signature: pass `importContext = { userId: 'user-1', connectionId: 'conn-1' }` and a mock `pool` (reuse the `fakePool` pattern from `test/transfers.test.ts`); add cases asserting (a) a message already in `import_source` short-circuits before `deps.detect` is called, (b) zero accounts records the message and skips, (c) a notify rejection does not reject the import, and (d) the insert params include `'user-1'`.
 
-- [ ] **Step 5: Run to verify PASS** — `pnpm --filter backend test -- importSource processEmail`.
+- [ ] **Step 5: Run to verify PASS** - `pnpm --filter backend test -- importSource processEmail`.
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
@@ -1270,7 +1270,7 @@ commita --no-push -x "Refactor processEmail to per-user imports: dedupe via impo
 
 - [ ] **Step 2: Write the failing tests.** In `test/telegram-client.test.ts`: `sendMessage('123', 'hi')` posts to the Bot API with `chat_id: '123'` and throws a `TelegramSendError` whose `status` is 403 when fetch resolves non-OK 403. In `test/telegram-webhook.test.ts` add: (a) `/start <valid-code>` calls `replaceTelegramConnection(db, 'user-1', '<chat id>')` and confirms in-chat; (b) `/start` with a chat already paired to another user sends the "already linked" message and does not replace; (c) a reply-edit from a paired chat passes that user's id into `getTransactionById`; (d) an update from an unpaired chat performs no queries; (e) a 403 from notify marks the connection `needs_reauth`.
 
-- [ ] **Step 3: Run to verify FAIL** — `pnpm --filter backend test -- telegram-client telegram-webhook`.
+- [ ] **Step 3: Run to verify FAIL** - `pnpm --filter backend test -- telegram-client telegram-webhook`.
 
 - [ ] **Step 4: Implement.** In `client.ts`:
 
@@ -1307,7 +1307,7 @@ export async function sendMessage(
 
 (Keep any existing formatting/parse-mode options the current implementation sends; only the chat-id source and error type change.) In `webhook.ts`, at the top of `handleTelegramUpdate`: read `const chatId = String(update.message?.chat?.id ?? '')`; if the text starts with `/start `, run the pairing flow (consume code → check `getTelegramConnectionByChatId` for a different user → `replaceTelegramConnection` → confirm via `deps.notify`); otherwise resolve `getTelegramConnectionByChatId(deps.db, chatId)`, return silently if null, and thread `connection.user_id` into every scoped query. Wrap each `deps.notify` call so a `TelegramSendError` with `status === 403` triggers `setConnectionStatus(deps.db, connection.id, 'needs_reauth')` instead of propagating.
 
-- [ ] **Step 5: Run to verify PASS** — `pnpm --filter backend test -- telegram-client telegram-webhook`.
+- [ ] **Step 5: Run to verify PASS** - `pnpm --filter backend test -- telegram-client telegram-webhook`.
 - [ ] **Step 6: Typecheck + commit**
 
 ```bash
@@ -1439,7 +1439,7 @@ describe('connection poller', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify FAIL** — `pnpm --filter backend test -- connectionPoller`.
+- [ ] **Step 2: Run to verify FAIL** - `pnpm --filter backend test -- connectionPoller`.
 
 - [ ] **Step 3: Implement gmail client additions**
 
@@ -1661,7 +1661,7 @@ if (env.APP_MODE === 'live') {
 }
 ```
 
-- [ ] **Step 6: Run the full backend suite** — `pnpm --filter backend test`
+- [ ] **Step 6: Run the full backend suite** - `pnpm --filter backend test`
 Expected: all pass (fix any test still importing the deleted `gmail/poller.ts`).
 - [ ] **Step 7: Typecheck + commit**
 
@@ -1672,7 +1672,7 @@ commita --no-push -x "Replace the single-owner env poller with the per-connectio
 
 ---
 
-## Phase 4 — Web UI
+## Phase 4 - Web UI
 
 ### Task 10: Integrations page (list, link, pair, remove, upsell)
 
@@ -1885,7 +1885,7 @@ export function IntegrationsPage() {
 
 - [ ] **Step 5: Write a smoke test** following the existing web test pattern (see `AppSmoke.test.tsx`): render `IntegrationsPage` inside a `QueryClientProvider` + router with `connectionsApi` fetch mocked, assert the two action buttons render and a listed gmail connection shows its email and a remove button.
 
-- [ ] **Step 6: Run to verify PASS** — `pnpm --filter web test && pnpm --filter web typecheck`.
+- [ ] **Step 6: Run to verify PASS** - `pnpm --filter web test && pnpm --filter web typecheck`.
 - [ ] **Step 7: Commit**
 
 ```bash
@@ -1894,7 +1894,7 @@ commita --no-push -x "Add the web Integrations page: list connections with statu
 
 ---
 
-## Phase 5 — Verification
+## Phase 5 - Verification
 
 ### Task 11: Full regression + live smoke
 
