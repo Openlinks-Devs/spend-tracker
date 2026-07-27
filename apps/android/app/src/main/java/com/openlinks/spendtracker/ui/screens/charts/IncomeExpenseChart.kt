@@ -37,6 +37,7 @@ import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
@@ -79,6 +80,9 @@ fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
                         rememberLineComponent(fill = fill(ChartColors.spendColor), thickness = 8.dp),
                     ),
                     mergeMode = { ColumnCartesianLayer.MergeMode.Grouped() },
+                    // Income and spend are both magnitudes, so zero is the true
+                    // baseline; auto-ranging flattens the smaller of the pair.
+                    rangeProvider = CartesianLayerRangeProvider.fixed(minY = 0.0),
                 ),
                 rememberLineCartesianLayer(
                     lineProvider = LineCartesianLayer.LineProvider.series(

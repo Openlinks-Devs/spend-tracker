@@ -16,6 +16,25 @@ interface SpendApi {
     suspend fun getTransactionsFiltered(filters: TransactionFilters, page: TransactionPage): TransactionListResponse
     suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload
 
+    /** Moves money between two accounts, creating both legs atomically. */
+    suspend fun createTransfer(transfer: TransferInput): TransferResult
+
+    /** The signed-in user's linked Gmail/Telegram integrations. */
+    suspend fun getConnections(): List<Connection>
+
+    /** Unlinks an integration (Gmail grants are revoked server-side). */
+    suspend fun deleteConnection(id: String)
+
+    /**
+     * Starts Gmail linking: returns the Google consent URL to open in a browser.
+     * Throws [ApiException] with status 402 when the account's Gmail limit is
+     * reached (free plans allow one).
+     */
+    suspend fun gmailLinkUrl(): String
+
+    /** Mints a single-use pairing code and returns the t.me deep link for it. */
+    suspend fun telegramPairCode(): String
+
     /**
      * Exchanges a Google ID token for a Better Auth session token. POSTs to
      * /api/auth/sign-in/social without a bearer header (no session yet) and

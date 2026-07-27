@@ -5,6 +5,7 @@ import com.openlinks.spendtracker.data.AnalyticsPayload
 import com.openlinks.spendtracker.data.ApiException
 import com.openlinks.spendtracker.data.AuthState
 import com.openlinks.spendtracker.data.Category
+import com.openlinks.spendtracker.data.Connection
 import com.openlinks.spendtracker.data.InMemoryKeyValueStore
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SessionStore
@@ -15,6 +16,8 @@ import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.data.TransactionListResponse
 import com.openlinks.spendtracker.data.TransactionPage
 import com.openlinks.spendtracker.data.TransactionUpdate
+import com.openlinks.spendtracker.data.TransferInput
+import com.openlinks.spendtracker.data.TransferResult
 import com.openlinks.spendtracker.ui.GateDestination
 import com.openlinks.spendtracker.ui.SessionViewModel
 import com.openlinks.spendtracker.ui.authGateDestination
@@ -106,6 +109,44 @@ class SessionViewModelTest {
         }
         override suspend fun exchangeGoogleIdToken(idToken: String): String = "session-token"
         override suspend fun signOutRemote() {}
+
+        var createdTransfer: TransferInput? = null
+        var connections = listOf<Connection>()
+        var connectionsError: Exception? = null
+        var gmailLinkError: Exception? = null
+        var removedConnectionId: String? = null
+
+        override suspend fun createTransfer(transfer: TransferInput): TransferResult {
+            createdTransfer = transfer
+            val leg = Transaction(
+                id = "transfer-leg",
+                description = transfer.fromDescription,
+                amount = -transfer.fromAmount,
+                currency = transfer.fromCurrency,
+                accountId = transfer.fromAccountId,
+                categoryId = transfer.fromCategoryId,
+                tags = transfer.tags,
+                createdAt = "2026-07-02T00:00:00Z",
+            )
+            return TransferResult(from = leg, to = leg.copy(id = "transfer-leg-2", amount = transfer.toAmount))
+        }
+
+        override suspend fun getConnections(): List<Connection> {
+            connectionsError?.let { error -> throw error }
+            return connections
+        }
+
+        override suspend fun deleteConnection(id: String) {
+            removedConnectionId = id
+            connections = connections.filterNot { connection -> connection.id == id }
+        }
+
+        override suspend fun gmailLinkUrl(): String {
+            gmailLinkError?.let { error -> throw error }
+            return "https://accounts.google.com/consent"
+        }
+
+        override suspend fun telegramPairCode(): String = "https://t.me/bot?start=code"
     }
 
     @Before
@@ -155,12 +196,12 @@ class SessionViewModelTest {
         assertEquals(1, state.transactions.size)
         assertNotNull(state.analytics)
         assertEquals(api.analyticsPayload, state.analytics)
-        // The filtered-transactions read plus the primary (month) and day-bucketed
-        // analytics reads all carry the default filters.
-        assertEquals(3, api.recordedFilterCalls.size)
+        // The filtered-transactions read plus one analytics read, both carrying
+        // the default filters. The default bucket is already "day", so the
+        // heatmap reuses that payload instead of fetching a second time.
+        assertEquals(2, api.recordedFilterCalls.size)
         assertTrue(api.recordedFilterCalls.all { filters -> filters == TransactionFilters() })
-        // Primary bucket plus a day-granularity fetch for the heatmap.
-        assertEquals(setOf("month", "day"), api.recordedBucketCalls.toSet())
+        assertEquals(setOf("day"), api.recordedBucketCalls.toSet())
     }
 
     @Test
@@ -243,8 +284,9 @@ class SessionViewModelTest {
         advanceUntilIdle()
 
         assertEquals("expense", viewModel.state.value.filters.type)
-        // Filtered transactions plus the primary and day-bucketed analytics reads.
-        assertEquals(3, api.recordedFilterCalls.size)
+        // Filtered transactions plus one analytics read: the default bucket is
+        // "day", so the heatmap shares that payload.
+        assertEquals(2, api.recordedFilterCalls.size)
         assertEquals(true, api.recordedFilterCalls.all { filters -> filters.type == "expense" })
     }
 
@@ -265,18 +307,20 @@ class SessionViewModelTest {
     }
 
     @Test
-    fun setCurrencyUpdatesFiltersWithoutRefetching() = runTest(dispatcher) {
+    fun setCurrencyRefetchesTheListButNotAnalytics() = runTest(dispatcher) {
         val api = FakeApi()
         val viewModel = SessionViewModel(api, dispatcher)
         viewModel.refresh()
         advanceUntilIdle()
-        val callCountBeforeSetCurrency = api.recordedFilterCalls.size
+        api.recordedBucketCalls.clear()
 
         viewModel.setCurrency("EUR")
         advanceUntilIdle()
 
         assertEquals("EUR", viewModel.state.value.filters.currency)
-        assertEquals(callCountBeforeSetCurrency, api.recordedFilterCalls.size)
+        assertEquals("EUR", api.recordedFilterCalls.last().currency)
+        // Analytics rows are bucketed per currency already, so nothing to refetch.
+        assertTrue(api.recordedBucketCalls.isEmpty())
     }
 
     @Test
@@ -328,5 +372,119 @@ class SessionViewModelTest {
 
         assertEquals("t1", api.deletedId)
         assertEquals(0, viewModel.state.value.transactions.size)
+    }
+
+    @Test
+    fun createTransferSendsBothLegsAndReloads() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        var reported = false
+        viewModel.createTransfer(
+            TransferInput(
+                fromAccountId = "acc-1",
+                toAccountId = "acc-2",
+                fromAmount = 100.0,
+                toAmount = 370.0,
+                fromCurrency = "USD",
+                toCurrency = "PEN",
+                fromCategoryId = "cat-out",
+                toCategoryId = "cat-in",
+                fromDescription = "Transfer to Soles",
+                toDescription = "Transfer from Checking",
+                tags = listOf("transfer"),
+            ),
+        ) { success -> reported = success }
+        advanceUntilIdle()
+
+        assertEquals("acc-2", api.createdTransfer?.toAccountId)
+        assertEquals(370.0, api.createdTransfer?.toAmount!!, 0.0)
+        assertTrue(reported)
+    }
+
+    @Test
+    fun setCurrencyFiltersTheListServerSide() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.setCurrency("PEN")
+        advanceUntilIdle()
+
+        assertEquals("PEN", viewModel.state.value.filters.currency)
+        assertEquals("PEN", api.recordedFilterCalls.last().currency)
+    }
+
+    @Test
+    fun loadConnectionsPopulatesTheList() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.connections = listOf(
+            Connection("conn-1", "gmail", "active", "me@example.com", "2026-07-02T00:00:00Z"),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadConnections()
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.connectionsState.value.connections.size)
+        assertFalse(viewModel.connectionsState.value.loading)
+        assertNull(viewModel.connectionsState.value.error)
+    }
+
+    @Test
+    fun mockModeRefusalIsAStateNotAnError() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.connectionsError = ApiException(503, "connections_require_live_mode")
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadConnections()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.connectionsState.value.liveModeRequired)
+        assertNull(viewModel.connectionsState.value.error)
+    }
+
+    @Test
+    fun gmailLinkYieldsAConsentUrl() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        var openedUrl: String? = null
+        viewModel.linkGmail { url -> openedUrl = url }
+        advanceUntilIdle()
+
+        assertEquals("https://accounts.google.com/consent", openedUrl)
+        assertFalse(viewModel.connectionsState.value.linking)
+    }
+
+    @Test
+    fun gmailLinkOver402ShowsTheUpsellRatherThanAnError() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.gmailLinkError = ApiException(402, "premium_required")
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        var openedUrl: String? = null
+        viewModel.linkGmail { url -> openedUrl = url }
+        advanceUntilIdle()
+
+        assertNull(openedUrl)
+        assertTrue(viewModel.connectionsState.value.premiumRequired)
+        assertNull(viewModel.connectionsState.value.error)
+    }
+
+    @Test
+    fun removingAConnectionReloadsTheList() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.connections = listOf(
+            Connection("conn-1", "telegram", "active", "12345", "2026-07-02T00:00:00Z"),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.loadConnections()
+        advanceUntilIdle()
+
+        viewModel.removeConnection("conn-1")
+        advanceUntilIdle()
+
+        assertEquals("conn-1", api.removedConnectionId)
+        assertEquals(0, viewModel.connectionsState.value.connections.size)
     }
 }

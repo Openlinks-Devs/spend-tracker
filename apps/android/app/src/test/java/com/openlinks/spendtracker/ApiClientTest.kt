@@ -278,6 +278,29 @@ class ApiClientTest {
         assertEquals(listOf("food", "drinks"), requestUrl.queryParameterValues("tag"))
         assertEquals("25", requestUrl.queryParameter("limit"))
         assertEquals("10", requestUrl.queryParameter("offset"))
+        // The list filters by currency server-side, unlike analytics below.
+        assertEquals("USD", requestUrl.queryParameter("currency"))
+    }
+
+    @Test
+    fun getAnalyticsDropsCurrencyAndPagingParams() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"summary":[],"series":[],"byCategory":[],"byTag":[],"byAccount":[]}"""),
+        )
+
+        val filters = TransactionFilters(query = "coffee", currency = "USD")
+
+        client().getAnalytics(filters, "month")
+
+        val requestUrl = server.takeRequest().requestUrl!!
+        assertEquals("coffee", requestUrl.queryParameter("q"))
+        assertEquals("month", requestUrl.queryParameter("bucket"))
+        // Analytics is deliberately currency-agnostic: it returns a row per
+        // currency so the switcher can offer them all.
         assertNull(requestUrl.queryParameter("currency"))
+        assertNull(requestUrl.queryParameter("limit"))
+        assertNull(requestUrl.queryParameter("offset"))
     }
 }

@@ -55,6 +55,53 @@ data class Category(
     val type: String,
 )
 
+/**
+ * A transfer between two accounts. The client sends both legs fully resolved with
+ * positive amounts; the backend signs them (money leaves the source, lands in the
+ * destination) and inserts both in one transaction. Amounts may differ (fees) and
+ * so may currencies (exchange).
+ */
+@Serializable
+data class TransferInput(
+    @SerialName("from_account_id") val fromAccountId: String,
+    @SerialName("to_account_id") val toAccountId: String,
+    @SerialName("from_amount") val fromAmount: Double,
+    @SerialName("to_amount") val toAmount: Double,
+    @SerialName("from_currency") val fromCurrency: String,
+    @SerialName("to_currency") val toCurrency: String,
+    @SerialName("from_category_id") val fromCategoryId: String,
+    @SerialName("to_category_id") val toCategoryId: String,
+    @SerialName("from_description") val fromDescription: String,
+    @SerialName("to_description") val toDescription: String,
+    val tags: List<String> = emptyList(),
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+/** The two transactions POST /api/transfers created. */
+@Serializable
+data class TransferResult(
+    val from: Transaction,
+    val to: Transaction,
+)
+
+/** A linked Gmail or Telegram integration, from GET /api/connections. */
+@Serializable
+data class Connection(
+    val id: String,
+    val provider: String,
+    val status: String,
+    @SerialName("external_id") val externalId: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
+/** POST /api/connections/gmail/link-url response. */
+@Serializable
+data class GmailLinkUrl(val url: String)
+
+/** POST /api/connections/telegram/pair-code response. */
+@Serializable
+data class TelegramPairing(val deepLink: String)
+
 /** Consistent backend error shape: { "error": string }. */
 @Serializable
 data class ApiError(

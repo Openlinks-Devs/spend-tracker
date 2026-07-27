@@ -2,6 +2,7 @@ package com.openlinks.spendtracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,7 +47,7 @@ fun SummaryScreen(
     onOpenTransaction: (String) -> Unit,
     onUpdateFilters: ((TransactionFilters) -> TransactionFilters) -> Unit,
     onClearFilters: () -> Unit,
-    onSetCurrency: (String) -> Unit,
+    onSetCurrency: (String?) -> Unit,
     onSetBucket: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -58,86 +59,95 @@ fun SummaryScreen(
     )
     val summary = state.analytics?.summary ?: emptyList()
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        SearchField(
-            query = state.filters.query,
-            onQueryChange = { newQuery -> onUpdateFilters { it.copy(query = newQuery) } },
-        )
-        ActiveFilterChips(
-            chips = chips,
-            onRemove = { chip -> onUpdateFilters(removeChipTransform(chip)) },
-            onClearAll = onClearFilters,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        FilterPanel(
-            state = state,
-            onUpdateFilters = onUpdateFilters,
-            expanded = filtersExpanded,
-            onToggle = { filtersExpanded = !filtersExpanded },
-            modifier = Modifier.padding(top = 8.dp),
-        )
+    val chartRows = seriesForCurrency(state.analytics?.series ?: emptyList(), state.displayCurrency)
+    val tagRows = tagsForCurrency(state.analytics?.byTag ?: emptyList(), state.displayCurrency)
+    val accountRows = accountsForCurrency(state.analytics?.byAccount ?: emptyList(), state.displayCurrency)
+    val categoryRows = categoriesForCurrency(state.analytics?.byCategory ?: emptyList(), state.displayCurrency)
+    val dayRows = seriesForCurrency(state.dayAnalytics?.series ?: emptyList(), state.displayCurrency)
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            BucketToggle(bucket = state.bucket, onChange = onSetBucket)
-            CurrencySwitcher(
-                currencies = currenciesIn(summary),
-                value = state.displayCurrency,
-                onChange = onSetCurrency,
+    // The whole screen scrolls, controls included. Pinning the search box, the
+    // filters and the tiles cost half the viewport and left the charts peeking
+    // through a slot.
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            SearchField(
+                query = state.filters.query,
+                onQueryChange = { newQuery -> onUpdateFilters { it.copy(query = newQuery) } },
             )
         }
-
-        SummaryTiles(
-            summary = summary,
-            currency = state.displayCurrency,
-            modifier = Modifier.padding(top = 12.dp),
-        )
-
-        val chartRows = seriesForCurrency(state.analytics?.series ?: emptyList(), state.displayCurrency)
-        val tagRows = tagsForCurrency(state.analytics?.byTag ?: emptyList(), state.displayCurrency)
-        val accountRows = accountsForCurrency(state.analytics?.byAccount ?: emptyList(), state.displayCurrency)
-        val categoryRows = categoriesForCurrency(state.analytics?.byCategory ?: emptyList(), state.displayCurrency)
-        val dayRows = seriesForCurrency(state.dayAnalytics?.series ?: emptyList(), state.displayCurrency)
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 8.dp),
-        ) {
-            item {
-                ChartsSection(
-                    seriesRows = chartRows,
-                    tagRows = tagRows,
-                    accountRows = accountRows,
-                    categoryRows = categoryRows,
-                    dayRows = dayRows,
-                    accountName = { accountId -> state.accountName(accountId) },
-                    categoryName = { categoryId -> state.categoryName(categoryId) },
+        item {
+            ActiveFilterChips(
+                chips = chips,
+                onRemove = { chip -> onUpdateFilters(removeChipTransform(chip)) },
+                onClearAll = onClearFilters,
+            )
+        }
+        item {
+            FilterPanel(
+                state = state,
+                onUpdateFilters = onUpdateFilters,
+                onSetCurrency = onSetCurrency,
+                expanded = filtersExpanded,
+                onToggle = { filtersExpanded = !filtersExpanded },
+            )
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                BucketToggle(bucket = state.bucket, onChange = onSetBucket)
+                CurrencySwitcher(
+                    currencies = currenciesIn(summary),
+                    value = state.displayCurrency,
+                    onChange = onSetCurrency,
                 )
             }
+        }
+        item {
+            SummaryTiles(
+                summary = summary,
+                currency = state.displayCurrency,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        item {
+            ChartsSection(
+                seriesRows = chartRows,
+                tagRows = tagRows,
+                accountRows = accountRows,
+                categoryRows = categoryRows,
+                dayRows = dayRows,
+                accountName = { accountId -> state.accountName(accountId) },
+                categoryName = { categoryId -> state.categoryName(categoryId) },
+            )
+        }
+        item {
+            Text(
+                text = Strings.get(StringKey.SummaryRecent),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+            )
+        }
+        if (state.transactions.isEmpty()) {
             item {
                 Text(
-                    text = Strings.get(StringKey.SummaryRecent),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                    text = Strings.get(StringKey.SummaryEmpty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (state.transactions.isEmpty()) {
-                item {
-                    Text(
-                        text = Strings.get(StringKey.SummaryEmpty),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            } else {
-                items(state.transactions.take(5)) { transaction ->
-                    RecentRow(
-                        transaction = transaction,
-                        categoryName = state.categoryName(transaction.categoryId),
-                        onClick = { onOpenTransaction(transaction.id) },
-                    )
-                }
+        } else {
+            items(state.transactions.take(5)) { transaction ->
+                RecentRow(
+                    transaction = transaction,
+                    categoryName = state.categoryName(transaction.categoryId),
+                    onClick = { onOpenTransaction(transaction.id) },
+                )
             }
         }
     }

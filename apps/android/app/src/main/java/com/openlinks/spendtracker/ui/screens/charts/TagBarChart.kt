@@ -19,6 +19,7 @@ import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
 
@@ -54,6 +55,9 @@ fun TagBarChart(rows: List<TagRow>, modifier: Modifier = Modifier) {
                 columnProvider = ColumnCartesianLayer.ColumnProvider.series(
                     rememberLineComponent(fill = fill(ChartColors.chartPalette[1]), thickness = 12.dp),
                 ),
+                // Spend is never negative, so the baseline belongs at zero;
+                // auto-ranging would hide every column shorter than the tallest.
+                rangeProvider = CartesianLayerRangeProvider.fixed(minY = 0.0),
             ),
             startAxis = VerticalAxis.rememberStart(),
             bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = labelIndexFormatter(labels)),

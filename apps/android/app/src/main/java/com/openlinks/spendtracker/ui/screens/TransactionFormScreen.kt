@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,8 +36,11 @@ import com.openlinks.spendtracker.ui.TransactionFormInput
 import com.openlinks.spendtracker.ui.TransactionFormValidator
 
 /**
- * Create/edit form. When [editingId] resolves to an existing transaction the
- * form is pre-filled and submits a PATCH; otherwise it POSTs a new transaction.
+ * Create/edit form. When [editingId] resolves to an existing transaction the form
+ * is pre-filled and submits a PATCH. When [templateId] resolves instead, the same
+ * fields are pre-filled but a brand new transaction is POSTed (duplicate); unlike
+ * an edit, every field stays editable and the date is left to the server, so a
+ * duplicate records today rather than repeating the original's timestamp.
  */
 @Composable
 fun TransactionFormScreen(
@@ -50,15 +50,18 @@ fun TransactionFormScreen(
     onSubmitUpdate: (String, TransactionUpdate) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    templateId: String? = null,
 ) {
     val existing: Transaction? = editingId?.let { state.transactionById(it) }
+    val template: Transaction? = templateId?.let { state.transactionById(it) }
+    val source: Transaction? = existing ?: template
 
-    var description by remember { mutableStateOf(existing?.description ?: "") }
-    var amount by remember { mutableStateOf(existing?.amount?.toString() ?: "") }
-    var currency by remember { mutableStateOf(existing?.currency ?: "USD") }
-    var accountId by remember { mutableStateOf(existing?.accountId ?: state.accounts.firstOrNull()?.id) }
-    var categoryId by remember { mutableStateOf(existing?.categoryId ?: state.categories.firstOrNull()?.id) }
-    var tags by remember { mutableStateOf(existing?.tags?.joinToString(", ") ?: "") }
+    var description by remember { mutableStateOf(source?.description ?: "") }
+    var amount by remember { mutableStateOf(source?.amount?.toString() ?: "") }
+    var currency by remember { mutableStateOf(source?.currency ?: "USD") }
+    var accountId by remember { mutableStateOf(source?.accountId ?: state.accounts.firstOrNull()?.id) }
+    var categoryId by remember { mutableStateOf(source?.categoryId ?: state.categories.firstOrNull()?.id) }
+    var tags by remember { mutableStateOf(source?.tags?.joinToString(", ") ?: "") }
     var errors by remember { mutableStateOf<List<StringKey>>(emptyList()) }
 
     // The form may compose before refresh() populates accounts/categories. remember
@@ -79,7 +82,7 @@ fun TransactionFormScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = Strings.get(if (existing == null) StringKey.FormCreateTitle else StringKey.FormEditTitle),
+            text = Strings.get(formTitleKey(isEditing = existing != null, isDuplicate = template != null)),
             style = MaterialTheme.typography.titleLarge,
         )
 
@@ -198,6 +201,13 @@ fun TransactionFormScreen(
     }
 }
 
+/** Which heading the form shows. Pure so the three-way choice is unit tested. */
+fun formTitleKey(isEditing: Boolean, isDuplicate: Boolean): StringKey = when {
+    isEditing -> StringKey.FormEditTitle
+    isDuplicate -> StringKey.FormDuplicateTitle
+    else -> StringKey.FormCreateTitle
+}
+
 @Composable
 private fun AccountPicker(
     accounts: List<Account>,
@@ -205,13 +215,12 @@ private fun AccountPicker(
     enabled: Boolean,
     onSelect: (String) -> Unit,
 ) {
-    val selectedLabel = accounts.firstOrNull { account -> account.id == selectedId }?.name ?: ""
     LabeledDropdown(
         label = Strings.get(StringKey.FieldAccount),
-        selectedLabel = selectedLabel,
-        enabled = enabled,
+        selectedId = selectedId,
         options = accounts.map { account -> account.id to account.name },
         onSelect = onSelect,
+        enabled = enabled,
     )
 }
 
@@ -222,68 +231,10 @@ private fun CategoryPicker(
     onSelect: (String) -> Unit,
 ) {
     // Category is required, so no null "None" option.
-    val selectedLabel = categories.firstOrNull { category -> category.id == selectedId }?.name ?: ""
     LabeledDropdown(
         label = Strings.get(StringKey.FieldCategory),
-        selectedLabel = selectedLabel,
-        enabled = true,
+        selectedId = selectedId,
         options = categories.map { category -> category.id to category.name },
         onSelect = onSelect,
     )
-}
-
-@Composable
-private fun LabeledDropdown(
-    label: String,
-    selectedLabel: String,
-    enabled: Boolean,
-    options: List<Pair<String, String>>,
-    onSelect: (String) -> Unit,
-) {
-    LabeledDropdownNullable(
-        label = label,
-        selectedLabel = selectedLabel,
-        enabled = enabled,
-        options = options.map { option -> option.first as String? to option.second },
-        onSelect = { id -> if (id != null) onSelect(id) },
-    )
-}
-
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun LabeledDropdownNullable(
-    label: String,
-    selectedLabel: String,
-    enabled: Boolean,
-    options: List<Pair<String?, String>>,
-    onSelect: (String?) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { if (enabled) expanded = it },
-    ) {
-        OutlinedTextField(
-            value = selectedLabel,
-            onValueChange = {},
-            readOnly = true,
-            enabled = enabled,
-            label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(androidx.compose.material3.MenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (id, optionLabel) ->
-                DropdownMenuItem(
-                    text = { Text(optionLabel) },
-                    onClick = {
-                        onSelect(id)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
 }

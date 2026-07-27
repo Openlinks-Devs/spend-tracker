@@ -85,6 +85,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("androidx.navigation:navigation-compose:2.8.4")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+
+    // Chrome Custom Tabs: Google rejects OAuth in a WebView, so Gmail linking
+    // hands the consent URL to the user's browser.
+    implementation("androidx.browser:browser:1.8.0")
 
     // Vico: Compose-native charting (column/line cartesian charts) for the analytics screen.
     implementation("com.patrykandpatrick.vico:compose-m3:2.1.3")

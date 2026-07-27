@@ -8,9 +8,11 @@ import androidx.lifecycle.viewModelScope
 import com.openlinks.spendtracker.data.Account
 import com.openlinks.spendtracker.data.AnalyticsPayload
 import com.openlinks.spendtracker.data.ApiClient
+import com.openlinks.spendtracker.data.ApiException
 import com.openlinks.spendtracker.data.AuthRepository
 import com.openlinks.spendtracker.data.AuthState
 import com.openlinks.spendtracker.data.Category
+import com.openlinks.spendtracker.data.Connection
 import com.openlinks.spendtracker.data.NewTransaction
 import com.openlinks.spendtracker.data.SessionStore
 import com.openlinks.spendtracker.data.SpendApi
@@ -18,6 +20,7 @@ import com.openlinks.spendtracker.data.Transaction
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.data.TransactionPage
 import com.openlinks.spendtracker.data.TransactionUpdate
+import com.openlinks.spendtracker.data.TransferInput
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
 import kotlinx.coroutines.CancellationException
@@ -43,7 +46,9 @@ data class SpendUiState(
     // Day-granularity analytics fetched alongside [analytics], used by the
     // calendar heatmap which always needs per-day buckets regardless of [bucket].
     val dayAnalytics: AnalyticsPayload? = null,
-    val bucket: String = "month",
+    // Day, not month: the default range is "this month", so a month bucket
+    // produces a single-bar chart. Day also lets the heatmap reuse this fetch.
+    val bucket: String = "day",
     val error: String? = null,
 ) {
     val summary: SummaryTotals get() = SummaryCalculator.compute(transactions)
@@ -77,6 +82,26 @@ data class AuthUiState(
 )
 
 /**
+ * Integrations screen status. [premiumRequired] is the backend's 402 answer to a
+ * Gmail link attempt past the plan's limit, and [liveModeRequired] its 503 in mock
+ * mode, where connections cannot exist because they key off a real user row.
+ */
+data class ConnectionsUiState(
+    val loading: Boolean = false,
+    val connections: List<Connection> = emptyList(),
+    val linking: Boolean = false,
+    val premiumRequired: Boolean = false,
+    val liveModeRequired: Boolean = false,
+    val error: String? = null,
+)
+
+// The backend's mock-mode refusal, which is expected rather than a failure.
+private const val LIVE_MODE_REQUIRED_ERROR = "connections_require_live_mode"
+
+private fun isLiveModeRequired(error: Exception): Boolean =
+    error is ApiException && error.message == LIVE_MODE_REQUIRED_ERROR
+
+/**
  * Owns the [SpendApi] and app state. Constructor-injectable ([api], [dispatcher])
  * so the logic is exercised with a fake API and a test dispatcher in plain JUnit,
  * no Robolectric required. The production path builds a real [ApiClient] via the
@@ -100,6 +125,9 @@ class SessionViewModel(
 
     private val mutableAuthUiState = MutableStateFlow(AuthUiState())
     val authUiState: StateFlow<AuthUiState> = mutableAuthUiState.asStateFlow()
+
+    private val mutableConnectionsState = MutableStateFlow(ConnectionsUiState())
+    val connectionsState: StateFlow<ConnectionsUiState> = mutableConnectionsState.asStateFlow()
 
     /**
      * Runs the Credential Manager sign-in, then re-reads the session so the gate
@@ -138,6 +166,103 @@ class SessionViewModel(
 
     private fun refreshAuthState() {
         sessionStore?.let { mutableAuthState.value = it.authState() }
+    }
+
+    /**
+     * Loads the linked integrations. Called when the screen opens and again when
+     * it resumes, since linking Gmail happens outside the app (in a browser tab)
+     * and coming back is the only signal that the list may have changed.
+     */
+    fun loadConnections() {
+        viewModelScope.launch {
+            mutableConnectionsState.value = mutableConnectionsState.value.copy(loading = true, error = null)
+            try {
+                val connections = withContext(dispatcher) { api.getConnections() }
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(
+                    loading = false,
+                    connections = connections,
+                    liveModeRequired = false,
+                    error = null,
+                )
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(
+                    loading = false,
+                    connections = emptyList(),
+                    liveModeRequired = isLiveModeRequired(error),
+                    error = if (isLiveModeRequired(error)) null else error.message
+                        ?: Strings.get(StringKey.ErrorGeneric),
+                )
+                refreshAuthState()
+            }
+        }
+    }
+
+    /**
+     * Asks the backend for a Google consent URL and hands it to [onUrl] to open.
+     * A 402 means the account is at its Gmail limit, which is an upsell, not an
+     * error, so it gets its own flag.
+     */
+    fun linkGmail(onUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            mutableConnectionsState.value = mutableConnectionsState.value.copy(
+                linking = true,
+                premiumRequired = false,
+                error = null,
+            )
+            try {
+                val url = withContext(dispatcher) { api.gmailLinkUrl() }
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(linking = false)
+                onUrl(url)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                val premiumRequired = error is ApiException && error.status == 402
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(
+                    linking = false,
+                    premiumRequired = premiumRequired,
+                    liveModeRequired = isLiveModeRequired(error),
+                    error = when {
+                        premiumRequired || isLiveModeRequired(error) -> null
+                        else -> error.message ?: Strings.get(StringKey.ErrorGeneric)
+                    },
+                )
+            }
+        }
+    }
+
+    /** Mints a Telegram pairing code and hands its deep link to [onDeepLink]. */
+    fun pairTelegram(onDeepLink: (String) -> Unit) {
+        viewModelScope.launch {
+            mutableConnectionsState.value = mutableConnectionsState.value.copy(linking = true, error = null)
+            try {
+                val deepLink = withContext(dispatcher) { api.telegramPairCode() }
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(linking = false)
+                onDeepLink(deepLink)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(
+                    linking = false,
+                    liveModeRequired = isLiveModeRequired(error),
+                    error = if (isLiveModeRequired(error)) null else error.message
+                        ?: Strings.get(StringKey.ErrorGeneric),
+                )
+            }
+        }
+    }
+
+    /** Unlinks an integration, then reloads the list so the row disappears. */
+    fun removeConnection(connectionId: String) {
+        viewModelScope.launch {
+            try {
+                withContext(dispatcher) { api.deleteConnection(connectionId) }
+                loadConnections()
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableConnectionsState.value = mutableConnectionsState.value.copy(
+                    error = error.message ?: Strings.get(StringKey.ErrorGeneric),
+                )
+            }
+        }
     }
 
     fun refresh() {
@@ -226,20 +351,43 @@ class SessionViewModel(
     }
 
     /**
-     * Sets the display currency. Purely a rendering preference (per B1, currency
-     * is never sent to the backend), so this does NOT re-fetch transactions or
-     * analytics, unlike [updateFilters].
+     * Sets the currency filter. The transactions list filters by currency
+     * server-side, so this re-fetches it; analytics is currency-agnostic by
+     * design (its switcher needs every currency), so it is left alone.
      */
     fun setCurrency(currency: String?) {
         mutableState.value = mutableState.value.copy(
             filters = mutableState.value.filters.copy(currency = currency),
         )
+        viewModelScope.launch {
+            try {
+                reloadTransactions()
+            } catch (error: Exception) {
+                mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
+            }
+        }
     }
 
     fun createTransaction(transaction: NewTransaction, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 withContext(dispatcher) { api.createTransaction(transaction) }
+                reloadFilteredData()
+                onDone(true)
+            } catch (error: Exception) {
+                mutableState.value = mutableState.value.copy(error = error.message ?: "Something went wrong")
+                refreshAuthState()
+                onDone(false)
+            }
+        }
+    }
+
+    /** Creates both legs of a transfer, then reloads the list and analytics. */
+    fun createTransfer(transfer: TransferInput, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                withContext(dispatcher) { api.createTransfer(transfer) }
                 reloadFilteredData()
                 onDone(true)
             } catch (error: Exception) {
@@ -276,6 +424,18 @@ class SessionViewModel(
                 onDone(false)
             }
         }
+    }
+
+    /**
+     * Re-fetches only the transactions list for the current filters. Used by the
+     * currency filter, which changes the list query but not the analytics one.
+     */
+    private suspend fun reloadTransactions() {
+        val filters = mutableState.value.filters
+        val transactions = withContext(dispatcher) {
+            api.getTransactionsFiltered(filters, TransactionPage()).items
+        }
+        mutableState.value = mutableState.value.copy(transactions = transactions, error = null)
     }
 
     /**

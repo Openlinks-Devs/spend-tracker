@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.openlinks.spendtracker.data.Account
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
@@ -42,7 +43,7 @@ import com.openlinks.spendtracker.ui.SpendUiState
 import kotlinx.coroutines.delay
 
 /** The removable active-filter chip model and its kind. Pure data, unit tested. */
-enum class FilterChipKind { QUERY, RANGE, TYPE, ACCOUNT, CATEGORY, TAG, MIN, MAX }
+enum class FilterChipKind { QUERY, RANGE, TYPE, ACCOUNT, CATEGORY, TAG, MIN, MAX, CURRENCY }
 
 data class ActiveFilterChip(val kind: FilterChipKind, val value: String, val label: String)
 
@@ -107,6 +108,13 @@ fun activeFilterChips(
     if (filters.type != TYPE_ALL) {
         chips += ActiveFilterChip(FilterChipKind.TYPE, filters.type, typeLabel(filters.type))
     }
+    filters.currency?.takeIf { currency -> currency.isNotBlank() }?.let { currency ->
+        chips += ActiveFilterChip(
+            FilterChipKind.CURRENCY,
+            currency,
+            "${Strings.get(StringKey.CurrencyLabel)}: $currency",
+        )
+    }
 
     return chips
 }
@@ -122,6 +130,7 @@ fun removeChipTransform(chip: ActiveFilterChip): (TransactionFilters) -> Transac
         FilterChipKind.TAG -> filters.copy(tags = filters.tags - chip.value)
         FilterChipKind.MIN -> filters.copy(amountMin = null)
         FilterChipKind.MAX -> filters.copy(amountMax = null)
+        FilterChipKind.CURRENCY -> filters.copy(currency = null)
     }
 }
 
@@ -161,13 +170,16 @@ fun SearchField(
 
 /**
  * Collapsible filter panel: a "Filters" toggle plus, when [expanded], sections for
- * type, date range, accounts, categories, tags (with any/all match) and amount
- * bounds. Every change is applied through [onUpdateFilters].
+ * type, date range, accounts, categories, tags (with any/all match), amount bounds
+ * and currency. Every change is applied through [onUpdateFilters], except currency,
+ * which goes through [onSetCurrency] because it only re-fetches the transactions
+ * list (analytics is deliberately currency-agnostic).
  */
 @Composable
 fun FilterPanel(
     state: SpendUiState,
     onUpdateFilters: ((TransactionFilters) -> TransactionFilters) -> Unit,
+    onSetCurrency: (String?) -> Unit,
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
@@ -199,6 +211,7 @@ fun FilterPanel(
                     TagsSection(state, onUpdateFilters)
                 }
                 AmountSection(filters, onUpdateFilters)
+                CurrencySection(state, onSetCurrency)
             }
         }
     }
@@ -207,6 +220,42 @@ fun FilterPanel(
 @Composable
 private fun SectionLabel(text: String) {
     Text(text = text, style = MaterialTheme.typography.labelLarge)
+}
+
+/**
+ * The currencies offered by the currency filter: every distinct account currency,
+ * alphabetically. Pure so it can be unit tested.
+ */
+fun currencyFilterOptions(accounts: List<Account>): List<String> =
+    accounts.map { account -> account.currency }.distinct().sorted()
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CurrencySection(
+    state: SpendUiState,
+    onSetCurrency: (String?) -> Unit,
+) {
+    val currencies = currencyFilterOptions(state.accounts)
+    // Nothing to filter by when every account shares one currency.
+    if (currencies.size < 2) return
+    val selected = state.filters.currency
+    Column {
+        SectionLabel(Strings.get(StringKey.CurrencyLabel))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = selected == null,
+                onClick = { onSetCurrency(null) },
+                label = { Text(Strings.get(StringKey.FilterCurrencyAll)) },
+            )
+            currencies.forEach { currency ->
+                FilterChip(
+                    selected = selected == currency,
+                    onClick = { onSetCurrency(if (selected == currency) null else currency) },
+                    label = { Text(currency) },
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -7,6 +7,8 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -20,30 +22,43 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.openlinks.spendtracker.BuildConfig
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.openlinks.spendtracker.i18n.StringKey
 import com.openlinks.spendtracker.i18n.Strings
+import com.openlinks.spendtracker.ui.screens.IntegrationsScreen
 import com.openlinks.spendtracker.ui.screens.SummaryScreen
 import com.openlinks.spendtracker.ui.screens.TransactionDetailScreen
 import com.openlinks.spendtracker.ui.screens.TransactionFormScreen
 import com.openlinks.spendtracker.ui.screens.TransactionsListScreen
+import com.openlinks.spendtracker.ui.screens.TransferFormScreen
+import com.openlinks.spendtracker.ui.screens.openExternalUrl
 
 private object Routes {
     const val SUMMARY = "summary"
     const val TRANSACTIONS = "transactions"
+    const val INTEGRATIONS = "integrations"
     const val DETAIL = "transactions/{id}"
-    const val CREATE = "create_transaction"
+    const val CREATE = "create_transaction?from={from}"
     const val EDIT = "transactions/{id}/edit"
+    const val TRANSFER = "create_transfer"
 
     fun detail(id: String) = "transactions/$id"
     fun edit(id: String) = "transactions/$id/edit"
+
+    // A duplicate is a create pre-filled from an existing transaction, so it is
+    // the same destination with the template's id attached.
+    fun create(templateId: String? = null) =
+        if (templateId == null) "create_transaction" else "create_transaction?from=$templateId"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,13 +72,16 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = currentRoute == Routes.SUMMARY || currentRoute == Routes.TRANSACTIONS
+    val topLevelRoutes = listOf(Routes.SUMMARY, Routes.TRANSACTIONS, Routes.INTEGRATIONS)
+    val showBottomBar = currentRoute in topLevelRoutes
     val topBarTitle = when (currentRoute) {
         Routes.SUMMARY -> Strings.get(StringKey.SummaryTitle)
         Routes.TRANSACTIONS -> Strings.get(StringKey.TransactionsTitle)
+        Routes.INTEGRATIONS -> Strings.get(StringKey.IntegrationsTitle)
         Routes.DETAIL -> Strings.get(StringKey.TransactionDetailTitle)
         Routes.CREATE -> Strings.get(StringKey.FormCreateTitle)
         Routes.EDIT -> Strings.get(StringKey.FormEditTitle)
+        Routes.TRANSFER -> Strings.get(StringKey.TransferTitle)
         else -> Strings.get(StringKey.AppTitle)
     }
 
@@ -82,6 +100,16 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     }
                 },
                 actions = {
+                    if (currentRoute == Routes.TRANSACTIONS) {
+                        androidx.compose.material3.IconButton(
+                            onClick = { navController.navigate(Routes.TRANSFER) },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.SwapHoriz,
+                                contentDescription = Strings.get(StringKey.ActionTransfer),
+                            )
+                        }
+                    }
                     // Sign-out only exists in live builds; a mock build has no session
                     // to end and stays exactly as before.
                     if (!BuildConfig.USE_MOCK_AUTH && showBottomBar) {
@@ -105,6 +133,11 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                             Icons.AutoMirrored.Filled.List,
                             Strings.get(StringKey.NavTransactions),
                         ),
+                        Triple(
+                            Routes.INTEGRATIONS,
+                            Icons.Filled.Link,
+                            Strings.get(StringKey.NavIntegrations),
+                        ),
                     )
                     destinations.forEach { (route, icon, label) ->
                         val selected = backStackEntry?.destination?.hierarchy?.any { it.route == route } == true
@@ -126,7 +159,7 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
         },
         floatingActionButton = {
             if (currentRoute == Routes.TRANSACTIONS) {
-                FloatingActionButton(onClick = { navController.navigate(Routes.CREATE) }) {
+                FloatingActionButton(onClick = { navController.navigate(Routes.create()) }) {
                     Icon(Icons.Filled.Add, contentDescription = Strings.get(StringKey.ActionAdd))
                 }
             }
@@ -153,11 +186,22 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     onOpenTransaction = { id -> navController.navigate(Routes.detail(id)) },
                     onUpdateFilters = viewModel::updateFilters,
                     onClearFilters = viewModel::clearFilters,
+                    onSetCurrency = viewModel::setCurrency,
                 )
             }
-            composable(Routes.CREATE) {
+            composable(
+                route = Routes.CREATE,
+                arguments = listOf(
+                    navArgument("from") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) { entry ->
                 TransactionFormScreen(
                     editingId = null,
+                    templateId = entry.arguments?.getString("from"),
                     state = state,
                     onSubmitCreate = { newTransaction ->
                         viewModel.createTransaction(newTransaction) { success ->
@@ -166,6 +210,36 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     },
                     onSubmitUpdate = { _, _ -> },
                     onCancel = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.TRANSFER) {
+                TransferFormScreen(
+                    state = state,
+                    onSubmit = { transfer ->
+                        viewModel.createTransfer(transfer) { success ->
+                            if (success) navController.popBackStack()
+                        }
+                    },
+                    onCancel = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.INTEGRATIONS) {
+                val connectionsState by viewModel.connectionsState.collectAsStateWithLifecycle()
+                // Linking Gmail finishes in a browser, so the only reliable signal
+                // that the list changed is the user coming back to this screen.
+                LifecycleResumeEffect(Unit) {
+                    viewModel.loadConnections()
+                    onPauseOrDispose { }
+                }
+                IntegrationsScreen(
+                    state = connectionsState,
+                    onLinkGmail = {
+                        viewModel.linkGmail { url -> openExternalUrl(context, url) }
+                    },
+                    onConnectTelegram = {
+                        viewModel.pairTelegram { deepLink -> openExternalUrl(context, deepLink) }
+                    },
+                    onRemove = viewModel::removeConnection,
                 )
             }
             composable(Routes.EDIT) { entry ->
@@ -188,6 +262,7 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     transactionId = id,
                     state = state,
                     onEdit = { transactionId -> navController.navigate(Routes.edit(transactionId)) },
+                    onDuplicate = { transactionId -> navController.navigate(Routes.create(transactionId)) },
                     onDelete = { transactionId ->
                         viewModel.deleteTransaction(transactionId) { success ->
                             if (success) navController.popBackStack()

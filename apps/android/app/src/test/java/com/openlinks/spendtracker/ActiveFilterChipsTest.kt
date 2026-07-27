@@ -1,9 +1,12 @@
 package com.openlinks.spendtracker
 
+import com.openlinks.spendtracker.data.Account
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.ui.screens.ActiveFilterChip
 import com.openlinks.spendtracker.ui.screens.FilterChipKind
 import com.openlinks.spendtracker.ui.screens.activeFilterChips
+import com.openlinks.spendtracker.ui.screens.currencyFilterOptions
+import com.openlinks.spendtracker.ui.screens.removeChipTransform
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -91,5 +94,35 @@ class ActiveFilterChipsTest {
             listOf(ActiveFilterChip(FilterChipKind.TYPE, "expense", "Expense")),
             chips,
         )
+    }
+
+    @Test
+    fun currencyProducesARemovableChip() {
+        val chips = activeFilterChips(TransactionFilters(currency = "PEN"), noName, noName)
+
+        assertEquals(
+            listOf(ActiveFilterChip(FilterChipKind.CURRENCY, "PEN", "Currency: PEN")),
+            chips,
+        )
+    }
+
+    @Test
+    fun removingTheCurrencyChipClearsTheCurrencyFilter() {
+        val chip = ActiveFilterChip(FilterChipKind.CURRENCY, "PEN", "Currency: PEN")
+
+        val cleared = removeChipTransform(chip)(TransactionFilters(currency = "PEN"))
+
+        assertEquals(null, cleared.currency)
+    }
+
+    @Test
+    fun currencyFilterOptionsAreDistinctAndSorted() {
+        val accounts = listOf(
+            Account(id = "acc-1", name = "Savings", type = "bank", currency = "USD"),
+            Account(id = "acc-2", name = "Wallet", type = "cash", currency = "PEN"),
+            Account(id = "acc-3", name = "Checking", type = "bank", currency = "USD"),
+        )
+
+        assertEquals(listOf("PEN", "USD"), currencyFilterOptions(accounts))
     }
 }

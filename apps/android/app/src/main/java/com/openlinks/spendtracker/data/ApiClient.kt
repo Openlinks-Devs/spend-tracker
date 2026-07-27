@@ -146,17 +146,40 @@ class ApiClient(
         filters: TransactionFilters,
         page: TransactionPage,
     ): TransactionListResponse =
-        getJson("/api/transactions", filtersToQueryParams(filters, page))
+        getJson("/api/transactions", listQueryParams(filters, page))
 
     override suspend fun getAnalytics(filters: TransactionFilters, bucket: String): AnalyticsPayload =
-        getJson(
-            "/api/transactions/analytics",
-            // The analytics endpoint returns fully aggregated bucketed rows, not a
-            // paginated list, so it ignores limit/offset/sort; only forward filters.
-            filtersToQueryParams(filters, TransactionPage())
-                .filterNot { (name, _) -> name == "limit" || name == "offset" || name == "sort" } +
-                ("bucket" to bucket),
-        )
+        getJson("/api/transactions/analytics", analyticsQueryParams(filters, bucket))
+
+    override suspend fun createTransfer(transfer: TransferInput): TransferResult =
+        withContext(Dispatchers.IO) {
+            val payload = json.encodeToString(TransferInput.serializer(), transfer)
+            val request = newRequest("/api/transfers")
+                .post(payload.toRequestBody(jsonMediaType))
+                .build()
+            http.newCall(request).execute().use { response -> decodeBody<TransferResult>(response) }
+        }
+
+    override suspend fun getConnections(): List<Connection> = getJson("/api/connections")
+
+    override suspend fun deleteConnection(id: String) {
+        execExpectingNoContent(newRequest("/api/connections/$id").delete().build())
+    }
+
+    override suspend fun gmailLinkUrl(): String = postForJson<GmailLinkUrl>(
+        "/api/connections/gmail/link-url",
+    ).url
+
+    override suspend fun telegramPairCode(): String = postForJson<TelegramPairing>(
+        "/api/connections/telegram/pair-code",
+    ).deepLink
+
+    // POST with no request body, for the connection endpoints whose input is the
+    // session alone.
+    private suspend inline fun <reified T> postForJson(path: String): T = withContext(Dispatchers.IO) {
+        val request = newRequest(path).post("".toRequestBody(jsonMediaType)).build()
+        http.newCall(request).execute().use { response -> decodeBody<T>(response) }
+    }
 
     override suspend fun exchangeGoogleIdToken(idToken: String): String = withContext(Dispatchers.IO) {
         val payload = json.encodeToString(

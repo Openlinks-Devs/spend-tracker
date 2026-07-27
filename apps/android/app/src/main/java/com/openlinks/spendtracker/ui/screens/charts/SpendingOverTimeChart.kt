@@ -20,6 +20,7 @@ import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
 
@@ -52,6 +53,10 @@ fun SpendingOverTimeChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) 
                 columnProvider = ColumnCartesianLayer.ColumnProvider.series(
                     rememberLineComponent(fill = fill(ChartColors.spendColor), thickness = 12.dp),
                 ),
+                // Pin the baseline to zero. Left to auto-range, one big column
+                // pushes the axis minimum above every smaller column, which then
+                // renders with no visible height at all.
+                rangeProvider = CartesianLayerRangeProvider.fixed(minY = 0.0),
             ),
             startAxis = VerticalAxis.rememberStart(),
             bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = labelIndexFormatter(labels)),

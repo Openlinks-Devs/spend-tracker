@@ -2,7 +2,8 @@ package com.openlinks.spendtracker
 
 import com.openlinks.spendtracker.data.TransactionFilters
 import com.openlinks.spendtracker.data.TransactionPage
-import com.openlinks.spendtracker.data.filtersToQueryParams
+import com.openlinks.spendtracker.data.analyticsQueryParams
+import com.openlinks.spendtracker.data.listQueryParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,7 +13,7 @@ class TransactionQueryTest {
 
     @Test
     fun defaultFiltersOnlyEmitRangeLimitAndOffset() {
-        val params = filtersToQueryParams(TransactionFilters(), TransactionPage())
+        val params = listQueryParams(TransactionFilters(), TransactionPage())
 
         assertEquals(
             listOf(
@@ -32,7 +33,7 @@ class TransactionQueryTest {
             tags = listOf("food", "rent"),
         )
 
-        val params = filtersToQueryParams(filters, TransactionPage())
+        val params = listQueryParams(filters, TransactionPage())
 
         assertEquals(
             listOf("acc-1", "acc-2"),
@@ -50,7 +51,7 @@ class TransactionQueryTest {
 
     @Test
     fun omitsTagMatchAndTypeWhenAtDefaults() {
-        val params = filtersToQueryParams(TransactionFilters(), TransactionPage())
+        val params = listQueryParams(TransactionFilters(), TransactionPage())
 
         assertFalse(params.any { (key, _) -> key == "tagMatch" })
         assertFalse(params.any { (key, _) -> key == "type" })
@@ -60,7 +61,7 @@ class TransactionQueryTest {
     fun includesTagMatchAndTypeWhenNonDefault() {
         val filters = TransactionFilters(tagMatch = "all", type = "income")
 
-        val params = filtersToQueryParams(filters, TransactionPage())
+        val params = listQueryParams(filters, TransactionPage())
 
         assertTrue(params.contains("tagMatch" to "all"))
         assertTrue(params.contains("type" to "income"))
@@ -75,7 +76,7 @@ class TransactionQueryTest {
         )
         val page = TransactionPage(limit = 25, offset = 75, sort = "amount_desc")
 
-        val params = filtersToQueryParams(filters, page)
+        val params = listQueryParams(filters, page)
 
         assertTrue(params.contains("q" to "coffee"))
         assertTrue(params.contains("min" to "5.0"))
@@ -89,18 +90,54 @@ class TransactionQueryTest {
     fun includesFromAndToWhenSet() {
         val filters = TransactionFilters(range = "custom", from = "2026-01-01", to = "2026-01-31")
 
-        val params = filtersToQueryParams(filters, TransactionPage())
+        val params = listQueryParams(filters, TransactionPage())
 
         assertTrue(params.contains("from" to "2026-01-01"))
         assertTrue(params.contains("to" to "2026-01-31"))
     }
 
     @Test
-    fun neverEmitsCurrencyParamEvenWhenSet() {
+    fun listParamsIncludeCurrencyWhenSet() {
         val filters = TransactionFilters(currency = "USD")
 
-        val params = filtersToQueryParams(filters, TransactionPage())
+        val params = listQueryParams(filters, TransactionPage())
+
+        assertTrue(params.contains("currency" to "USD"))
+    }
+
+    @Test
+    fun listParamsOmitCurrencyWhenUnsetOrBlank() {
+        assertFalse(
+            listQueryParams(TransactionFilters(), TransactionPage())
+                .any { (key, _) -> key == "currency" },
+        )
+        assertFalse(
+            listQueryParams(TransactionFilters(currency = "  "), TransactionPage())
+                .any { (key, _) -> key == "currency" },
+        )
+    }
+
+    // Analytics returns rows bucketed per currency and the UI switches between
+    // them client-side, so the currency filter must not reach that endpoint.
+    @Test
+    fun analyticsParamsNeverIncludeCurrency() {
+        val filters = TransactionFilters(currency = "USD")
+
+        val params = analyticsQueryParams(filters, "month")
 
         assertFalse(params.any { (key, _) -> key == "currency" })
+        assertTrue(params.contains("bucket" to "month"))
+    }
+
+    @Test
+    fun analyticsParamsCarryFiltersButNoPaging() {
+        val filters = TransactionFilters(query = "coffee", type = "expense", accountIds = listOf("acc-1"))
+
+        val params = analyticsQueryParams(filters, "day")
+
+        assertTrue(params.contains("q" to "coffee"))
+        assertTrue(params.contains("type" to "expense"))
+        assertTrue(params.contains("account" to "acc-1"))
+        assertFalse(params.any { (key, _) -> key == "limit" || key == "offset" || key == "sort" })
     }
 }
