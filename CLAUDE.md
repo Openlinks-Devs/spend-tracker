@@ -12,21 +12,19 @@ This is a pnpm monorepo with **three surfaces of one product**, all talking to t
 
 For Android work, use the `ship-mobile-app` skill.
 
-### Parity catch-up (recently added to web, still to mirror on Android)
+### Android specifics
 
-These shipped on web/backend and need to be brought to the Android client:
-
-- **Transfer** between accounts (creates two linked transactions; supports different amounts/currencies; defaults to the Balance -/+ categories).
-- **Duplicate transaction** (pre-fills a new transaction from an existing one).
-- **Currency filter** in the transactions filters.
+- The client has a build-time mock/live seam: `USE_MOCK_AUTH` (from the `useMockAuth` Gradle property) picks between an `x-mock-user` header and a real Better Auth bearer token. Debug builds default to mock; a live build is `./gradlew assembleDebug -PuseMockAuth=false -PserverClientId=<web-oauth-client-id> -PapiBaseUrl=<backend-url>`.
+- Connections are unavailable in mock mode by design (the backend answers `503 connections_require_live_mode` because they key off a real `user` row), so the Integrations screen shows an explanatory state instead of an error there.
+- Gmail linking leaves the app for a Chrome Custom Tab (Google rejects OAuth in a WebView). There is no App Link back: the Integrations screen reloads its list on resume, which is what picks up a completed link. Adding a real App Link would need `assetlinks.json` hosted on the `APP_BASE_URL` domain.
 
 ### Roadmap items - each must also ship on Android
 
 Tracked in `docs/superpowers/plans/` and `docs/superpowers/specs/`:
 
-1. **Multi-tenancy** - data scoped per user (`user_id` on `accounts`/`categories`/`transactions`), auth-gated. Implemented on backend and web, pending deploy. Android parity still pending: the client must send auth and only ever show the signed-in user's data.
-2. **Per-user integrations (connections)** - each user links their own Gmail account(s) and Telegram; premium (multiple Gmail accounts) is gated by an `is_premium` flag. Implemented on backend and web, pending deploy. Android parity still pending: the connection-management UI needs to be built.
-3. **Mercado Pago (Mercado Libre) billing** - subscription flow that sets `is_premium`. Android needs the upgrade entry point.
+1. **Multi-tenancy** - data scoped per user (`user_id` on `accounts`/`categories`/`transactions`), auth-gated. Implemented on backend, web and Android, pending deploy.
+2. **Per-user integrations (connections)** - each user links their own Gmail account(s) and Telegram; premium (multiple Gmail accounts) is gated by an `is_premium` flag. Implemented on backend, web and Android, pending deploy.
+3. **Mercado Pago (Mercado Libre) billing** - subscription flow that sets `is_premium`. Not started. Web and Android both need the upgrade entry point.
 
 ## Conventions
 
