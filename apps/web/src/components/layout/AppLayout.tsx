@@ -25,7 +25,10 @@ const navigationItems = [
 export function AppLayout() {
   const location = useLocation()
   const { data: session } = useSession()
-  const userEmail = session?.user.email
+  // Guard `user` as well as `session`: a session can come back truthy but
+  // without a user (a misrouted /api/auth call, a partial response), and an
+  // unguarded read there blanks the whole app with a render exception.
+  const userEmail = session?.user?.email
   const navigationTarget = (navigationItem: (typeof navigationItems)[number]) =>
     navigationItem.preservesFilters
       ? { pathname: navigationItem.to, search: location.search }
