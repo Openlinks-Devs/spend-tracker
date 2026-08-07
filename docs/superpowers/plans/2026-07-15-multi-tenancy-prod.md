@@ -747,7 +747,12 @@ commita --no-push -x "Attribute Gmail/Telegram auto-imports to the owner user id
 
 Do these when promoting to a real environment (Coolify):
 
-- **Topology (recommended: same-origin).** Serve the web build and proxy `/api` to the backend under one HTTPS domain. This avoids cross-origin cookie/CORS issues. Set the web build's `VITE_API_URL` to `/api` (default) and reverse-proxy `/api` → backend:3000.
+- **Topology (recommended: same-origin).** Serve the web build and proxy the backend's routes under one HTTPS domain. This avoids cross-origin cookie/CORS issues. Set the web build's `VITE_API_URL` to `/api` (default) and reverse-proxy **three** prefixes to the backend, not just one:
+  - `/api` → the app's own calls, including `/api/auth/*`
+  - `/connections` → Google redirects here after consent (`/connections/gmail/callback`)
+  - `/telegram` → Telegram POSTs here (`/telegram/webhook`)
+
+  The last two are mounted outside `/api/*` deliberately, because they are entered by a third party with no app session rather than by the SPA. Forwarding only `/api` leaves them resolving against the static web host, where they 404: Gmail linking fails at the final redirect and Telegram messages are silently dropped. (`/health` also lives outside `/api`, but the container healthcheck hits the backend directly, so it does not need proxying.)
 - **Web hosting.** `pnpm --filter web build` produces static assets in `apps/web/dist`; serve them via the proxy/static host. (The backend serves no static files today.)
 - **Backend env (production):** `NODE_ENV=production`, `APP_MODE=live` (mock now rejected), `DATABASE_URL`, fresh strong `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://<prod-origin>`, `WEB_ORIGIN=https://<prod-origin>`, `GOOGLE_CLIENT_ID/SECRET`, `ALLOWED_EMAILS=<invited emails>`, `OPENAI_*`. Include `GOOGLE_*`/`TELEGRAM_*` only if keeping owner-only import.
 - **Web env (production):** do NOT set `VITE_APP_MODE` (mock bypass); set `VITE_API_URL` per topology.
