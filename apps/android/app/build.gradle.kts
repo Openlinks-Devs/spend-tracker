@@ -16,6 +16,28 @@ val useMockAuth: Boolean =
 // Passed at build time via -PserverClientId for live builds; empty in mock builds.
 val serverClientId: String = (project.findProperty("serverClientId") as String?) ?: ""
 
+// Release signing. The keystore lives outside the repo and its credentials come
+// from Gradle properties (put them in ~/.gradle/gradle.properties) or the matching
+// environment variables for CI. Nothing here may ever hold a literal secret.
+fun signingSetting(propertyName: String, environmentName: String): String? =
+    (project.findProperty(propertyName) as String?) ?: System.getenv(environmentName)
+
+val releaseStorePath: String? = signingSetting("releaseStoreFile", "ANDROID_RELEASE_STORE_FILE")
+val releaseStorePassword: String? =
+    signingSetting("releaseStorePassword", "ANDROID_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias: String? = signingSetting("releaseKeyAlias", "ANDROID_RELEASE_KEY_ALIAS")
+val releaseKeyPassword: String? =
+    signingSetting("releaseKeyPassword", "ANDROID_RELEASE_KEY_PASSWORD")
+val releaseKeystore: File? = releaseStorePath?.let(::File)?.takeIf { keystore -> keystore.exists() }
+
+// A machine without the keystore still has to be able to build. When any part of
+// the configuration is missing the release build stays unsigned rather than
+// failing, so a fresh clone and CI are not blocked on holding the signing key.
+val canSignRelease: Boolean = releaseKeystore != null &&
+    releaseStorePassword != null &&
+    releaseKeyAlias != null &&
+    releaseKeyPassword != null
+
 android {
     namespace = "com.openlinks.spendtracker"
     compileSdk = 35
@@ -35,8 +57,20 @@ android {
         buildConfigField("String", "SERVER_CLIENT_ID", "\"$serverClientId\"")
     }
 
+    signingConfigs {
+        if (canSignRelease) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = if (canSignRelease) signingConfigs.getByName("release") else null
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

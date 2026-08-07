@@ -2,9 +2,16 @@
 /build
 /app/build
 .gradle
+.kotlin
 
 # Local machine config (SDK path, secrets)
 local.properties
+
+# Signing keys. These belong outside the repo entirely; the rule is a backstop
+# against a stray copy being committed.
+*.jks
+*.keystore
+keystore.properties
 
 # Android Studio / IDE
 .idea
