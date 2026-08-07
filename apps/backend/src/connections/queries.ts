@@ -39,9 +39,23 @@ export async function getConnectionById(
 
 // All non-removed gmail rows count toward the limit regardless of status, so a
 // dead connection still occupies a slot until explicitly removed.
+/**
+ * How many Gmail connections count against the plan limit: the active ones.
+ *
+ * A `needs_reauth` row is a broken connection, and re-linking it replaces that
+ * row rather than adding one (upsertGmailConnection is keyed on user + provider
+ * + email). Counting it would let a broken connection occupy the very slot
+ * needed to repair it, which is what made re-authenticating a free account's
+ * only Gmail return 402 premium_required. `disabled` rows are already parked as
+ * over-cap by the poller's downgrade pass, so charging for them too would
+ * double-penalise. Both exclusions match DOWNGRADE_SQL, which ranks and caps on
+ * active rows alone.
+ */
 export async function countGmailConnections(db: Queryable, userId: string): Promise<number> {
   const result = await db.query(
-    `SELECT count(*)::int AS count FROM connection WHERE user_id = $1 AND provider = 'gmail'`,
+    `SELECT count(*)::int AS count
+       FROM connection
+      WHERE user_id = $1 AND provider = 'gmail' AND status = 'active'`,
     [userId],
   )
   return Number(result.rows[0].count)
