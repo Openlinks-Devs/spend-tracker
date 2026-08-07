@@ -9,10 +9,10 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
--keep,includedescriptorclasses class com.openlinks.spendtracker.**$$serializer { *; }
--keepclassmembers class com.openlinks.spendtracker.** {
+-keep,includedescriptorclasses class app.openlinks.spendtracker.**$$serializer { *; }
+-keepclassmembers class app.openlinks.spendtracker.** {
     *** Companion;
 }
--keepclasseswithmembers class com.openlinks.spendtracker.** {
+-keepclasseswithmembers class app.openlinks.spendtracker.** {
     kotlinx.serialization.KSerializer serializer(...);
 }

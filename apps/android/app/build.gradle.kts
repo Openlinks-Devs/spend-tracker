@@ -39,11 +39,11 @@ val canSignRelease: Boolean = releaseKeystore != null &&
     releaseKeyPassword != null
 
 android {
-    namespace = "com.openlinks.spendtracker"
+    namespace = "app.openlinks.spendtracker"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.openlinks.spendtracker"
+        applicationId = "app.openlinks.spendtracker"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
