@@ -107,11 +107,30 @@ pnpm --filter web dev
 Then open <http://localhost:5173>.
 
 **Keep it same-origin.** The browser should talk only to the Vite dev server,
-which proxies `/api` to the backend. Pointing `VITE_API_URL` straight at the
+which proxies the backend's routes. Pointing `VITE_API_URL` straight at the
 backend port looks like it works and then breaks sign-in, because the Better
 Auth browser client ignores `VITE_API_URL`: it derives its own base URL from
 `window.location.origin` and appends `/api/auth`. Split the origins and those
 calls go somewhere else entirely.
+
+### The backend owns three prefixes, not just /api
+
+Two backend routes sit outside `/api` on purpose, because a third party enters
+them directly with no app session:
+
+| Prefix | Who calls it |
+|---|---|
+| `/api` | The SPA and the Android client, including `/api/auth/*` |
+| `/connections` | Google, redirecting to `/connections/gmail/callback` after consent |
+| `/telegram` | Telegram, POSTing to `/telegram/webhook` |
+
+`vite.config.ts` forwards all three. **Any production reverse proxy must do the
+same.** Forwarding only `/api` is the easy mistake: the app looks completely
+healthy, then Gmail linking dies at the final redirect and Telegram messages
+vanish, because both resolve against the static web host and 404 there.
+
+`/health` is also outside `/api`, but healthchecks hit the backend directly so
+it does not need proxying.
 
 If the backend is not on the default port, point the proxy at it:
 
