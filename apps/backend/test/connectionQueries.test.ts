@@ -36,11 +36,16 @@ describe('connection queries', () => {
     expect(replaceSql).toMatch(/INSERT INTO connection/i)
   })
 
-  it('counts gmail connections regardless of status', async () => {
+  // Only active connections count against the plan limit. Counting every row
+  // meant a broken (needs_reauth) connection occupied the very slot needed to
+  // repair it, so re-authenticating a free account's only Gmail returned 402
+  // premium_required. It also matches the poller's downgrade enforcement, which
+  // already ranks and caps on active rows alone.
+  it('counts only active gmail connections toward the plan limit', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ count: '3' }] }) }
     expect(await countGmailConnections(db, 'user-1')).toBe(3)
     const [countSql] = db.query.mock.calls[0]
-    expect(countSql).not.toMatch(/status/)
+    expect(countSql).toMatch(/status\s*=\s*'active'/i)
   })
 
   it('gmailLimitFor returns 1 free and 5 premium', () => {
