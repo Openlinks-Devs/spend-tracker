@@ -72,7 +72,13 @@ export function withOtherBucket<Row>(
   }
   const kept = ranked.slice(0, palette.length - 1)
   const remainder = ranked.slice(palette.length - 1)
-  const otherTotal = remainder.reduce((sum, entry) => sum + entry.value, 0)
+  // Round to cents. Adding a long column of decimal amounts in binary floating
+  // point accumulates error - summing 31 categories produced
+  // 37636.219999999994 - and this value is a money total, so cents is the real
+  // precision. Display is formatted too, but the stored value should not carry
+  // noise that percentages are then derived from.
+  const otherTotal =
+    Math.round(remainder.reduce((sum, entry) => sum + entry.value, 0) * 100) / 100
   return [
     ...kept.map((entry, index) => ({ ...entry, color: palette[index] })),
     { name: `${OTHER_LABEL} (${remainder.length})`, value: otherTotal, color: OTHER_COLOR },
