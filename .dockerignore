@@ -1,9 +1,14 @@
 **/node_modules
 **/dist
 .git
+# Secrets never enter the image; runtime config comes from the platform's env.
 **/.env
+**/.env.*
 coverage
 docs
+# Tests are not needed at build or runtime.
 apps/backend/test
-apps/web
+**/*.test.ts
+**/*.test.tsx
+# The Android client is a standalone Gradle project, unrelated to this image.
 apps/android
