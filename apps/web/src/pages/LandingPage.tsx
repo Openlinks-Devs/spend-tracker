@@ -232,9 +232,29 @@ export function LandingPage() {
       </main>
 
       <footer className="border-t">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span className="font-medium text-foreground">SpendTracker</span>
-          <span>Gmail and Telegram, turned into one ledger.</span>
+          {/* Plain anchors, not react-router links: these are standalone static
+              documents in public/, served by the same origin but outside the SPA.
+              Google's OAuth verification also expects the privacy policy to be
+              reachable from the page that requests consent. */}
+          <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <a href="/privacy.html" className="transition-colors hover:text-foreground">
+              Privacy policy
+            </a>
+            <a
+              href="/terms-and-conditions.html"
+              className="transition-colors hover:text-foreground"
+            >
+              Terms and conditions
+            </a>
+            <a
+              href="mailto:contact@openlinks.app"
+              className="transition-colors hover:text-foreground"
+            >
+              Contact
+            </a>
+          </nav>
         </div>
       </footer>
     </div>
