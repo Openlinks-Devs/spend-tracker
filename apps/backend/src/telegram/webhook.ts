@@ -81,20 +81,20 @@ async function handlePairing(code: string, chatId: string, deps: WebhookDeps): P
   if (!code) return
   const pairedUserId = await consumePairingCode(deps.db, code, 'telegram_pair')
   if (!pairedUserId) {
-    await deps.notify(chatId, 'El codigo de vinculacion no es valido o ya expiro.')
+    await deps.notify(chatId, 'El código de vinculación no es válido o ya expiró.')
     return
   }
   // A chat maps to at most one user globally, so a code minted by a different
   // user must not steal a chat already paired to someone else.
   const existing = await getTelegramConnectionByChatId(deps.db, chatId)
   if (existing && existing.user_id !== pairedUserId) {
-    await deps.notify(chatId, 'Este chat ya esta vinculado a otra cuenta de SpendTracker.')
+    await deps.notify(chatId, 'Este chat ya está vinculado a otra cuenta de SpendTracker.')
     return
   }
   await replaceTelegramConnection(deps.db, pairedUserId, chatId)
   await deps.notify(
     chatId,
-    'Chat vinculado a SpendTracker. Responde a un mensaje de transaccion para editarla.',
+    'Chat vinculado a SpendTracker. Responde a un mensaje de transacción para editarla.',
   )
 }
 
