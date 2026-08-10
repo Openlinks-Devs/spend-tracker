@@ -3,6 +3,7 @@ import { EChart } from '@/components/EChart'
 import { formatCurrency, formatDayLabel } from '@/lib/utils'
 import { toDayWindow } from '@/lib/dayWindow'
 import { SPEND_RAMP } from '@/lib/echartsTheme'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { SeriesRow } from '@/types'
 
 interface SpendCalendarHeatmapProps {
@@ -13,7 +14,11 @@ interface SpendCalendarHeatmapProps {
   onSelect?: (window: { from: string; to: string }) => void
 }
 
-const MONTHS_SHOWN = 6
+// Six months of day cells needs roughly 90px per month to stay legible. On a
+// phone that is about 2px per cell, which is noise rather than data, so narrow
+// screens show a shorter window instead of an unreadable one.
+const MONTHS_SHOWN_WIDE = 6
+const MONTHS_SHOWN_NARROW = 3
 
 // Zero-padded local calendar-day key (YYYY-MM-DD) that the ECharts calendar
 // coordinate system expects. toDayKey in lib/utils is unpadded, so build it here.
@@ -32,6 +37,12 @@ function monthsBeforeKey(dayKey: string, months: number): string {
 }
 
 export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendarHeatmapProps) {
+  const isNarrow = useMediaQuery('(max-width: 640px)')
+  const monthsShown = isNarrow ? MONTHS_SHOWN_NARROW : MONTHS_SHOWN_WIDE
+  // The calendar itself only needs ~140px (7 rows at 16px plus labels); the rest
+  // of a 288px box was empty, stranding the scale legend far below the grid.
+  const chartHeight = isNarrow ? 200 : 224
+
   const option = useMemo(() => {
     const dailySpend = rows.map((seriesRow) => ({
       dayKey: toCalendarDayKey(new Date(seriesRow.bucketStart)),
@@ -43,7 +54,7 @@ export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendar
     // Zero-padded keys sort and compare lexically, so string ordering is safe.
     const sortedKeys = dailySpend.map((entry) => entry.dayKey).sort()
     const rangeEnd = sortedKeys[sortedKeys.length - 1]
-    const rangeStart = rangeEnd ? monthsBeforeKey(rangeEnd, MONTHS_SHOWN) : sortedKeys[0]
+    const rangeStart = rangeEnd ? monthsBeforeKey(rangeEnd, monthsShown) : sortedKeys[0]
     const recentSpend = dailySpend.filter((entry) => entry.dayKey >= rangeStart)
     const maxSpend = recentSpend.reduce((runningMax, entry) => Math.max(runningMax, entry.spend), 0)
 
@@ -91,7 +102,7 @@ export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendar
         },
       ],
     }
-  }, [rows, currency])
+  }, [rows, currency, monthsShown])
 
   if (rows.length === 0) {
     return (
@@ -104,7 +115,7 @@ export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendar
   return (
     <EChart
       option={option}
-      height={288}
+      height={chartHeight}
       onEvents={{
         click: (params) => {
           const clicked = params.data as { window?: { from: string; to: string } } | undefined

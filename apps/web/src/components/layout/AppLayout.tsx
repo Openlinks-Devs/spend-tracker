@@ -86,9 +86,36 @@ export function AppLayout() {
         )}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center gap-4 border-b bg-background px-6 md:hidden">
-          <span className="text-lg font-semibold">SpendTracker</span>
-          <nav className="flex gap-2 overflow-x-auto">
+        {/* Two rows on small screens. Cramming the wordmark and five links onto
+            one line clipped the last item ("Integrations" rendered as "I") and
+            left no room for the account, so signing out was impossible on a
+            phone - the sidebar footer that holds it is desktop-only. */}
+        <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur md:hidden">
+          <div className="flex h-14 items-center justify-between gap-3 px-4">
+            <span className="truncate text-lg font-semibold tracking-tight">SpendTracker</span>
+            {isMockMode ? null : (
+              <div className="flex min-w-0 items-center gap-2">
+                {userEmail ? (
+                  <span className="max-w-[9rem] truncate text-xs text-muted-foreground">
+                    {userEmail}
+                  </span>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 px-2"
+                  onClick={() => signOut()}
+                  aria-label="Sign out"
+                >
+                  <IconLogout className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+          {/* Horizontal scroll is the honest answer for five destinations on a
+              narrow screen; the edge fade tells you there is more to reach. */}
+          <nav className="-mb-px flex gap-1 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {navigationItems.map((navigationItem) => (
               <NavLink
                 key={navigationItem.to}
@@ -96,10 +123,10 @@ export function AppLayout() {
                 end={navigationItem.end}
                 className={({ isActive }) =>
                   cn(
-                    'whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium',
+                    'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                   )
                 }
               >
@@ -108,7 +135,10 @@ export function AppLayout() {
             ))}
           </nav>
         </header>
-        <main className="flex-1 p-6">
+        {/* min-w-0 so wide children (chart canvases, long descriptions) shrink
+            here instead of stretching the page. Tighter gutters on phones:
+            p-6 spent 48px of a 390px screen on empty margin. */}
+        <main className="min-w-0 flex-1 p-4 sm:p-6">
           <Outlet />
         </main>
       </div>

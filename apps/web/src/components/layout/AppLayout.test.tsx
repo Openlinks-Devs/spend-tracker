@@ -26,9 +26,13 @@ afterEach(() => {
 })
 
 describe('AppLayout sign out', () => {
-  it('offers sign out when a real session can be ended', async () => {
+  // Two controls exist at once - one in the desktop sidebar footer, one in the
+  // mobile header - and CSS picks which is visible per breakpoint. Both are in
+  // the DOM, so this asserts reachability rather than a single instance. Before
+  // the mobile header had one, signing out was impossible on a phone.
+  it('offers sign out at every breakpoint when a real session can be ended', async () => {
     await renderLayout(false)
-    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeNull()
+    expect(screen.getAllByRole('button', { name: /sign out/i }).length).toBeGreaterThan(0)
   })
 
   // In mock mode the backend synthesizes a session for every request and the
@@ -37,6 +41,6 @@ describe('AppLayout sign out', () => {
   // the app stays exactly where it was.
   it('hides sign out in mock mode, where nothing can end the session', async () => {
     await renderLayout(true)
-    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
+    expect(screen.queryAllByRole('button', { name: /sign out/i })).toHaveLength(0)
   })
 })

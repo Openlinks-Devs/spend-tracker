@@ -15,7 +15,7 @@ import { useCategories } from '@/hooks/useCategories'
 import { useTransactionAnalytics } from '@/hooks/useTransactionAnalytics'
 import { toSearchParams, type TransactionFilterState } from '@/lib/filterParams'
 import { toErrorMessage } from '@/lib/api'
-import { toNameById } from '@/lib/utils'
+import { cn, toNameById } from '@/lib/utils'
 import type { SummaryRow } from '@/types'
 
 const DEFAULT_DISPLAY_CURRENCY = 'USD'
@@ -69,7 +69,12 @@ interface ChartCardProps {
 
 function ChartCard({ title, className, children }: ChartCardProps) {
   return (
-    <Card className={className}>
+    // min-w-0 is load-bearing, not defensive. A grid item defaults to
+    // min-width:auto, so this card could never shrink below the intrinsic width
+    // of the chart canvas inside it: the ResizeObserver in EChart had nothing to
+    // shrink into, the cards pushed past the viewport, and the whole page
+    // scrolled sideways on a phone.
+    <Card className={cn('min-w-0', className)}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>

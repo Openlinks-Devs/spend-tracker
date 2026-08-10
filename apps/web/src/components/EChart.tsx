@@ -54,5 +54,13 @@ export function EChart({ option, height, onEvents }: EChartProps) {
     }
   }, [onEvents])
 
-  return <div ref={containerRef} style={{ height, width: '100%' }} />
+  // minWidth:0 lets the container shrink inside flex/grid parents; overflow
+  // hidden stops a canvas that is momentarily wider (between a resize and the
+  // observer firing) from widening the page.
+  return (
+    <div
+      ref={containerRef}
+      style={{ height, width: '100%', minWidth: 0, overflow: 'hidden' }}
+    />
+  )
 }
