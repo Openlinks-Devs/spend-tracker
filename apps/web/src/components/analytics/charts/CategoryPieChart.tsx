@@ -1,15 +1,22 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
+import { itemCurrencyTooltip } from '@/lib/chartTooltip'
 import { withOtherBucket } from '@/lib/echartsTheme'
 import type { CategoryRow } from '@/types'
 
 interface CategoryPieChartProps {
   rows: CategoryRow[]
+  currency: string
   categoryNameById: Map<string, string>
   onSelect?: (categoryId: string) => void
 }
 
-export function CategoryPieChart({ rows, categoryNameById, onSelect }: CategoryPieChartProps) {
+export function CategoryPieChart({
+  rows,
+  currency,
+  categoryNameById,
+  onSelect,
+}: CategoryPieChartProps) {
   const option = useMemo(() => {
     // A pie has no axis, so colour is the only thing identifying a slice - which
     // makes it the one chart here that genuinely needs distinct hues. It is also
@@ -33,7 +40,10 @@ export function CategoryPieChart({ rows, categoryNameById, onSelect }: CategoryP
     )
 
     return {
-      tooltip: { trigger: 'item' as const, formatter: '{b}: {c} ({d}%)' },
+      tooltip: {
+        trigger: 'item' as const,
+        formatter: itemCurrencyTooltip(currency, { percent: true }),
+      },
       series: [
         {
           type: 'pie' as const,
@@ -51,7 +61,7 @@ export function CategoryPieChart({ rows, categoryNameById, onSelect }: CategoryP
         },
       ],
     }
-  }, [rows, categoryNameById])
+  }, [rows, currency, categoryNameById])
   return (
     <EChart
       option={option}

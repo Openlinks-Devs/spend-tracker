@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
+import { axisCurrencyTooltip } from '@/lib/chartTooltip'
 import { SPEND_COLOR } from '@/lib/echartsTheme'
 import { formatDate } from '@/lib/utils'
 import type { SeriesRow } from '@/types'
 
 interface SpendingOverTimeChartProps {
   rows: SeriesRow[]
+  currency: string
   onSelect?: (window: { from: string; to: string }) => void
 }
 
@@ -22,12 +24,12 @@ function resolveBucketEnd(rows: SeriesRow[], index: number): string {
   return new Date(currentStart + interval).toISOString()
 }
 
-export function SpendingOverTimeChart({ rows, onSelect }: SpendingOverTimeChartProps) {
+export function SpendingOverTimeChart({ rows, currency, onSelect }: SpendingOverTimeChartProps) {
   const option = useMemo(
     () => ({
       // One series, and it is spend - so it wears the spend colour, not the
       // first slot of the identity palette (which is why it used to be blue).
-      tooltip: { trigger: 'axis' as const },
+      tooltip: { trigger: 'axis' as const, formatter: axisCurrencyTooltip(currency) },
       grid: { left: 48, right: 16, top: 24, bottom: 40 },
       xAxis: {
         type: 'category' as const,
@@ -45,7 +47,7 @@ export function SpendingOverTimeChart({ rows, onSelect }: SpendingOverTimeChartP
         },
       ],
     }),
-    [rows],
+    [rows, currency],
   )
   return (
     <EChart

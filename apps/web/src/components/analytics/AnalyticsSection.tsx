@@ -193,22 +193,27 @@ export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps)
 
           <div className="grid gap-4 lg:grid-cols-2">
             <ChartCard title="Spending over time">
-              <SpendingOverTimeChart rows={seriesForCurrency} />
+              <SpendingOverTimeChart rows={seriesForCurrency} currency={displayCurrency} />
             </ChartCard>
             <ChartCard title="Income vs spend">
-              <IncomeExpenseChart rows={seriesForCurrency} />
+              <IncomeExpenseChart rows={seriesForCurrency} currency={displayCurrency} />
             </ChartCard>
             <ChartCard title="Spending by category">
               <CategoryPieChart
                 rows={categoriesForCurrency}
+                currency={displayCurrency}
                 categoryNameById={categoryNameById}
               />
             </ChartCard>
             <ChartCard title="Top tags">
-              <TagBarChart rows={tagsForCurrency} />
+              <TagBarChart rows={tagsForCurrency} currency={displayCurrency} />
             </ChartCard>
             <ChartCard title="Net by account">
-              <AccountNetChart rows={accountsForCurrency} accountNameById={accountNameById} />
+              <AccountNetChart
+                rows={accountsForCurrency}
+                currency={displayCurrency}
+                accountNameById={accountNameById}
+              />
             </ChartCard>
             <ChartCard title="Daily spending" className="lg:col-span-2">
               <SpendCalendarHeatmap

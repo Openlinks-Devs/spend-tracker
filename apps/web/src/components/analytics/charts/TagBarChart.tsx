@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
+import { itemCurrencyTooltip } from '@/lib/chartTooltip'
 import { SPEND_COLOR } from '@/lib/echartsTheme'
 import type { TagRow } from '@/types'
 
 interface TagBarChartProps {
   rows: TagRow[]
+  currency: string
   onSelect?: (tag: string) => void
 }
 
@@ -12,7 +14,7 @@ interface TagBarChartProps {
 // unreadable stack and let one long-tail bar set a scale that flattened the rest.
 const TOP_TAGS_SHOWN = 12
 
-export function TagBarChart({ rows, onSelect }: TagBarChartProps) {
+export function TagBarChart({ rows, currency, onSelect }: TagBarChartProps) {
   const option = useMemo(() => {
     const sortedRows = [...rows]
       .sort((firstRow, secondRow) => secondRow.spend - firstRow.spend)
@@ -21,7 +23,7 @@ export function TagBarChart({ rows, onSelect }: TagBarChartProps) {
       // Every bar is the same measure (spend) and the axis already names the
       // tag, so one colour. A rainbow here implied the tags were different
       // kinds of thing, and reused hues once there were more tags than slots.
-      tooltip: { trigger: 'item' as const },
+      tooltip: { trigger: 'item' as const, formatter: itemCurrencyTooltip(currency) },
       grid: { left: 96, right: 24, top: 24, bottom: 64 },
       xAxis: { type: 'value' as const, axisLabel: { rotate: 60 } },
       yAxis: {
@@ -37,7 +39,7 @@ export function TagBarChart({ rows, onSelect }: TagBarChartProps) {
         },
       ],
     }
-  }, [rows])
+  }, [rows, currency])
   return (
     <EChart
       option={option}

@@ -1,21 +1,23 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
+import { axisCurrencyTooltip } from '@/lib/chartTooltip'
 import { INCOME_COLOR, SPEND_COLOR, NET_COLOR } from '@/lib/echartsTheme'
 import { formatDate } from '@/lib/utils'
 import type { SeriesRow } from '@/types'
 
 interface IncomeExpenseChartProps {
   rows: SeriesRow[]
+  currency: string
 }
 
-export function IncomeExpenseChart({ rows }: IncomeExpenseChartProps) {
+export function IncomeExpenseChart({ rows, currency }: IncomeExpenseChartProps) {
   const option = useMemo(
     () => ({
       // Colours are pinned per series, not taken from the categorical palette by
       // index. Income and spend are opposite poles of one measure, so they carry
       // the reserved polarity pair; picking them off an identity palette is what
       // used to paint spend green.
-      tooltip: { trigger: 'axis' as const },
+      tooltip: { trigger: 'axis' as const, formatter: axisCurrencyTooltip(currency) },
       legend: { data: ['Income', 'Spend', 'Net'], top: 0 },
       grid: { left: 48, right: 16, top: 48, bottom: 40 },
       xAxis: {
@@ -48,7 +50,7 @@ export function IncomeExpenseChart({ rows }: IncomeExpenseChartProps) {
         },
       ],
     }),
-    [rows],
+    [rows, currency],
   )
   return <EChart option={option} height={288} />
 }

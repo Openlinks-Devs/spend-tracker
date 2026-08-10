@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
+import { itemCurrencyTooltip } from '@/lib/chartTooltip'
 import { INCOME_COLOR, SPEND_COLOR } from '@/lib/echartsTheme'
 import type { AccountRow } from '@/types'
 
@@ -11,14 +12,15 @@ import type { AccountRow } from '@/types'
 
 interface AccountNetChartProps {
   rows: AccountRow[]
+  currency: string
   accountNameById: Map<string, string>
 }
 
-export function AccountNetChart({ rows, accountNameById }: AccountNetChartProps) {
+export function AccountNetChart({ rows, currency, accountNameById }: AccountNetChartProps) {
   const option = useMemo(() => {
     const sortedRows = [...rows].sort((firstRow, secondRow) => secondRow.net - firstRow.net)
     return {
-      tooltip: { trigger: 'item' as const },
+      tooltip: { trigger: 'item' as const, formatter: itemCurrencyTooltip(currency) },
       grid: { left: 110, right: 24, top: 24, bottom: 64 },
       xAxis: { type: 'value' as const, axisLabel: { rotate: 60 } },
       yAxis: {
@@ -38,6 +40,6 @@ export function AccountNetChart({ rows, accountNameById }: AccountNetChartProps)
         },
       ],
     }
-  }, [rows, accountNameById])
+  }, [rows, currency, accountNameById])
   return <EChart option={option} height={288} />
 }
