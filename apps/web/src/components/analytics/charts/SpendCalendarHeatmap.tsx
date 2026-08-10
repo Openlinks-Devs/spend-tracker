@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { formatCurrency, formatDayLabel } from '@/lib/utils'
 import { toDayWindow } from '@/lib/dayWindow'
+import { SPEND_RAMP } from '@/lib/echartsTheme'
 import type { SeriesRow } from '@/types'
 
 interface SpendCalendarHeatmapProps {
@@ -59,6 +60,9 @@ export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendar
         },
       },
       visualMap: {
+        // Sequential: one hue, light to dark, in the spend colour so "darker
+        // means more spent" matches what the bars say.
+        inRange: { color: SPEND_RAMP },
         min: 0,
         max: maxSpend > 0 ? maxSpend : 1,
         calculable: true,

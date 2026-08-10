@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
-import { palette } from '@/lib/echartsTheme'
+import { INCOME_COLOR, SPEND_COLOR, NET_COLOR } from '@/lib/echartsTheme'
 import { formatDate } from '@/lib/utils'
 import type { SeriesRow } from '@/types'
 
@@ -11,7 +11,10 @@ interface IncomeExpenseChartProps {
 export function IncomeExpenseChart({ rows }: IncomeExpenseChartProps) {
   const option = useMemo(
     () => ({
-      color: palette,
+      // Colours are pinned per series, not taken from the categorical palette by
+      // index. Income and spend are opposite poles of one measure, so they carry
+      // the reserved polarity pair; picking them off an identity palette is what
+      // used to paint spend green.
       tooltip: { trigger: 'axis' as const },
       legend: { data: ['Income', 'Spend', 'Net'], top: 0 },
       grid: { left: 48, right: 16, top: 48, bottom: 40 },
@@ -24,16 +27,23 @@ export function IncomeExpenseChart({ rows }: IncomeExpenseChartProps) {
         {
           name: 'Income',
           type: 'bar' as const,
+          itemStyle: { color: INCOME_COLOR, borderRadius: [4, 4, 0, 0] },
           data: rows.map((seriesRow) => seriesRow.income),
         },
         {
           name: 'Spend',
           type: 'bar' as const,
+          itemStyle: { color: SPEND_COLOR, borderRadius: [4, 4, 0, 0] },
           data: rows.map((seriesRow) => seriesRow.spend),
         },
         {
+          // Neutral ink, and a line rather than a bar, so net reads as the
+          // derived midpoint of the two poles instead of a third category.
           name: 'Net',
           type: 'line' as const,
+          itemStyle: { color: NET_COLOR },
+          lineStyle: { color: NET_COLOR, width: 2 },
+          symbolSize: 8,
           data: rows.map((seriesRow) => seriesRow.net),
         },
       ],

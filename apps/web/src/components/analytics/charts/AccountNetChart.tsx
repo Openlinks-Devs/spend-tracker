@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
+import { INCOME_COLOR, SPEND_COLOR } from '@/lib/echartsTheme'
 import type { AccountRow } from '@/types'
 
-// Net can be positive (money in) or negative (money out), so bars are colored by
-// sign rather than by the categorical palette: green for a positive net, red for
-// a negative one.
-const POSITIVE_NET_COLOR = '#16a34a'
-const NEGATIVE_NET_COLOR = '#dc2626'
+// Net can be positive (money in) or negative (money out), so bars are coloured by
+// sign - the same polarity pair the income/spend chart uses, so one colour means
+// one thing across the dashboard. The previous green/red pair was replaced
+// because it measured protan ΔE 5.0: red-green colourblind viewers could not
+// tell a positive account from a negative one.
 
 interface AccountNetChartProps {
   rows: AccountRow[]
@@ -32,7 +33,7 @@ export function AccountNetChart({ rows, accountNameById }: AccountNetChartProps)
           type: 'bar' as const,
           data: sortedRows.map((accountRow) => ({
             value: accountRow.net,
-            itemStyle: { color: accountRow.net >= 0 ? POSITIVE_NET_COLOR : NEGATIVE_NET_COLOR },
+            itemStyle: { color: accountRow.net >= 0 ? INCOME_COLOR : SPEND_COLOR },
           })),
         },
       ],
