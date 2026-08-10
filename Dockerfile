@@ -28,11 +28,20 @@ RUN pnpm --filter backend build
 COPY apps/web/tsconfig.json ./apps/web/tsconfig.json
 COPY apps/web/vite.config.ts apps/web/index.html ./apps/web/
 COPY apps/web/src ./apps/web/src
+# Static documents served verbatim next to the SPA (privacy policy, terms).
+# Vite copies public/ into dist/ as-is.
+COPY apps/web/public ./apps/web/public
 RUN pnpm --filter web exec vite build
 
 FROM node:22-slim AS runtime
 WORKDIR /repo
 RUN corepack enable
+# node:22-slim ships with neither curl nor wget, and Coolify's container
+# healthcheck shells out to one of them. Without this the app starts correctly
+# and is still marked unhealthy, which rolls the deployment back.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV TZ=America/Lima
 # Consumed by apps/backend/src/index.ts to enable static serving. Relative to
