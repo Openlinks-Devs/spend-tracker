@@ -6,6 +6,7 @@ import { AccountsPage } from '@/pages/AccountsPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { IntegrationsPage } from '@/pages/IntegrationsPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { LandingPage } from '@/pages/LandingPage'
 import { useSession } from '@/lib/authClient'
 // In mock mode the backend synthesizes a demo session for every request, so
 // there is no real Better Auth session for the web app to check. Skip the login
@@ -30,10 +31,16 @@ function AuthenticatedApp() {
       </div>
     )
   }
+  // Signed out, the site is the public landing page. Deep links (/transactions,
+  // a shared filter URL) go to the landing page too rather than 404ing, so the
+  // sign-in prompt is always one click away; the app routes come back once
+  // there is a session.
   if (!session) {
     return (
       <Routes>
-        <Route path="*" element={<LoginPage />} />
+        <Route index element={<LandingPage />} />
+        <Route path="login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
   }
