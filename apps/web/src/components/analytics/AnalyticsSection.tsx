@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CurrencySwitcher } from '@/components/analytics/CurrencySwitcher'
@@ -12,7 +13,7 @@ import { TagBarChart } from '@/components/analytics/charts/TagBarChart'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
 import { useTransactionAnalytics } from '@/hooks/useTransactionAnalytics'
-import { type TransactionFilterState } from '@/lib/filterParams'
+import { toSearchParams, type TransactionFilterState } from '@/lib/filterParams'
 import { toErrorMessage } from '@/lib/api'
 import { toNameById } from '@/lib/utils'
 import type { SummaryRow } from '@/types'
@@ -79,6 +80,7 @@ function ChartCard({ title, className, children }: ChartCardProps) {
 
 export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps) {
   const [bucket, setBucket] = useState<AnalyticsBucket>('month')
+  const navigate = useNavigate()
 
   // The over-time/income-expense series follow the selected bucket, while the
   // heatmap always needs day granularity. When bucket is already 'day' both
@@ -204,7 +206,28 @@ export function AnalyticsSection({ filters, setFilters }: AnalyticsSectionProps)
               <AccountNetChart rows={accountsForCurrency} accountNameById={accountNameById} />
             </ChartCard>
             <ChartCard title="Daily spending" className="lg:col-span-2">
-              <SpendCalendarHeatmap rows={daySeriesForCurrency} currency={displayCurrency} />
+              <SpendCalendarHeatmap
+                rows={daySeriesForCurrency}
+                currency={displayCurrency}
+                // Drill into the clicked day on the transactions page. The
+                // current filters carry over so the drill-down stays a subset of
+                // what the chart drew, with the date range narrowed to that one
+                // day. 'custom' is not a backend preset, which is exactly what
+                // makes it fall through to using from/to verbatim.
+                // displayCurrency is pinned too: the heatmap charts a single
+                // currency, so without it the list would total more than the
+                // cell the user clicked.
+                onSelect={(window) => {
+                  const params = toSearchParams({
+                    ...filters,
+                    range: 'custom',
+                    from: window.from,
+                    to: window.to,
+                    currency: displayCurrency,
+                  })
+                  navigate(`/transactions?${params.toString()}`)
+                }}
+              />
             </ChartCard>
           </div>
         </>

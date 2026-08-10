@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { signOut, useSession } from '@/lib/authClient'
+import { isMockMode } from '@/lib/appMode'
 
 // Dashboard and Transactions share the same filter query string; carrying the
 // current location.search across those two links keeps filters applied when the
@@ -63,18 +64,26 @@ export function AppLayout() {
             )
           })}
         </nav>
-        <div className="flex flex-col gap-2 border-t p-3">
-          {userEmail ? <span className="truncate px-3 text-sm text-muted-foreground">{userEmail}</span> : null}
-          <Button
-            type="button"
-            variant="ghost"
-            className="justify-start gap-3 px-3"
-            onClick={() => signOut()}
-          >
-            <IconLogout className="h-4 w-4" />
-            Sign out
-          </Button>
-        </div>
+        {/* Mock mode has no session to end: the backend answers every request
+            with a synthesized one and App skips the login gate, so signOut()
+            would return 200 and change nothing on screen. Hide the control
+            rather than ship a button that cannot work. Mock mode also has no
+            session to read an email from, so the whole footer goes with it
+            instead of leaving an empty bordered strip. */}
+        {isMockMode ? null : (
+          <div className="flex flex-col gap-2 border-t p-3">
+            {userEmail ? <span className="truncate px-3 text-sm text-muted-foreground">{userEmail}</span> : null}
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-start gap-3 px-3"
+              onClick={() => signOut()}
+            >
+              <IconLogout className="h-4 w-4" />
+              Sign out
+            </Button>
+          </div>
+        )}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center gap-4 border-b bg-background px-6 md:hidden">

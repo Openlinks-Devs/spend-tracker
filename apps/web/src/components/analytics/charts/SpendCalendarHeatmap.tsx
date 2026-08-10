@@ -1,11 +1,15 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { formatCurrency, formatDayLabel } from '@/lib/utils'
+import { toDayWindow } from '@/lib/dayWindow'
 import type { SeriesRow } from '@/types'
 
 interface SpendCalendarHeatmapProps {
   rows: SeriesRow[]
   currency: string
+  // Same contract as SpendingOverTimeChart: hand back the half-open window of
+  // the clicked bucket and let the caller decide what to do with it.
+  onSelect?: (window: { from: string; to: string }) => void
 }
 
 const MONTHS_SHOWN = 6
@@ -26,7 +30,7 @@ function monthsBeforeKey(dayKey: string, months: number): string {
   return toCalendarDayKey(date)
 }
 
-export function SpendCalendarHeatmap({ rows, currency }: SpendCalendarHeatmapProps) {
+export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendarHeatmapProps) {
   const option = useMemo(() => {
     const dailySpend = rows.map((seriesRow) => ({
       dayKey: toCalendarDayKey(new Date(seriesRow.bucketStart)),
@@ -73,7 +77,13 @@ export function SpendCalendarHeatmap({ rows, currency }: SpendCalendarHeatmapPro
         {
           type: 'heatmap' as const,
           coordinateSystem: 'calendar' as const,
-          data: recentSpend.map((entry) => [entry.dayKey, entry.spend] as [string, number]),
+          // Object form rather than a bare tuple so each cell carries the filter
+          // window for its own day. `value` keeps the [dayKey, spend] shape the
+          // calendar coordinate system and the tooltip formatter both expect.
+          data: recentSpend.map((entry) => ({
+            value: [entry.dayKey, entry.spend] as [string, number],
+            window: toDayWindow(entry.dayKey),
+          })),
         },
       ],
     }
@@ -87,5 +97,16 @@ export function SpendCalendarHeatmap({ rows, currency }: SpendCalendarHeatmapPro
     )
   }
 
-  return <EChart option={option} height={288} />
+  return (
+    <EChart
+      option={option}
+      height={288}
+      onEvents={{
+        click: (params) => {
+          const clicked = params.data as { window?: { from: string; to: string } } | undefined
+          if (onSelect && clicked?.window) onSelect(clicked.window)
+        },
+      }}
+    />
+  )
 }
