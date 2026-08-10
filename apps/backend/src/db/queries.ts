@@ -213,7 +213,12 @@ export async function getAnalytics(
     params,
   )
   const series = await db.query(
-    `SELECT to_char(date_trunc('${safeBucket}', created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "bucketStart",
+    // No "Z" suffix: created_at is `timestamp without time zone`, so date_trunc
+    // returns a LOCAL bucket start. Labelling it UTC made clients west of UTC
+    // parse it back across midnight and draw every daily bucket one day early.
+    // Without an offset, JS Date parses this form as local time, which is what
+    // these calendar buckets actually are.
+    `SELECT to_char(date_trunc('${safeBucket}', created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS') AS "bucketStart",
             currency, ${ANALYTICS_INCOME_EXPRESSION} AS income, ${ANALYTICS_SPEND_EXPRESSION} AS spend,
             sum(amount)::float8 AS net
        FROM transactions ${clause}
