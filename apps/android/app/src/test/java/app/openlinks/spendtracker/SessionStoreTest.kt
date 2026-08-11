@@ -2,11 +2,29 @@ package app.openlinks.spendtracker
 
 import app.openlinks.spendtracker.data.AuthState
 import app.openlinks.spendtracker.data.InMemoryKeyValueStore
+import app.openlinks.spendtracker.data.KeyValueStore
 import app.openlinks.spendtracker.data.SessionStore
+import app.openlinks.spendtracker.data.ThemePreference
+import app.openlinks.spendtracker.data.ThemeStore
 import app.openlinks.spendtracker.data.authHeaders
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+/**
+ * Stands in for Context.getSharedPreferences(name, ...): one backing map per file
+ * name. SharedPrefsStore's new name parameter buys exactly one property, that
+ * distinct names are distinct namespaces, and that property is a platform
+ * guarantee a plain JVM unit test cannot exercise (Robolectric is not on this
+ * project's classpath, and unitTests.isReturnDefaultValues makes the real call
+ * return null). Asserting it against an equivalent factory at least pins the
+ * contract every caller depends on.
+ */
+private class NamedStoreFactory {
+    private val filesByName = mutableMapOf<String, InMemoryKeyValueStore>()
+    fun store(name: String): KeyValueStore = filesByName.getOrPut(name) { InMemoryKeyValueStore() }
+}
 
 class SessionStoreTest {
 
@@ -37,6 +55,33 @@ class SessionStoreTest {
         store.saveToken("abc123")
         store.clear()
         assertEquals(AuthState.SignedOut, store.authState())
+    }
+
+    @Test
+    fun storesWithDifferentNamesDoNotSeeEachOthersKeys() {
+        val factory = NamedStoreFactory()
+        val sessionStore = SessionStore(factory.store("spendtracker_session"))
+        val prefsFile = factory.store("spendtracker_prefs")
+
+        sessionStore.saveToken("abc123")
+        assertNull(prefsFile.getString("bearer_token"))
+
+        prefsFile.putString("theme_preference", "dark")
+        assertEquals(AuthState.SignedIn("abc123"), sessionStore.authState())
+    }
+
+    @Test
+    fun signOutClearsTheSessionFileButNotTheThemeFile() {
+        val factory = NamedStoreFactory()
+        val sessionStore = SessionStore(factory.store("spendtracker_session"))
+        val themeStore = ThemeStore(factory.store("spendtracker_prefs"))
+
+        sessionStore.saveToken("abc123")
+        themeStore.setPreference(ThemePreference.Dark)
+        sessionStore.clear()
+
+        assertEquals(AuthState.SignedOut, sessionStore.authState())
+        assertEquals(ThemePreference.Dark, themeStore.preference())
     }
 
     @Test

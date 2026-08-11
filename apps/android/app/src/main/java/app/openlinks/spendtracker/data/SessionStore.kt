@@ -22,8 +22,23 @@ interface KeyValueStore {
     fun remove(key: String)
 }
 
-class SharedPrefsStore(context: Context) : KeyValueStore {
-    private val prefs = context.getSharedPreferences("spendtracker_session", Context.MODE_PRIVATE)
+/**
+ * SharedPreferences-backed store. [name] is the prefs file, and it is a parameter
+ * rather than a constant because not everything we persist is session state: the
+ * appearance preference has to survive sign-out, and [SessionStore.clear] wipes
+ * every key in the session file. Separate files are separate namespaces, so a
+ * caller that wants durable state simply asks for a different one. The default
+ * keeps every existing call site pointing at the session file unchanged.
+ *
+ * SharedPreferences (not DataStore) on purpose: reads here are synchronous, which
+ * is what MainActivity.onCreate needs to resolve the theme before the first frame.
+ * A Flow-based read would decide after the first frame and flash light-then-dark.
+ */
+class SharedPrefsStore(
+    context: Context,
+    name: String = "spendtracker_session",
+) : KeyValueStore {
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
     override fun getString(key: String): String? = prefs.getString(key, null)
     override fun putString(key: String, value: String) {
         prefs.edit().putString(key, value).apply()

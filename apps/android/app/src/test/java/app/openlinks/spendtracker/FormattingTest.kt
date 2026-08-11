@@ -33,6 +33,60 @@ class FormattingTest {
         assertEquals("$ 0.10", Formatting.money(0.1, "USD"))
     }
 
+    /**
+     * The chart value axes read money through this, so the gutter has to stay narrow:
+     * "$ 1,234,567.00" on an axis either clips or steals width from the plot.
+     */
+    @Test
+    fun compactMoneyAbbreviatesLargeAmounts() {
+        assertEquals("$ 1.2K", Formatting.compactMoney(1200.0, "USD"))
+        assertEquals("$ 1.5M", Formatting.compactMoney(1_500_000.0, "USD"))
+        assertEquals("$ 2.3B", Formatting.compactMoney(2_250_000_000.0, "USD"))
+    }
+
+    @Test
+    fun compactMoneyDropsATrailingZeroDecimal() {
+        assertEquals("$ 1K", Formatting.compactMoney(1000.0, "USD"))
+        assertEquals("$ 3M", Formatting.compactMoney(3_000_000.0, "USD"))
+    }
+
+    @Test
+    fun compactMoneyKeepsCentsBelowAThousand() {
+        assertEquals("$ 42.50", Formatting.compactMoney(42.5, "USD"))
+        assertEquals("$ 0.00", Formatting.compactMoney(0.0, "USD"))
+        assertEquals("$ 999.99", Formatting.compactMoney(999.99, "USD"))
+    }
+
+    @Test
+    fun compactMoneyKeepsTheSignInFrontAndTheCurrencyRules() {
+        assertEquals("-S/ 2.5K", Formatting.compactMoney(-2500.0, "PEN"))
+        assertEquals("CLP 1.2K", Formatting.compactMoney(1200.0, "CLP"))
+    }
+
+    /** An axis on a chart with no rows has no currency to read; it must not print a stray space. */
+    @Test
+    fun compactMoneyWithoutACurrencyPrintsJustTheNumber() {
+        assertEquals("1.2K", Formatting.compactMoney(1200.0, ""))
+        assertEquals("-42.50", Formatting.compactMoney(-42.5, ""))
+    }
+
+    /**
+     * The exact drift web surfaced when it summed a folded bucket: 37636.219999999994.
+     * Aggregates are rounded here before anyone formats or compares them.
+     */
+    @Test
+    fun roundToCentsRemovesFloatingPointDrift() {
+        assertEquals(37636.22, Formatting.roundToCents(37636.219999999994), 0.0)
+        assertEquals(0.3, Formatting.roundToCents(0.1 + 0.2), 0.0)
+        assertEquals(-4.56, Formatting.roundToCents(-4.555), 0.0)
+    }
+
+    @Test
+    fun roundToCentsLeavesExactAmountsAlone() {
+        assertEquals(12.34, Formatting.roundToCents(12.34), 0.0)
+        assertEquals(0.0, Formatting.roundToCents(0.0), 0.0)
+    }
+
     @Test
     fun dateTimeIsHumanReadable() {
         assertEquals("27 Jul 2026, 06:56", Formatting.dateTime("2026-07-27T06:56:37.935Z", utc))

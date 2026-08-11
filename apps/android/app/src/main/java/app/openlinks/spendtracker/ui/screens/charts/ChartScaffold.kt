@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
+import app.openlinks.spendtracker.ui.Formatting
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 
 /**
@@ -30,3 +31,16 @@ fun ChartEmptyState(modifier: Modifier = Modifier) {
  */
 fun labelIndexFormatter(labels: List<String>): CartesianValueFormatter =
     CartesianValueFormatter { _, value, _ -> labels.getOrNull(value.toInt()) ?: "" }
+
+/**
+ * A value-axis [CartesianValueFormatter] that prints money in [currency] instead of
+ * Vico's raw decimals. Every chart's value axis uses it, because the summary tiles
+ * and transaction rows on the same screen print formatted money and an axis reading
+ * "37636.219999999994" beside them is the same number told badly.
+ *
+ * [Formatting.compactMoney], not [Formatting.money]: the axis gutter is narrow, so
+ * full amounts either clip or steal width from the plot. A null [currency] (no rows
+ * to read one off) formats the number with no symbol rather than failing.
+ */
+fun moneyValueFormatter(currency: String?): CartesianValueFormatter =
+    CartesianValueFormatter { _, value, _ -> Formatting.compactMoney(value, currency.orEmpty()) }

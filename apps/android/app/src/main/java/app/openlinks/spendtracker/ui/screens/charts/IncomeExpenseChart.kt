@@ -24,7 +24,8 @@ import app.openlinks.spendtracker.data.SeriesRow
 import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
 import app.openlinks.spendtracker.ui.bucketLabel
-import app.openlinks.spendtracker.ui.theme.ChartColors
+import app.openlinks.spendtracker.ui.theme.ChartTheme
+import app.openlinks.spendtracker.ui.theme.rememberChartTheme
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -46,8 +47,14 @@ import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 /**
  * A grouped income/spend column chart with a net line overlaid, per time bucket.
  * [rows] are already filtered to a single currency and sorted chronologically by
- * the backend. A Compose legend below the chart labels the three semantic colors.
+ * the backend. A Compose legend below the chart labels the three semantic colors,
+ * drawing from the same tokens the chart does so the two cannot drift apart.
  * Renders an empty-state Text (never an empty chart) when there is no data.
+ *
+ * Income and spend are POLARITY, so they take the reserved blue/red pair rather
+ * than the finance-convention green/red, which a red-green colourblind viewer
+ * cannot separate (protan dE 1.6-5.7 against a floor of 8). Net is the neutral ink,
+ * not a third hue: it is a reference line across the pair, not a third category.
  */
 @Composable
 fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
@@ -70,14 +77,16 @@ fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
     }
 
     val labels = rows.map { row -> bucketLabel(row.bucketStart) }
+    val chartTheme = rememberChartTheme()
+    val currency = rows.firstOrNull()?.currency
 
     Column(modifier = modifier.fillMaxWidth()) {
         CartesianChartHost(
             chart = rememberCartesianChart(
                 rememberColumnCartesianLayer(
                     columnProvider = ColumnCartesianLayer.ColumnProvider.series(
-                        rememberLineComponent(fill = fill(ChartColors.incomeColor), thickness = 8.dp),
-                        rememberLineComponent(fill = fill(ChartColors.spendColor), thickness = 8.dp),
+                        rememberLineComponent(fill = fill(chartTheme.income), thickness = 8.dp),
+                        rememberLineComponent(fill = fill(chartTheme.spend), thickness = 8.dp),
                     ),
                     mergeMode = { ColumnCartesianLayer.MergeMode.Grouped() },
                     // Income and spend are both magnitudes, so zero is the true
@@ -87,28 +96,30 @@ fun IncomeExpenseChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
                 rememberLineCartesianLayer(
                     lineProvider = LineCartesianLayer.LineProvider.series(
                         LineCartesianLayer.rememberLine(
-                            fill = LineCartesianLayer.LineFill.single(fill(ChartColors.netColor)),
+                            fill = LineCartesianLayer.LineFill.single(fill(chartTheme.net)),
                         ),
                     ),
                 ),
-                startAxis = VerticalAxis.rememberStart(),
+                startAxis = VerticalAxis.rememberStart(valueFormatter = moneyValueFormatter(currency)),
                 bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = labelIndexFormatter(labels)),
             ),
             modelProducer = modelProducer,
             modifier = Modifier.fillMaxWidth().height(220.dp),
         )
         ChartLegend(
+            chartTheme = chartTheme,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
     }
 }
 
+/** Takes the same [chartTheme] instance the chart painted with, so a swatch cannot disagree with its series. */
 @Composable
-private fun ChartLegend(modifier: Modifier = Modifier) {
+private fun ChartLegend(chartTheme: ChartTheme, modifier: Modifier = Modifier) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        LegendEntry(color = ChartColors.incomeColor, label = Strings.get(StringKey.SummaryIncome))
-        LegendEntry(color = ChartColors.spendColor, label = Strings.get(StringKey.SummarySpend))
-        LegendEntry(color = ChartColors.netColor, label = Strings.get(StringKey.SummaryNet))
+        LegendEntry(color = chartTheme.income, label = Strings.get(StringKey.SummaryIncome))
+        LegendEntry(color = chartTheme.spend, label = Strings.get(StringKey.SummarySpend))
+        LegendEntry(color = chartTheme.net, label = Strings.get(StringKey.SummaryNet))
     }
 }
 

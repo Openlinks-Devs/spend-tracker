@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -80,8 +82,31 @@ private val DarkColors = darkColorScheme(
 )
 
 /**
+ * Is the theme actually in effect dark? Read this, never [isSystemInDarkTheme],
+ * anywhere a color has to match the surface it is painted on. The two agree only
+ * while the app blindly follows the OS; once the user can force light or dark they
+ * diverge, and anything still asking the OS ends up dark-on-light or light-on-dark.
+ *
+ * Provided by [SpendTrackerTheme] from the same boolean that picks the color
+ * scheme, so the value can never disagree with the surfaces around it. The `false`
+ * default only applies outside the theme (previews, tests).
+ */
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
+
+/**
  * Money colors, which are semantic rather than decorative: they must not shift
  * with the theme's accent. Kept slightly lighter in dark mode for contrast.
+ *
+ * These four values are deliberately NOT swapped for the chart polarity pair in
+ * [ChartTheme]. Amounts are TEXT and must clear WCAG 4.5:1; measured against the
+ * real surfaces these are 6.01:1 / 6.25:1 / 10.58:1 / 10.88:1, whereas the chart
+ * blue #2a78d6 measures 4.42:1 on white and 4.18:1 on the dark surface and the
+ * chart red #e34948 measures 3.95:1 on white. Those clear the 3:1 threshold that
+ * applies to graphics but fail it as text, so reusing them here would trade a
+ * chart accessibility win for a text-contrast regression. Colour is also not the
+ * only channel for an amount: Formatting.money emits a leading '-' and the summary
+ * tiles carry Income / Spend / Net labels. Chart tokens and money tokens are two
+ * different roles; only the charts change.
  */
 object MoneyColors {
     private val incomeLight = Color(0xFF1B6E3C)
@@ -90,10 +115,10 @@ object MoneyColors {
     private val expenseDark = Color(0xFFFFB4AB)
 
     @Composable
-    fun income(): Color = if (isSystemInDarkTheme()) incomeDark else incomeLight
+    fun income(): Color = if (LocalIsDarkTheme.current) incomeDark else incomeLight
 
     @Composable
-    fun expense(): Color = if (isSystemInDarkTheme()) expenseDark else expenseLight
+    fun expense(): Color = if (LocalIsDarkTheme.current) expenseDark else expenseLight
 
     /** Green above zero, red below, plain text at exactly zero. */
     @Composable
@@ -104,13 +129,21 @@ object MoneyColors {
     }
 }
 
+/**
+ * [darkTheme] is the single source of truth for the whole tree: it picks the color
+ * scheme AND is published as [LocalIsDarkTheme], so a caller that overrides it
+ * (MainActivity, once the user has chosen an appearance) moves every theme-aware
+ * color together instead of leaving money amounts and chart series on the OS setting.
+ */
 @Composable
 fun SpendTrackerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        content = content,
-    )
+    CompositionLocalProvider(LocalIsDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            content = content,
+        )
+    }
 }

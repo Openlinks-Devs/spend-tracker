@@ -35,6 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
+import app.openlinks.spendtracker.ui.screens.AppearanceMenu
 import app.openlinks.spendtracker.ui.screens.IntegrationsScreen
 import app.openlinks.spendtracker.ui.screens.SummaryScreen
 import app.openlinks.spendtracker.ui.screens.TransactionDetailScreen
@@ -110,6 +111,14 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                             )
                         }
                     }
+                    // The appearance control lives on the top-level screens only, for
+                    // the same reason sign-out does: the detail and form screens hand
+                    // their action slots to the task at hand, and back is one tap away.
+                    // It is not gated on the mock flag, because the preference is a
+                    // device setting and has nothing to do with having a session.
+                    if (showBottomBar) {
+                        AppearanceMenu()
+                    }
                     // Sign-out only exists in live builds; a mock build has no session
                     // to end and stays exactly as before.
                     if (!BuildConfig.USE_MOCK_AUTH && showBottomBar) {
@@ -178,6 +187,26 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     onClearFilters = viewModel::clearFilters,
                     onSetCurrency = viewModel::setCurrency,
                     onSetBucket = viewModel::setBucket,
+                    // Tapping a day in the heatmap drills into it, the same way
+                    // the web client does: narrow the range to that single day
+                    // and show the transactions behind the cell. "custom" is not
+                    // a backend range preset, which is exactly what makes the
+                    // server fall through to using from/to verbatim. The display
+                    // currency is pinned because the heatmap charts one currency,
+                    // so without it the list would total more than the cell.
+                    onSelectDay = { dayKey ->
+                        dayFilterWindow(dayKey)?.let { (from, to) ->
+                            viewModel.updateFilters { filters ->
+                                filters.copy(
+                                    range = "custom",
+                                    from = from,
+                                    to = to,
+                                    currency = state.displayCurrency,
+                                )
+                            }
+                            navController.navigate(Routes.TRANSACTIONS)
+                        }
+                    },
                 )
             }
             composable(Routes.TRANSACTIONS) {

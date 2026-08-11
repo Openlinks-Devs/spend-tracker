@@ -119,6 +119,12 @@ enum class StringKey {
     ConnectionStatusDisabled,
     ActionReauthenticate,
     ActionRemove,
+    Appearance,
+    ThemeLight,
+    ThemeDark,
+    ThemeSystem,
+    ChartOtherCategories,
+    ChartOtherTags,
 }
 
 /** Simple locale-aware lookup. English is the only bundled locale for now. */
@@ -244,6 +250,16 @@ object Strings {
         StringKey.ConnectionStatusDisabled to "Disabled",
         StringKey.ActionReauthenticate to "Re-authenticate",
         StringKey.ActionRemove to "Remove",
+        // Appearance: the three-state light/dark/system control. Plain labels, not
+        // chips or micro-caps decoration.
+        StringKey.Appearance to "Appearance",
+        StringKey.ThemeLight to "Light",
+        StringKey.ThemeDark to "Dark",
+        StringKey.ThemeSystem to "System",
+        // The charts' neutral aggregation buckets: the donut folds the long tail of
+        // categories into one wedge, the tag bar truncates to a final row.
+        StringKey.ChartOtherCategories to "Other categories",
+        StringKey.ChartOtherTags to "Other tags",
     )
 
     private val locales: Map<String, Map<StringKey, String>> = mapOf("en" to english)

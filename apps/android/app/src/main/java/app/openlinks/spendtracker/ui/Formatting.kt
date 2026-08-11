@@ -1,5 +1,7 @@
 package app.openlinks.spendtracker.ui
 
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -34,9 +36,58 @@ object Formatting {
     fun money(amount: Double, currency: String): String {
         val sign = if (amount < 0) "-" else ""
         val magnitude = String.format(Locale.US, "%,.2f", abs(amount))
-        val prefix = symbols[currency.uppercase(Locale.US)]
-        return if (prefix != null) "$sign$prefix $magnitude" else "$sign$currency $magnitude"
+        return sign + withCurrency(magnitude, currency)
     }
+
+    /**
+     * "$ 1.2K", "-S/ 2.5M", "$ 42.50". The abbreviated form of [money], for places
+     * where the full amount does not fit: a chart's value axis is a narrow gutter,
+     * and "$ 1,234,567.00" there either clips or squeezes the plot. Everything the
+     * user reads is still formatted money (never a raw Double such as
+     * 37636.219999999994), just shortened. An amount below a thousand keeps its
+     * cents, since that is what the gutter has room for anyway.
+     *
+     * A blank [currency] drops the prefix entirely rather than printing a stray
+     * space, so a chart with no rows to read a currency off still renders.
+     */
+    fun compactMoney(amount: Double, currency: String): String {
+        val sign = if (amount < 0) "-" else ""
+        return sign + withCurrency(compactMagnitude(abs(amount)), currency)
+    }
+
+    /**
+     * [amount] rounded to whole cents. Aggregating a column of doubles drifts (web
+     * surfaced a folded bucket total as 37636.219999999994), and the drift shows up
+     * the moment that total is formatted or compared, so every aggregate this app
+     * computes is rounded here first. BigDecimal rather than round(x * 100) / 100
+     * because the latter is itself a floating-point operation on the scaled value.
+     * Non-finite input is passed through: BigDecimal cannot represent it.
+     */
+    fun roundToCents(amount: Double): Double {
+        if (!amount.isFinite()) return amount
+        return BigDecimal.valueOf(amount).setScale(2, RoundingMode.HALF_UP).toDouble()
+    }
+
+    private fun withCurrency(magnitude: String, currency: String): String {
+        val prefix = symbols[currency.uppercase(Locale.US)]
+        return when {
+            prefix != null -> "$prefix $magnitude"
+            currency.isBlank() -> magnitude
+            else -> "$currency $magnitude"
+        }
+    }
+
+    /** The unsigned part of [compactMoney]: "1.2K", "3M", "42.50". */
+    private fun compactMagnitude(magnitude: Double): String = when {
+        magnitude >= 1_000_000_000.0 -> "${oneDecimal(magnitude / 1_000_000_000.0)}B"
+        magnitude >= 1_000_000.0 -> "${oneDecimal(magnitude / 1_000_000.0)}M"
+        magnitude >= 1_000.0 -> "${oneDecimal(magnitude / 1_000.0)}K"
+        else -> String.format(Locale.US, "%,.2f", magnitude)
+    }
+
+    /** One decimal place, with a trailing ".0" dropped so 1000 reads "1K", not "1.0K". */
+    private fun oneDecimal(value: Double): String =
+        String.format(Locale.US, "%.1f", value).removeSuffix(".0")
 
     /** The calendar day an ISO timestamp falls on, in the device's zone. */
     fun localDate(isoTimestamp: String, zone: ZoneId = ZoneId.systemDefault()): LocalDate? =

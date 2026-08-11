@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.openlinks.spendtracker.data.SeriesRow
 import app.openlinks.spendtracker.ui.bucketLabel
-import app.openlinks.spendtracker.ui.theme.ChartColors
+import app.openlinks.spendtracker.ui.theme.rememberChartTheme
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -28,8 +28,12 @@ import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
  * A column chart of spend per time bucket. [rows] are already filtered to a
  * single currency and sorted chronologically by the backend, so the column at
  * index i corresponds to rows[i]. The bottom axis labels each column with
- * [bucketLabel]. Renders an empty-state Text (never an empty chart) when there
- * is no data, so it cannot crash on an empty model.
+ * [bucketLabel] and the value axis prints formatted money. Renders an empty-state
+ * Text (never an empty chart) when there is no data, so it cannot crash on an
+ * empty model.
+ *
+ * One measure, so ONE colour: the themed spend token. Painting the columns across
+ * the identity palette would imply the buckets are different kinds of thing.
  */
 @Composable
 fun SpendingOverTimeChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) {
@@ -46,19 +50,21 @@ fun SpendingOverTimeChart(rows: List<SeriesRow>, modifier: Modifier = Modifier) 
     }
 
     val labels = rows.map { row -> bucketLabel(row.bucketStart) }
+    val chartTheme = rememberChartTheme()
+    val currency = rows.firstOrNull()?.currency
 
     CartesianChartHost(
         chart = rememberCartesianChart(
             rememberColumnCartesianLayer(
                 columnProvider = ColumnCartesianLayer.ColumnProvider.series(
-                    rememberLineComponent(fill = fill(ChartColors.spendColor), thickness = 12.dp),
+                    rememberLineComponent(fill = fill(chartTheme.spend), thickness = 12.dp),
                 ),
                 // Pin the baseline to zero. Left to auto-range, one big column
                 // pushes the axis minimum above every smaller column, which then
                 // renders with no visible height at all.
                 rangeProvider = CartesianLayerRangeProvider.fixed(minY = 0.0),
             ),
-            startAxis = VerticalAxis.rememberStart(),
+            startAxis = VerticalAxis.rememberStart(valueFormatter = moneyValueFormatter(currency)),
             bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = labelIndexFormatter(labels)),
         ),
         modelProducer = modelProducer,

@@ -8,7 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.openlinks.spendtracker.data.AccountRow
-import app.openlinks.spendtracker.ui.theme.ChartColors
+import app.openlinks.spendtracker.ui.theme.rememberChartTheme
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -34,6 +34,13 @@ import com.patrykandpatrick.vico.core.common.data.ExtraStore
  * series index, not per entry. The bottom axis labels each column with
  * [accountName] (falling back to the raw account id). Renders an empty-state
  * Text (never an empty chart) when there is no data.
+ *
+ * Sign is polarity, so the colours are the reserved blue/red pair (protan dE 21.6),
+ * not the finance-convention green/red the file used to ship. That matters more
+ * here than anywhere else: there is no sign glyph on a column, so colour is the
+ * ONLY channel carrying the sign, and a red-green colourblind viewer read the whole
+ * chart as one flat colour. The money-formatted value axis, whose negative labels
+ * lead with "-", is the second channel for the same information.
  */
 @Composable
 fun AccountNetChart(
@@ -54,9 +61,11 @@ fun AccountNetChart(
     }
 
     val labels = rows.map { row -> accountName(row.accountId) ?: row.accountId }
+    val chartTheme = rememberChartTheme()
+    val currency = rows.firstOrNull()?.currency
 
-    val positiveColumn = rememberLineComponent(fill = fill(ChartColors.incomeColor), thickness = 12.dp)
-    val negativeColumn = rememberLineComponent(fill = fill(ChartColors.spendColor), thickness = 12.dp)
+    val positiveColumn = rememberLineComponent(fill = fill(chartTheme.income), thickness = 12.dp)
+    val negativeColumn = rememberLineComponent(fill = fill(chartTheme.spend), thickness = 12.dp)
     val columnProvider = remember(positiveColumn, negativeColumn) {
         SignedColumnProvider(positiveColumn = positiveColumn, negativeColumn = negativeColumn)
     }
@@ -64,7 +73,7 @@ fun AccountNetChart(
     CartesianChartHost(
         chart = rememberCartesianChart(
             rememberColumnCartesianLayer(columnProvider = columnProvider),
-            startAxis = VerticalAxis.rememberStart(),
+            startAxis = VerticalAxis.rememberStart(valueFormatter = moneyValueFormatter(currency)),
             bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = labelIndexFormatter(labels)),
         ),
         modelProducer = modelProducer,

@@ -49,6 +49,7 @@ fun SummaryScreen(
     onClearFilters: () -> Unit,
     onSetCurrency: (String?) -> Unit,
     onSetBucket: (String) -> Unit,
+    onSelectDay: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var filtersExpanded by remember { mutableStateOf(false) }
@@ -124,6 +125,7 @@ fun SummaryScreen(
                 dayRows = dayRows,
                 accountName = { accountId -> state.accountName(accountId) },
                 categoryName = { categoryId -> state.categoryName(categoryId) },
+                onSelectDay = onSelectDay,
             )
         }
         item {
@@ -167,6 +169,7 @@ private fun ChartsSection(
     dayRows: List<SeriesRow>,
     accountName: (String) -> String?,
     categoryName: (String) -> String?,
+    onSelectDay: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -190,7 +193,7 @@ private fun ChartsSection(
             AccountNetChart(rows = accountRows, accountName = accountName)
         }
         ChartCard(title = Strings.get(StringKey.ChartSpendingCalendar)) {
-            CalendarHeatmap(daySeries = dayRows)
+            CalendarHeatmap(daySeries = dayRows, onSelectDay = onSelectDay)
         }
     }
 }
