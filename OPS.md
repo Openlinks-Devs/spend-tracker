@@ -1,9 +1,10 @@
-# Running SpendTracker locally
+# Running SpendTracker
 
-A runbook for bringing the whole stack up on one machine, where the browser and
-the servers share `localhost`. If you are running the servers on a remote box
-(for example over Tailscale) read "Running on a remote host" at the bottom first,
-because Google OAuth will not work against a private hostname.
+Sections 1 to 6 are a runbook for bringing the whole stack up on one machine,
+where the browser and the servers share `localhost`. If you are running the
+servers on a remote box (for example over Tailscale) read "Running on a remote
+host" first, because Google OAuth will not work against a private hostname.
+"Production deployment" at the bottom covers the live install.
 
 ## Prerequisites
 
@@ -30,9 +31,10 @@ env DATABASE_URL="postgres://dev:devpass@localhost:5434/spendtracker" \
   pnpm --filter backend migrate
 ```
 
-On an empty database all five migrations apply in one pass. (Against a database
-that already holds ledger rows, `004_user_scoping_not_null.sql` fails on purpose
-until `scripts/backfill-owner.ts` has run. That is a production concern only.)
+On an empty database all five migrations apply in one pass. A database that
+already exists is a different job: it needs baselining and a specific ordering
+around `004_user_scoping_not_null.sql`. See "Migrating an existing database"
+under "Production deployment".
 
 ## 2. Backend environment
 
@@ -50,6 +52,12 @@ APP_BASE_URL
 
 The `TELEGRAM_*` values are required even if you never wire Telegram. Put
 placeholder strings there rather than leaving them unset.
+
+`WEB_ORIGIN` is **optional** and is read straight from `process.env`, not from
+the Zod schema, so leaving it out never blocks boot. It sets the origin allowed
+by the credentialed CORS policy, falling back to `BETTER_AUTH_URL` and then to
+`http://localhost:5173`. In the single-origin production image everything is
+same-origin, so it can be omitted there.
 
 Generate an encryption key (this one protects stored Gmail refresh tokens):
 
@@ -187,6 +195,34 @@ the Integrations screen shows an explanatory state instead of an error.
 Credential Manager needs a Google **Play** system image or a real device. A
 plain `google_apis` emulator image cannot complete Google sign-in.
 
+### Signed release build
+
+The keystore lives outside the repo. Its four values come from Gradle properties
+(`~/.gradle/gradle.properties`) or, for CI, the matching environment variables:
+
+| Gradle property | Environment variable |
+|---|---|
+| `releaseStoreFile` | `ANDROID_RELEASE_STORE_FILE` |
+| `releaseStorePassword` | `ANDROID_RELEASE_STORE_PASSWORD` |
+| `releaseKeyAlias` | `ANDROID_RELEASE_KEY_ALIAS` |
+| `releaseKeyPassword` | `ANDROID_RELEASE_KEY_PASSWORD` |
+
+```bash
+cd apps/android
+./gradlew assembleRelease -PuseMockAuth=false \
+  -PserverClientId=<web-oauth-client-id> \
+  -PapiBaseUrl=https://spendtracker.openlinks.app
+```
+
+**The trap:** if any of the four is missing, or the keystore file does not exist
+at `releaseStoreFile`, the build does not fail. It produces an **unsigned**
+release APK, so a broken signing setup looks exactly like a successful build and
+is only caught when the artifact refuses to install. Verify before shipping:
+
+```bash
+apksigner verify app/build/outputs/apk/release/app-release.apk
+```
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -221,3 +257,128 @@ cannot be registered. Two ways around it:
   `ssh -L 5173:localhost:5173 -L 3001:localhost:3001 <host>`
 - Or expose a real HTTPS name (for example `tailscale serve`) and register that
   origin's callback URIs instead.
+
+## Production deployment
+
+Production is a **Coolify** application at <https://spendtracker.openlinks.app>,
+built from the **root `Dockerfile`** with the **repository root as the build
+context** (the image builds both apps and needs the workspace manifests):
+
+```bash
+docker build -t spend-tracker .
+```
+
+It runs as one container on one port: the Hono server answers `/api`,
+`/connections`, `/telegram` and `/health`, and serves the built SPA for
+everything else. **No reverse-proxy prefix configuration is needed**, unlike the
+local Vite proxy in section 4, because the backend serves the SPA itself.
+Same-origin is also a hard requirement: the Better Auth browser client derives
+its base URL from `window.location.origin`, so splitting the origins breaks
+sign-in.
+
+### Runtime environment
+
+The image already sets `NODE_ENV=production`, `TZ=America/Lima` and
+`WEB_DIST_PATH=./apps/web/dist` (the last one is what turns on static serving in
+`apps/backend/src/index.ts`, and it is resolved relative to the working
+directory). Coolify supplies the rest: every variable from section 2, plus
+
+- `APP_MODE=live`. Under `NODE_ENV=production`, `env.ts` **throws on boot** if
+  `APP_MODE` is `mock`, because mock mode bypasses auth.
+- `ALLOWED_EMAILS`, set explicitly. `env.ts` also throws in production if it is
+  empty, rather than falling back to its default.
+- `BETTER_AUTH_URL`, `APP_BASE_URL` and `TELEGRAM_WEBHOOK_URL` on the public
+  origin, and `GOOGLE_REDIRECT_URI=https://spendtracker.openlinks.app/connections/gmail/callback`
+  registered on the Web OAuth client.
+
+### Healthcheck
+
+Coolify's container healthcheck shells out to `curl` (or `wget`) against
+`/health`, and `node:22-slim` ships with neither. The runtime stage installs
+`curl` for exactly this reason. Remove it and the app starts correctly, is still
+marked unhealthy, and the deployment rolls back.
+
+### apps/web/public must be copied
+
+The privacy policy and terms are static files in `apps/web/public`, which Vite
+copies into `dist/` verbatim. The Dockerfile copies `apps/web/public` before
+`vite build`; drop that line and the build still succeeds while the legal
+documents 404 in production. This has already regressed twice (commits
+`406a712`, `483c8a2`).
+
+### Coolify credentials
+
+The repository-root `.env` is gitignored and holds `COOLIFY_API_KEY` and
+`COOLIFY_BASE_URL`, which is what the Coolify tooling reads to drive the
+deployment. A fresh clone has to recreate it.
+
+### Migrating an existing database
+
+`migrate.ts` skips only the files already recorded in `schema_migrations`
+(`name text PRIMARY KEY, applied_at timestamptz`), and `002_auth.sql` is not
+idempotent: it does a bare `create table "user"` with no `IF NOT EXISTS`. So a
+database whose Better Auth tables already exist dies on 002 with a duplicate
+table error, long before 004 is ever reached. Baseline first:
+
+```sql
+INSERT INTO schema_migrations (name) VALUES ('001_init.sql'), ('002_auth.sql')
+  ON CONFLICT DO NOTHING;
+```
+
+(Create the table yourself if this is the first run: `migrate.ts` creates it with
+`CREATE TABLE IF NOT EXISTS`, so running the migration once to that point is also
+fine.) Then, for a database that already holds ledger rows, follow this order:
+
+1. Apply `003_user_scoping.sql` (nullable `user_id`) **on its own**. There is no
+   command for this: `pnpm --filter backend migrate` takes no target, range or
+   step argument, it loops over every pending file (`scripts/migrate.ts`), so
+   running it here applies 003 and then immediately attempts 004 on unbackfilled
+   rows. Apply the one file and record it the way `migrate.ts` would, in a single
+   transaction:
+
+   ```bash
+   cd apps/backend
+   psql "<production-url>" --single-transaction -v ON_ERROR_STOP=1 \
+     -f migrations/003_user_scoping.sql \
+     -c "INSERT INTO schema_migrations (name) VALUES ('003_user_scoping.sql');"
+   ```
+
+   Without `psql` there is a fallback, because each migration runs in its own
+   transaction: run `pnpm --filter backend migrate` and let it fail on 004. That
+   failure rolls 004 back and aborts the loop with exit code 1, leaving 003
+   applied and recorded, which is the state this step wants. Expect a non-zero
+   exit and a `column "user_id" of relation "accounts" contains null values`
+   error; any other error means something else is wrong and you should stop.
+2. The owner signs in once with Google, so a `"user"` row exists for the first
+   address in `ALLOWED_EMAILS`. `backfill-owner.ts` exits with an error without
+   it.
+3. Run the backfill:
+
+   ```bash
+   cd apps/backend
+   env DATABASE_URL=<production-url> ALLOWED_EMAILS=owner@example.com \
+     pnpm exec tsx scripts/backfill-owner.ts
+   ```
+
+4. Confirm no old deployment is still writing rows with a NULL `user_id`. Skip
+   this and 004 either fails on rows written after the backfill, or passes and
+   then the old code starts failing its inserts.
+5. Only now run the rest: `pnpm --filter backend migrate`. With 001-003 recorded
+   in `schema_migrations` it skips them and applies
+   `004_user_scoping_not_null.sql` and `005_connections.sql`, which is exactly
+   what "the rest" means here since the script always runs everything pending.
+
+### Telegram webhook registration
+
+Setting `TELEGRAM_WEBHOOK_URL` registers nothing by itself. Telegram has to be
+told where to POST, once after deploy and again whenever the URL changes, or
+`/telegram/webhook` is simply never called. There is no npm script for it:
+
+```bash
+cd apps/backend
+pnpm exec tsx --env-file=/path/to/production.env src/scripts/set-webhook.ts
+```
+
+The script reads the full validated env, so it needs the production values, and
+the URL must be publicly reachable: a `localhost` webhook URL is unreachable
+from Telegram's servers.
