@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SpendTracker</title>
+    <script>
+      // Applied before first paint so a dark-mode user never sees a white flash.
+      // Runs standalone (no bundle yet), and reads the same key as lib/theme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem('spendtracker-theme')
+          var isDark =
+            stored === 'dark' ||
+            (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', isDark)
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+        } catch (error) {
+          /* Private mode can throw on localStorage; light is a safe default. */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
