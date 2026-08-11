@@ -10,11 +10,13 @@ import { useEffect, useState } from 'react'
  * Prefer a Tailwind breakpoint whenever the change is purely visual.
  */
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() =>
-    typeof window === 'undefined' ? false : window.matchMedia(query).matches,
-  )
+  // Same guard as lib/theme: matchMedia is absent in jsdom and non-browser
+  // environments, and an unguarded call throws at render.
+  const supported = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  const [matches, setMatches] = useState(() => (supported ? window.matchMedia(query).matches : false))
 
   useEffect(() => {
+    if (!supported) return
     const mediaQueryList = window.matchMedia(query)
     const onChange = (event: MediaQueryListEvent) => setMatches(event.matches)
     // Re-read on subscribe: the query may already have changed between the
@@ -22,7 +24,7 @@ export function useMediaQuery(query: string): boolean {
     setMatches(mediaQueryList.matches)
     mediaQueryList.addEventListener('change', onChange)
     return () => mediaQueryList.removeEventListener('change', onChange)
-  }, [query])
+  }, [query, supported])
 
   return matches
 }
