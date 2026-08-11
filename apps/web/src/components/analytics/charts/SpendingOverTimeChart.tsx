@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { axisCurrencyTooltip } from '@/lib/chartTooltip'
-import { SPEND_COLOR } from '@/lib/echartsTheme'
+import { chartThemeFor } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 import { formatDate } from '@/lib/utils'
 import type { SeriesRow } from '@/types'
 
@@ -25,6 +26,7 @@ function resolveBucketEnd(rows: SeriesRow[], index: number): string {
 }
 
 export function SpendingOverTimeChart({ rows, currency, onSelect }: SpendingOverTimeChartProps) {
+  const theme = chartThemeFor(useIsDarkTheme())
   const option = useMemo(
     () => ({
       // One series, and it is spend - so it wears the spend colour, not the
@@ -39,7 +41,7 @@ export function SpendingOverTimeChart({ rows, currency, onSelect }: SpendingOver
       series: [
         {
           type: 'bar' as const,
-          itemStyle: { color: SPEND_COLOR, borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: theme.spend, borderRadius: [4, 4, 0, 0] },
           data: rows.map((seriesRow, bucketIndex) => ({
             value: seriesRow.spend,
             window: { from: seriesRow.bucketStart, to: resolveBucketEnd(rows, bucketIndex) },
@@ -47,7 +49,7 @@ export function SpendingOverTimeChart({ rows, currency, onSelect }: SpendingOver
         },
       ],
     }),
-    [rows, currency],
+    [rows, currency, theme],
   )
   return (
     <EChart

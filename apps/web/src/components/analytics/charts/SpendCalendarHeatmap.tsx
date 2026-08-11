@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { formatCurrency, formatDayLabel } from '@/lib/utils'
 import { toDayWindow } from '@/lib/dayWindow'
-import { SPEND_RAMP } from '@/lib/echartsTheme'
+import { chartThemeFor } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { SeriesRow } from '@/types'
 
@@ -37,6 +38,7 @@ function monthsBeforeKey(dayKey: string, months: number): string {
 }
 
 export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendarHeatmapProps) {
+  const theme = chartThemeFor(useIsDarkTheme())
   const isNarrow = useMediaQuery('(max-width: 640px)')
   const monthsShown = isNarrow ? MONTHS_SHOWN_NARROW : MONTHS_SHOWN_WIDE
   // The calendar itself only needs ~140px (7 rows at 16px plus labels); the rest
@@ -73,7 +75,7 @@ export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendar
       visualMap: {
         // Sequential: one hue, light to dark, in the spend colour so "darker
         // means more spent" matches what the bars say.
-        inRange: { color: SPEND_RAMP },
+        inRange: { color: theme.spendRamp },
         min: 0,
         max: maxSpend > 0 ? maxSpend : 1,
         calculable: true,
@@ -102,7 +104,7 @@ export function SpendCalendarHeatmap({ rows, currency, onSelect }: SpendCalendar
         },
       ],
     }
-  }, [rows, currency, monthsShown])
+  }, [rows, currency, monthsShown, theme])
 
   if (rows.length === 0) {
     return (

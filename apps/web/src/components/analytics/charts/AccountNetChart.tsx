@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { itemCurrencyTooltip } from '@/lib/chartTooltip'
-import { INCOME_COLOR, SPEND_COLOR } from '@/lib/echartsTheme'
+import { chartThemeFor } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 import type { AccountRow } from '@/types'
 
 // Net can be positive (money in) or negative (money out), so bars are coloured by
@@ -17,6 +18,7 @@ interface AccountNetChartProps {
 }
 
 export function AccountNetChart({ rows, currency, accountNameById }: AccountNetChartProps) {
+  const theme = chartThemeFor(useIsDarkTheme())
   const option = useMemo(() => {
     const sortedRows = [...rows].sort((firstRow, secondRow) => secondRow.net - firstRow.net)
     return {
@@ -35,11 +37,11 @@ export function AccountNetChart({ rows, currency, accountNameById }: AccountNetC
           type: 'bar' as const,
           data: sortedRows.map((accountRow) => ({
             value: accountRow.net,
-            itemStyle: { color: accountRow.net >= 0 ? INCOME_COLOR : SPEND_COLOR },
+            itemStyle: { color: accountRow.net >= 0 ? theme.income : theme.spend },
           })),
         },
       ],
     }
-  }, [rows, currency, accountNameById])
+  }, [rows, currency, accountNameById, theme])
   return <EChart option={option} height={288} />
 }

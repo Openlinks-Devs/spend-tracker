@@ -7,12 +7,48 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { EChartsCoreOption } from 'echarts/core'
+import { chartThemeFor } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 
 echarts.use([
   BarChart, PieChart, LineChart, HeatmapChart,
   GridComponent, TitleComponent, TooltipComponent, LegendComponent,
   VisualMapComponent, CalendarComponent, CanvasRenderer,
 ])
+
+// Axis, grid, legend and tooltip chrome is registered once per surface rather
+// than repeated in every chart option. ECharts bakes the theme in at init, which
+// is why the chart is torn down and rebuilt when the surface changes.
+function registerSurfaceTheme(name: string, isDark: boolean) {
+  const theme = chartThemeFor(isDark)
+  echarts.registerTheme(name, {
+    backgroundColor: 'transparent',
+    textStyle: { color: theme.axisLabel },
+    title: { textStyle: { color: theme.tooltipText } },
+    legend: { textStyle: { color: theme.axisLabel } },
+    tooltip: {
+      backgroundColor: theme.tooltipBackground,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
+    },
+    categoryAxis: {
+      axisLine: { lineStyle: { color: theme.gridLine } },
+      axisTick: { lineStyle: { color: theme.gridLine } },
+      axisLabel: { color: theme.axisLabel },
+      splitLine: { lineStyle: { color: theme.gridLine } },
+    },
+    valueAxis: {
+      axisLine: { lineStyle: { color: theme.gridLine } },
+      axisTick: { lineStyle: { color: theme.gridLine } },
+      axisLabel: { color: theme.axisLabel },
+      splitLine: { lineStyle: { color: theme.gridLine } },
+    },
+    visualMap: { textStyle: { color: theme.axisLabel } },
+  })
+}
+
+registerSurfaceTheme('spendtracker-light', false)
+registerSurfaceTheme('spendtracker-dark', true)
 
 type EChartClickHandler = (params: { data?: unknown; name?: string; value?: unknown }) => void
 
@@ -25,11 +61,15 @@ interface EChartProps {
 export function EChart({ option, height, onEvents }: EChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.EChartsType | undefined>(undefined)
+  const isDark = useIsDarkTheme()
 
+  // Keyed on isDark: ECharts resolves a theme at init and offers no way to swap
+  // it afterwards, so switching surfaces disposes and rebuilds. The option
+  // effect below re-applies the series immediately after.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const chart = echarts.init(container)
+    const chart = echarts.init(container, isDark ? 'spendtracker-dark' : 'spendtracker-light')
     chartRef.current = chart
     const resizeObserver = new ResizeObserver(() => chart.resize())
     resizeObserver.observe(container)
@@ -38,7 +78,7 @@ export function EChart({ option, height, onEvents }: EChartProps) {
       chart.dispose()
       chartRef.current = undefined
     }
-  }, [])
+  }, [isDark])
 
   useEffect(() => {
     chartRef.current?.setOption(option, { notMerge: true })

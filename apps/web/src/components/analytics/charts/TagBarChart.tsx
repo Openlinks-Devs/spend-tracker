@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { itemCurrencyTooltip } from '@/lib/chartTooltip'
-import { SPEND_COLOR } from '@/lib/echartsTheme'
+import { chartThemeFor } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 import type { TagRow } from '@/types'
 
 interface TagBarChartProps {
@@ -15,6 +16,7 @@ interface TagBarChartProps {
 const TOP_TAGS_SHOWN = 12
 
 export function TagBarChart({ rows, currency, onSelect }: TagBarChartProps) {
+  const theme = chartThemeFor(useIsDarkTheme())
   const option = useMemo(() => {
     const sortedRows = [...rows]
       .sort((firstRow, secondRow) => secondRow.spend - firstRow.spend)
@@ -34,12 +36,12 @@ export function TagBarChart({ rows, currency, onSelect }: TagBarChartProps) {
       series: [
         {
           type: 'bar' as const,
-          itemStyle: { color: SPEND_COLOR, borderRadius: [0, 4, 4, 0] },
+          itemStyle: { color: theme.spend, borderRadius: [0, 4, 4, 0] },
           data: sortedRows.map((tagRow) => ({ value: tagRow.spend, tag: tagRow.tag })),
         },
       ],
     }
-  }, [rows, currency])
+  }, [rows, currency, theme])
   return (
     <EChart
       option={option}

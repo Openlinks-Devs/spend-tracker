@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { signOut, useSession } from '@/lib/authClient'
 import { isMockMode } from '@/lib/appMode'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 // Dashboard and Transactions share the same filter query string; carrying the
 // current location.search across those two links keeps filters applied when the
@@ -37,7 +38,10 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-muted/30">
-      <aside className="hidden w-60 flex-col border-r bg-background md:flex">
+      {/* Sticky and viewport-height: the footer holds the theme control and sign
+          out, and without this the sidebar grew with the page, stranding both at
+          the bottom of a long dashboard instead of keeping them in reach. */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-background md:flex">
         <div className="flex h-16 items-center border-b px-6">
           <span className="text-lg font-semibold">SpendTracker</span>
         </div>
@@ -70,6 +74,9 @@ export function AppLayout() {
             rather than ship a button that cannot work. Mock mode also has no
             session to read an email from, so the whole footer goes with it
             instead of leaving an empty bordered strip. */}
+        <div className="border-t p-3">
+          <ThemeToggle className="w-full justify-center" />
+        </div>
         {isMockMode ? null : (
           <div className="flex flex-col gap-2 border-t p-3">
             {userEmail ? <span className="truncate px-3 text-sm text-muted-foreground">{userEmail}</span> : null}
@@ -93,25 +100,28 @@ export function AppLayout() {
         <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur md:hidden">
           <div className="flex h-14 items-center justify-between gap-3 px-4">
             <span className="truncate text-lg font-semibold tracking-tight">SpendTracker</span>
-            {isMockMode ? null : (
-              <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <ThemeToggle />
+              {isMockMode ? null : (
+                <>
                 {userEmail ? (
                   <span className="max-w-[9rem] truncate text-xs text-muted-foreground">
                     {userEmail}
                   </span>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 px-2"
-                  onClick={() => signOut()}
-                  aria-label="Sign out"
-                >
-                  <IconLogout className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 px-2"
+                    onClick={() => signOut()}
+                    aria-label="Sign out"
+                  >
+                    <IconLogout className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
           {/* Horizontal scroll is the honest answer for five destinations on a
               narrow screen; the edge fade tells you there is more to reach. */}

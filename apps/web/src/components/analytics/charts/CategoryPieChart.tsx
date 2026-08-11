@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { itemCurrencyTooltip } from '@/lib/chartTooltip'
-import { withOtherBucket } from '@/lib/echartsTheme'
+import { chartThemeFor, withOtherBucket } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 import type { CategoryRow } from '@/types'
 
 interface CategoryPieChartProps {
@@ -17,6 +18,7 @@ export function CategoryPieChart({
   categoryNameById,
   onSelect,
 }: CategoryPieChartProps) {
+  const theme = chartThemeFor(useIsDarkTheme())
   const option = useMemo(() => {
     // A pie has no axis, so colour is the only thing identifying a slice - which
     // makes it the one chart here that genuinely needs distinct hues. It is also
@@ -37,6 +39,7 @@ export function CategoryPieChart({
       spending,
       (categoryRow) => categoryRow.spend,
       (categoryRow) => categoryNameById.get(categoryRow.categoryId) ?? 'Uncategorized',
+      theme,
     )
 
     return {
@@ -50,7 +53,7 @@ export function CategoryPieChart({
           radius: ['45%', '70%'],
           // 2px surface gap between segments, so adjacent slices stay separable
           // even when two hues are close.
-          itemStyle: { borderColor: '#ffffff', borderWidth: 2 },
+          itemStyle: { borderColor: theme.surface, borderWidth: 2 },
           data: slices.map((slice) => ({
             value: slice.value,
             name: slice.name,
@@ -61,7 +64,7 @@ export function CategoryPieChart({
         },
       ],
     }
-  }, [rows, currency, categoryNameById])
+  }, [rows, currency, categoryNameById, theme])
   return (
     <EChart
       option={option}

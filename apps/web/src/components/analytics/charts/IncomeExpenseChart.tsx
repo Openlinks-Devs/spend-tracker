@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { EChart } from '@/components/EChart'
 import { axisCurrencyTooltip } from '@/lib/chartTooltip'
-import { INCOME_COLOR, SPEND_COLOR, NET_COLOR } from '@/lib/echartsTheme'
+import { chartThemeFor } from '@/lib/echartsTheme'
+import { useIsDarkTheme } from '@/hooks/useTheme'
 import { formatDate } from '@/lib/utils'
 import type { SeriesRow } from '@/types'
 
@@ -11,6 +12,7 @@ interface IncomeExpenseChartProps {
 }
 
 export function IncomeExpenseChart({ rows, currency }: IncomeExpenseChartProps) {
+  const theme = chartThemeFor(useIsDarkTheme())
   const option = useMemo(
     () => ({
       // Colours are pinned per series, not taken from the categorical palette by
@@ -29,13 +31,13 @@ export function IncomeExpenseChart({ rows, currency }: IncomeExpenseChartProps) 
         {
           name: 'Income',
           type: 'bar' as const,
-          itemStyle: { color: INCOME_COLOR, borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: theme.income, borderRadius: [4, 4, 0, 0] },
           data: rows.map((seriesRow) => seriesRow.income),
         },
         {
           name: 'Spend',
           type: 'bar' as const,
-          itemStyle: { color: SPEND_COLOR, borderRadius: [4, 4, 0, 0] },
+          itemStyle: { color: theme.spend, borderRadius: [4, 4, 0, 0] },
           data: rows.map((seriesRow) => seriesRow.spend),
         },
         {
@@ -43,14 +45,14 @@ export function IncomeExpenseChart({ rows, currency }: IncomeExpenseChartProps) 
           // derived midpoint of the two poles instead of a third category.
           name: 'Net',
           type: 'line' as const,
-          itemStyle: { color: NET_COLOR },
-          lineStyle: { color: NET_COLOR, width: 2 },
+          itemStyle: { color: theme.net },
+          lineStyle: { color: theme.net, width: 2 },
           symbolSize: 8,
           data: rows.map((seriesRow) => seriesRow.net),
         },
       ],
     }),
-    [rows, currency],
+    [rows, currency, theme],
   )
   return <EChart option={option} height={288} />
 }
