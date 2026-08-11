@@ -13,6 +13,7 @@ import {
 } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { signIn } from '@/lib/authClient'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 // The pipeline is a genuine ordered sequence, which is what earns the numbering:
 // each step consumes the previous one's output.
@@ -82,6 +83,7 @@ export function LandingPage() {
             >
               How it works
             </a>
+            <ThemeToggle />
             <Button type="button" size="sm" onClick={signInWithGoogle}>
               Sign in
             </Button>
