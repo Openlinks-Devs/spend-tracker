@@ -5,6 +5,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terms and Conditions - SpendTracker</title>
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('spendtracker-theme')
+        var isDark =
+          stored === 'dark' ||
+          (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', isDark)
+        document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+      } catch (error) {}
+    })()
+  </script>
   <link rel="stylesheet" href="/legal.css" />
 </head>
 
