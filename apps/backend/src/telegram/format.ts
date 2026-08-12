@@ -56,3 +56,20 @@ export function formatDeleted(): string {
 export function formatError(detail: string): string {
   return `Could not create the transaction in SpendTracker:\n\n${detail}`
 }
+
+export interface GmailConnectionLostView {
+  email: string
+  integrationsUrl: string
+}
+
+export function formatGmailConnectionLost(view: GmailConnectionLostView): string {
+  return [
+    'SpendTracker lost access to a Gmail account:',
+    '',
+    `<strong>${escapeHtml(view.email)}</strong>`,
+    '',
+    'Transactions from that account will not be imported until you reconnect it.',
+    '',
+    `Reconnect: ${view.integrationsUrl}`,
+  ].join('\n')
+}
