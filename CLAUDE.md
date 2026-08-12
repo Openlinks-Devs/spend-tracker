@@ -24,6 +24,7 @@ These shipped on web and have no Android equivalent yet. Record new ones here ra
 - The client has a build-time mock/live seam: `USE_MOCK_AUTH` (from the `useMockAuth` Gradle property) picks between an `x-mock-user` header and a real Better Auth bearer token. Debug builds default to mock; a live build is `./gradlew assembleDebug -PuseMockAuth=false -PserverClientId=<web-oauth-client-id> -PapiBaseUrl=<backend-url>`.
 - Connections are unavailable in mock mode by design (the backend answers `503 connections_require_live_mode` because they key off a real `user` row), so the Integrations screen shows an explanatory state instead of an error there.
 - Gmail linking leaves the app for a Chrome Custom Tab (Google rejects OAuth in a WebView). There is no App Link back: the Integrations screen reloads its list on resume, which is what picks up a completed link. Adding a real App Link would need `assetlinks.json` hosted on the `APP_BASE_URL` domain.
+- A Gmail connection that loses access is announced over Telegram, not in-app: the poller flips it to `needs_reauth` and `connections/notifyConnectionLost.ts` sends the alert. Both clients only show the resulting status on their Integrations screens.
 
 ### Roadmap items - each must also ship on Android
 
@@ -33,8 +34,6 @@ Tracked in `docs/superpowers/plans/` and `docs/superpowers/specs/`:
 2. **Per-user integrations (connections)** - each user links their own Gmail account(s) and Telegram; premium (multiple Gmail accounts) is gated by an `is_premium` flag. Deployed to production.
 3. **Mercado Pago (Mercado Libre) billing** - subscription flow that sets `is_premium`. Not started. Web and Android both need the upgrade entry point.
 4. **Localization** - the product ships English-only for now, and that is deliberate: all new copy, including Telegram messages, is written in English. Not started. A real localization pass needs a per-user language preference on the `user` row, a catalog on web (Android already routes every string through `i18n/Strings.kt`, which was built for swapping the map), and the backend picking the locale for the messages it sends to Telegram, since those are written server-side rather than in a client.
-
-- A Gmail connection that loses access is announced over Telegram, not in-app: the poller flips it to `needs_reauth` and `connections/notifyConnectionLost.ts` sends the alert. Both clients only show the resulting status on their Integrations screens.
 
 ## Deployment
 
