@@ -5,6 +5,7 @@ import { loadEnv } from './config/env.js'
 import { getPool } from './db/pool.js'
 import { parseEncryptionKeys } from './connections/crypto.js'
 import { startConnectionPolling } from './connections/poller.js'
+import { notifyGmailConnectionLost } from './connections/notifyConnectionLost.js'
 import { createGmailClientForToken, fetchMessage, listMessageIdsSince } from './gmail/client.js'
 import { parseMessage, type GmailMessage } from './gmail/parse.js'
 import { processEmail, defaultProcessDeps } from './pipeline/processEmail.js'
@@ -42,6 +43,11 @@ if (env.APP_MODE === 'live') {
             if (telegram) await sendMessage(telegram.external_id, text)
           },
         }).catch((error) => console.error('processEmail failed:', error)),
+      notifyGmailConnectionLost: (connection) =>
+        notifyGmailConnectionLost(
+          { db, sendMessage, integrationsUrl: `${env.APP_BASE_URL}/integrations` },
+          connection,
+        ),
       nowSeconds: () => String(Math.floor(Date.now() / 1000)),
     },
     env.GMAIL_POLL_INTERVAL_MS,
