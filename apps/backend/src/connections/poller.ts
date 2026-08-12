@@ -27,6 +27,7 @@ export interface ConnectionPollerDeps {
     email: { subject: string; text: string; messageId: string },
     importContext: { userId: string; connectionId: string },
   ) => Promise<void>
+  notifyGmailConnectionLost: (connection: Connection) => Promise<void>
   nowSeconds: () => string
 }
 
@@ -66,8 +67,15 @@ export async function pollConnectionsOnce(deps: ConnectionPollerDeps): Promise<v
         await pollOneConnection(connection, deps)
       } catch (error) {
         if (isAuthError(error)) {
+          // Status first: a Telegram outage must never leave a dead token
+          // marked active, or the poller retries it forever.
           await setConnectionStatus(deps.db, connection.id, 'needs_reauth')
           console.error(`Connection ${connection.id} needs re-auth:`, error)
+          try {
+            await deps.notifyGmailConnectionLost(connection)
+          } catch (notifyError) {
+            console.error(`Failed to alert about connection ${connection.id}:`, notifyError)
+          }
         } else {
           console.error(`Connection ${connection.id} poll failed (will retry):`, error)
         }
