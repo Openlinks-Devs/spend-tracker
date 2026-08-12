@@ -15,7 +15,7 @@ export interface NewTransactionView {
 
 export function formatNewTransaction(view: NewTransactionView): string {
   return [
-    'Nueva transacción creada en SpendTracker:',
+    'New transaction created in SpendTracker:',
     '',
     `<strong>${escapeHtml(view.description)}</strong>`,
     '',
@@ -26,7 +26,7 @@ export function formatNewTransaction(view: NewTransactionView): string {
     '</pre>',
     `Amount: ${view.currency} ${view.amount}`,
     '',
-    `Fecha/hora: <code>${view.created_at}</code>`,
+    `Date/time: <code>${view.created_at}</code>`,
   ].join('\n')
 }
 
@@ -39,7 +39,7 @@ export interface UpdatedTransactionView {
 
 export function formatUpdatedTransaction(view: UpdatedTransactionView): string {
   return [
-    'Transacción actualizada:',
+    'Transaction updated:',
     `<strong>${escapeHtml(view.description)}</strong>`,
     '',
     `<pre>ID: ${view.id}`,
@@ -50,9 +50,9 @@ export function formatUpdatedTransaction(view: UpdatedTransactionView): string {
 }
 
 export function formatDeleted(): string {
-  return 'Transacción eliminada'
+  return 'Transaction deleted'
 }
 
 export function formatError(detail: string): string {
-  return `Error creando la transacción en SpendTracker:\n\n${detail}`
+  return `Could not create the transaction in SpendTracker:\n\n${detail}`
 }
