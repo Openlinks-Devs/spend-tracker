@@ -34,6 +34,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
       fetchMessage: vi.fn(),
       parseMessage: vi.fn(),
       importEmail: vi.fn().mockResolvedValue(undefined),
+      notifyGmailConnectionLost: vi.fn().mockResolvedValue(undefined),
       nowSeconds: () => '1700000000',
       ...overrides,
     },
@@ -94,6 +95,55 @@ describe('connection poller', () => {
     await pollConnectionsOnce(deps as never)
     const statusCall = deps.db.query.mock.calls.find(([sql]) => /SET status/.test(sql))
     expect(statusCall[1]).toEqual(['conn-bad', 'needs_reauth'])
+    expect(deps.listSince).toHaveBeenCalledTimes(2)
+  })
+
+  it('alerts the user when a connection breaks', async () => {
+    const failing = encryptedConnection('conn-bad', 'user-1', 'bad@gmail.com', '1690000000')
+    const { deps } = baseDeps({
+      listSince: vi.fn().mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400 })),
+    })
+    deps.db.query = vi.fn(async (sql: string) =>
+      /FROM connection/.test(sql) ? { rows: [failing] } : { rows: [] })
+    await pollConnectionsOnce(deps as never)
+    expect(deps.notifyGmailConnectionLost).toHaveBeenCalledTimes(1)
+    expect(deps.notifyGmailConnectionLost.mock.calls[0][0].id).toBe('conn-bad')
+    expect(deps.notifyGmailConnectionLost.mock.calls[0][0].external_id).toBe('bad@gmail.com')
+    // The status must be written before the alert goes out: a Telegram outage
+    // must never leave a dead token marked active.
+    const statusCall = deps.db.query.mock.calls.find(([sql]) => /SET status/.test(sql))
+    expect(statusCall[1]).toEqual(['conn-bad', 'needs_reauth'])
+    expect(deps.db.query.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      deps.notifyGmailConnectionLost.mock.invocationCallOrder[0],
+    )
+  })
+
+  it('does not alert on a transient failure', async () => {
+    const connection = encryptedConnection('conn-1', 'user-1', 'a@gmail.com', '1690000000')
+    const { deps } = baseDeps({
+      listSince: vi.fn().mockRejectedValue(Object.assign(new Error('socket hang up'), { status: 503 })),
+    })
+    deps.db.query = vi.fn(async (sql: string) =>
+      /FROM connection/.test(sql) ? { rows: [connection] } : { rows: [] })
+    await pollConnectionsOnce(deps as never)
+    expect(deps.notifyGmailConnectionLost).not.toHaveBeenCalled()
+    const statusCall = deps.db.query.mock.calls.find(([sql]) => /SET status/.test(sql))
+    expect(statusCall).toBeUndefined()
+  })
+
+  it('keeps polling the remaining connections when the alert throws', async () => {
+    const failing = encryptedConnection('conn-bad', 'user-1', 'bad@gmail.com', '1690000000')
+    const healthy = encryptedConnection('conn-ok', 'user-2', 'ok@gmail.com', '1690000000')
+    const { deps } = baseDeps({
+      listSince: vi
+        .fn()
+        .mockRejectedValueOnce(Object.assign(new Error('invalid_grant'), { status: 400 }))
+        .mockResolvedValueOnce([]),
+      notifyGmailConnectionLost: vi.fn().mockRejectedValue(new Error('telegram is down')),
+    })
+    deps.db.query = vi.fn(async (sql: string) =>
+      /FROM connection/.test(sql) ? { rows: [failing, healthy] } : { rows: [] })
+    await pollConnectionsOnce(deps as never)
     expect(deps.listSince).toHaveBeenCalledTimes(2)
   })
 })
