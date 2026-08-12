@@ -32,6 +32,7 @@ Tracked in `docs/superpowers/plans/` and `docs/superpowers/specs/`:
 1. **Multi-tenancy** - data scoped per user (`user_id` on `accounts`/`categories`/`transactions`), auth-gated. Deployed to production: migrations 001-005 are applied and `user_id` is `NOT NULL` on all three tables.
 2. **Per-user integrations (connections)** - each user links their own Gmail account(s) and Telegram; premium (multiple Gmail accounts) is gated by an `is_premium` flag. Deployed to production.
 3. **Mercado Pago (Mercado Libre) billing** - subscription flow that sets `is_premium`. Not started. Web and Android both need the upgrade entry point.
+4. **Localization** - the product ships English-only for now, and that is deliberate: all new copy, including Telegram messages, is written in English. Not started. A real localization pass needs a per-user language preference on the `user` row, a catalog on web (Android already routes every string through `i18n/Strings.kt`, which was built for swapping the map), and the backend picking the locale for the messages it sends to Telegram, since those are written server-side rather than in a client.
 
 ## Deployment
 
