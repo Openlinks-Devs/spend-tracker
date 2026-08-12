@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatNewTransaction, formatDeleted } from '../src/telegram/format.js'
+import { formatNewTransaction, formatDeleted, formatGmailConnectionLost } from '../src/telegram/format.js'
 
 describe('telegram format', () => {
   it('includes the id and amount in a new-transaction message', () => {
@@ -28,5 +28,24 @@ describe('telegram format', () => {
     expect(message).toContain('Food &gt; Snacks')
     expect(message).toContain('a&amp;b')
     expect(message).toContain('c&lt;d&gt;')
+  })
+
+  it('names the account and links to the integrations page', () => {
+    const message = formatGmailConnectionLost({
+      email: 'misaelabanto@gmail.com',
+      integrationsUrl: 'https://spendtracker.openlinks.app/integrations',
+    })
+    expect(message).toContain('misaelabanto@gmail.com')
+    expect(message).toContain('https://spendtracker.openlinks.app/integrations')
+    expect(message).toContain('lost access')
+  })
+
+  it('escapes HTML special characters in the account address', () => {
+    const message = formatGmailConnectionLost({
+      email: 'a<b>&c@gmail.com',
+      integrationsUrl: 'https://example.test/integrations',
+    })
+    expect(message).toContain('a&lt;b&gt;&amp;c@gmail.com')
+    expect(message).not.toContain('<b>')
   })
 })
