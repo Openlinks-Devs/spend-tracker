@@ -104,7 +104,7 @@ describe('handleTelegramUpdate', () => {
 
     expect(replaceTelegramConnection).not.toHaveBeenCalled()
     expect(deps.notify).toHaveBeenCalledOnce()
-    expect(deps.notify.mock.calls[0][1]).toMatch(/otra cuenta/i)
+    expect(deps.notify.mock.calls[0][1]).toMatch(/another SpendTracker account/i)
   })
 
   it('scopes a reply-edit to the paired chat user', async () => {

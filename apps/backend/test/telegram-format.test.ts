@@ -13,7 +13,7 @@ describe('telegram format', () => {
   })
 
   it('formats a delete confirmation', () => {
-    expect(formatDeleted()).toContain('eliminada')
+    expect(formatDeleted()).toBe('Transaction deleted')
   })
 
   it('escapes HTML special characters in dynamic fields', () => {
