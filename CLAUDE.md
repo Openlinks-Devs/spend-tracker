@@ -34,6 +34,8 @@ Tracked in `docs/superpowers/plans/` and `docs/superpowers/specs/`:
 3. **Mercado Pago (Mercado Libre) billing** - subscription flow that sets `is_premium`. Not started. Web and Android both need the upgrade entry point.
 4. **Localization** - the product ships English-only for now, and that is deliberate: all new copy, including Telegram messages, is written in English. Not started. A real localization pass needs a per-user language preference on the `user` row, a catalog on web (Android already routes every string through `i18n/Strings.kt`, which was built for swapping the map), and the backend picking the locale for the messages it sends to Telegram, since those are written server-side rather than in a client.
 
+- A Gmail connection that loses access is announced over Telegram, not in-app: the poller flips it to `needs_reauth` and `connections/notifyConnectionLost.ts` sends the alert. Both clients only show the resulting status on their Integrations screens.
+
 ## Deployment
 
 The product is live at <https://spendtracker.openlinks.app>, deployed on a self-hosted Coolify instance from the **root `Dockerfile`** (build context is the repository root; the image builds both apps).
