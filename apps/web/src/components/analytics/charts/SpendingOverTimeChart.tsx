@@ -40,6 +40,9 @@ export function SpendingOverTimeChart({ rows, currency, onSelect }: SpendingOver
       yAxis: { type: 'value' as const },
       series: [
         {
+          // The tooltip prints this. Without it ECharts falls back to its
+          // internal placeholder and the user reads "series0: S/ 5,172.76".
+          name: 'Spend',
           type: 'bar' as const,
           itemStyle: { color: theme.spend, borderRadius: [4, 4, 0, 0] },
           data: rows.map((seriesRow, bucketIndex) => ({
