@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button'
 import { signOut, useSession } from '@/lib/authClient'
 import { isMockMode } from '@/lib/appMode'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { ConnectionAlert } from '@/components/layout/ConnectionAlert'
+import { useBrokenConnections } from '@/hooks/useConnections'
 
 // Dashboard and Transactions share the same filter query string; carrying the
 // current location.search across those two links keeps filters applied when the
@@ -24,9 +26,26 @@ const navigationItems = [
   { to: '/integrations', label: 'Integrations', icon: IconPlug, end: false, preservesFilters: false },
 ]
 
+/**
+ * The dot on the Integrations nav item. Rendered only when a linked account
+ * stopped importing, so it carries state rather than decoration.
+ */
+function NavigationAttentionDot() {
+  return (
+    <span
+      aria-label="Needs attention"
+      className="ml-auto h-2 w-2 shrink-0 rounded-full bg-destructive"
+    />
+  )
+}
+
 export function AppLayout() {
   const location = useLocation()
   const { data: session } = useSession()
+  const brokenConnections = useBrokenConnections()
+  // The Integrations screen lists the same broken accounts row by row, so the
+  // banner would only repeat what is already on screen there.
+  const showConnectionAlert = !location.pathname.startsWith('/integrations')
   // Guard `user` as well as `session`: a session can come back truthy but
   // without a user (a misrouted /api/auth call, a partial response), and an
   // unguarded read there blanks the whole app with a render exception.
@@ -64,6 +83,9 @@ export function AppLayout() {
               >
                 <NavigationIcon className="h-4 w-4" />
                 {navigationItem.label}
+                {navigationItem.to === '/integrations' && brokenConnections.length > 0 ? (
+                  <NavigationAttentionDot />
+                ) : null}
               </NavLink>
             )
           })}
@@ -133,7 +155,7 @@ export function AppLayout() {
                 end={navigationItem.end}
                 className={({ isActive }) =>
                   cn(
-                    'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                     isActive
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
@@ -141,10 +163,17 @@ export function AppLayout() {
                 }
               >
                 {navigationItem.label}
+                {navigationItem.to === '/integrations' && brokenConnections.length > 0 ? (
+                  <NavigationAttentionDot />
+                ) : null}
               </NavLink>
             ))}
           </nav>
         </header>
+        {/* Mounted here rather than inside a page so it survives client-side
+            navigation, which is also what scopes its dismissal to the session:
+            in-memory state that resets on reload. */}
+        {showConnectionAlert ? <ConnectionAlert brokenConnections={brokenConnections} /> : null}
         {/* min-w-0 so wide children (chart canvases, long descriptions) shrink
             here instead of stretching the page. Tighter gutters on phones:
             p-6 spent 48px of a 390px screen on empty margin. */}

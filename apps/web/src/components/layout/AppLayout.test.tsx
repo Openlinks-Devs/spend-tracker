@@ -1,20 +1,37 @@
 import { render, screen, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Connection } from '@/types'
 
 // Plain vitest assertions rather than jest-dom matchers: `toBeInTheDocument`
 // does not register under this vitest version (the IntegrationsPage suite fails
 // on the same thing), and that is an unrelated setup bug.
-async function renderLayout(isMockMode: boolean) {
+function brokenConnection(email: string): Connection {
+  return {
+    id: `conn-${email}`,
+    provider: 'gmail',
+    status: 'needs_reauth',
+    external_id: email,
+    created_at: '2026-08-01T00:00:00.000Z',
+  }
+}
+
+async function renderLayout(
+  isMockMode: boolean,
+  options: { brokenConnections?: Connection[]; route?: string } = {},
+) {
   vi.resetModules()
   vi.doMock('@/lib/appMode', () => ({ isMockMode }))
   vi.doMock('@/lib/authClient', () => ({
     signOut: vi.fn(),
     useSession: () => ({ data: { user: { email: 'demo@example.com' } } }),
   }))
+  vi.doMock('@/hooks/useConnections', () => ({
+    useBrokenConnections: () => options.brokenConnections ?? [],
+  }))
   const { AppLayout } = await import('./AppLayout')
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[options.route ?? '/']}>
       <AppLayout />
     </MemoryRouter>,
   )
@@ -42,5 +59,32 @@ describe('AppLayout sign out', () => {
   it('hides sign out in mock mode, where nothing can end the session', async () => {
     await renderLayout(true)
     expect(screen.queryAllByRole('button', { name: /sign out/i })).toHaveLength(0)
+  })
+})
+
+describe('AppLayout broken connection signal', () => {
+  it('marks the integrations link when an account stopped importing', async () => {
+    await renderLayout(false, { brokenConnections: [brokenConnection('misael@gmail.com')] })
+    // One marker per nav rendering: the desktop sidebar and the mobile header
+    // both list Integrations, and CSS decides which is visible.
+    expect(screen.getAllByLabelText(/needs attention/i).length).toBeGreaterThan(0)
+  })
+
+  it('leaves the integrations link unmarked when every account is healthy', async () => {
+    await renderLayout(false)
+    expect(screen.queryAllByLabelText(/needs attention/i)).toHaveLength(0)
+  })
+
+  it('shows the alert banner when an account stopped importing', async () => {
+    await renderLayout(false, { brokenConnections: [brokenConnection('misael@gmail.com')] })
+    expect(screen.getByRole('alert')).toHaveTextContent('misael@gmail.com')
+  })
+
+  it('hides the banner on the integrations screen, which already shows the state', async () => {
+    await renderLayout(false, {
+      brokenConnections: [brokenConnection('misael@gmail.com')],
+      route: '/integrations',
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
