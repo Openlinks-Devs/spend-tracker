@@ -65,4 +65,37 @@ describe('IntegrationsPage', () => {
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /remove connection/i })).toBeInTheDocument()
   })
+
+  it('says what a broken gmail connection costs, not just its status', async () => {
+    const brokenConnection: Connection = {
+      id: 'connection-2',
+      provider: 'gmail',
+      status: 'needs_reauth',
+      external_id: 'broken@example.com',
+      created_at: '2026-01-01T00:00:00.000Z',
+    }
+    vi.mocked(connectionsApi.list).mockResolvedValue([brokenConnection])
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('broken@example.com')).toBeInTheDocument())
+    expect(screen.getByText(/not importing transactions/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /re-authenticate/i })).toBeInTheDocument()
+  })
+
+  it('leaves a healthy connection without the broken-state consequence line', async () => {
+    const healthyConnection: Connection = {
+      id: 'connection-3',
+      provider: 'gmail',
+      status: 'active',
+      external_id: 'fine@example.com',
+      created_at: '2026-01-01T00:00:00.000Z',
+    }
+    vi.mocked(connectionsApi.list).mockResolvedValue([healthyConnection])
+
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('fine@example.com')).toBeInTheDocument())
+    expect(screen.queryByText(/not importing transactions/i)).toBeNull()
+  })
 })

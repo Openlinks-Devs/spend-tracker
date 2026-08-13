@@ -1,6 +1,12 @@
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router'
-import { IconBrandGmail, IconBrandTelegram, IconTrash, IconRefresh } from '@tabler/icons-react'
+import {
+  IconBrandGmail,
+  IconBrandTelegram,
+  IconTrash,
+  IconRefresh,
+  IconAlertTriangle,
+} from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -107,7 +113,19 @@ export function IntegrationsPage() {
                     <p className="truncate text-sm font-medium">
                       {connection.provider === 'gmail' ? connection.external_id : 'Telegram'}
                     </p>
-                    <p className="text-xs text-muted-foreground">{STATUS_LABELS[connection.status]}</p>
+                    {connection.status === 'needs_reauth' ? (
+                      // Naming the state is not enough: "Needs re-authentication"
+                      // reads as housekeeping, while the actual cost is silently
+                      // missing transactions.
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                        <IconAlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Not importing transactions. Link the account again.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {STATUS_LABELS[connection.status]}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 gap-0.5">
                     {connection.provider === 'gmail' && connection.status === 'needs_reauth' ? (
