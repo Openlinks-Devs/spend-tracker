@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -189,10 +190,32 @@ private fun ConnectionRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = connectionStatusLabel(connection.status),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                if (connection.status == "needs_reauth") {
+                    // Naming the status is not enough: "Needs re-authentication"
+                    // reads as housekeeping, while the real cost is transactions
+                    // that are silently not arriving.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            text = Strings.get(StringKey.ConnectionNotImporting),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = connectionStatusLabel(connection.status),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
             if (connection.provider == "gmail" && connection.status == "needs_reauth") {
                 IconButton(onClick = onReauthenticate) {

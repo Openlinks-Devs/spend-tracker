@@ -93,7 +93,25 @@ data class ConnectionsUiState(
     val premiumRequired: Boolean = false,
     val liveModeRequired: Boolean = false,
     val error: String? = null,
+    /**
+     * Whether the user waved away the broken-connection banner. Held here rather
+     * than persisted on purpose: the ViewModel survives rotation and dies with
+     * the process, which scopes the dismissal to this app launch. A broken
+     * account cannot be silenced for good while it is still costing imports.
+     */
+    val alertDismissed: Boolean = false,
 )
+
+/**
+ * The linked Gmail accounts that lost access and stopped importing. Pure, so the
+ * rule is tested in plain JUnit rather than through a screen.
+ *
+ * `disabled` is excluded deliberately: it means the connection sits over the
+ * plan's account cap, which the user cannot repair by reconnecting. The
+ * backend's Telegram alert draws the same line.
+ */
+fun brokenGmailConnections(connections: List<Connection>): List<Connection> =
+    connections.filter { connection -> connection.provider == "gmail" && connection.status == "needs_reauth" }
 
 // The backend's mock-mode refusal, which is expected rather than a failure.
 private const val LIVE_MODE_REQUIRED_ERROR = "connections_require_live_mode"
@@ -169,9 +187,11 @@ class SessionViewModel(
     }
 
     /**
-     * Loads the linked integrations. Called when the screen opens and again when
-     * it resumes, since linking Gmail happens outside the app (in a browser tab)
-     * and coming back is the only signal that the list may have changed.
+     * Loads the linked integrations. Called at app start so the navigation bar
+     * and the summary banner can report a broken account from anywhere, when the
+     * Integrations screen opens, and again when it resumes, since linking Gmail
+     * happens outside the app (in a browser tab) and coming back is the only
+     * signal that the list may have changed.
      */
     fun loadConnections() {
         viewModelScope.launch {
@@ -183,6 +203,12 @@ class SessionViewModel(
                     connections = connections,
                     liveModeRequired = false,
                     error = null,
+                    // A dismissal only ever silences the accounts that were
+                    // broken when the user waved it away. Once they are all
+                    // healthy again the flag has nothing to suppress, so clear
+                    // it and let a later breakage speak up.
+                    alertDismissed = mutableConnectionsState.value.alertDismissed &&
+                        brokenGmailConnections(connections).isNotEmpty(),
                 )
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -196,6 +222,11 @@ class SessionViewModel(
                 refreshAuthState()
             }
         }
+    }
+
+    /** Hides the broken-connection banner until the next app launch. */
+    fun dismissConnectionAlert() {
+        mutableConnectionsState.value = mutableConnectionsState.value.copy(alertDismissed = true)
     }
 
     /**

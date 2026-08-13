@@ -21,6 +21,7 @@ import app.openlinks.spendtracker.data.TransferResult
 import app.openlinks.spendtracker.ui.GateDestination
 import app.openlinks.spendtracker.ui.SessionViewModel
 import app.openlinks.spendtracker.ui.authGateDestination
+import app.openlinks.spendtracker.ui.brokenGmailConnections
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -441,6 +442,61 @@ class SessionViewModelTest {
 
         assertTrue(viewModel.connectionsState.value.liveModeRequired)
         assertNull(viewModel.connectionsState.value.error)
+    }
+
+    @Test
+    fun mockModeSurfacesNoBrokenConnections() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.connectionsError = ApiException(503, "connections_require_live_mode")
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadConnections()
+        advanceUntilIdle()
+
+        assertTrue(brokenGmailConnections(viewModel.connectionsState.value.connections).isEmpty())
+    }
+
+    @Test
+    fun dismissingTheConnectionAlertHidesItForThisLaunch() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.connections = listOf(
+            Connection("conn-1", "gmail", "needs_reauth", "broken@example.com", "2026-07-02T00:00:00Z"),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadConnections()
+        advanceUntilIdle()
+        assertFalse(viewModel.connectionsState.value.alertDismissed)
+
+        viewModel.dismissConnectionAlert()
+
+        assertTrue(viewModel.connectionsState.value.alertDismissed)
+        // The connection itself stays broken: dismissal hides the banner, it
+        // does not resolve anything.
+        assertEquals(1, brokenGmailConnections(viewModel.connectionsState.value.connections).size)
+    }
+
+    @Test
+    fun reloadingConnectionsBringsTheAlertBackWhenAnAccountBreaksAgain() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.connections = listOf(
+            Connection("conn-1", "gmail", "needs_reauth", "broken@example.com", "2026-07-02T00:00:00Z"),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadConnections()
+        advanceUntilIdle()
+        viewModel.dismissConnectionAlert()
+
+        // Reconnecting clears the breakage, so the dismissal has nothing left to
+        // suppress and must not outlive it.
+        api.connections = listOf(
+            Connection("conn-1", "gmail", "active", "broken@example.com", "2026-07-02T00:00:00Z"),
+        )
+        viewModel.loadConnections()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.connectionsState.value.alertDismissed)
     }
 
     @Test

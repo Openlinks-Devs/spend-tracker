@@ -1,5 +1,6 @@
 package app.openlinks.spendtracker.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -9,6 +10,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -22,6 +25,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.openlinks.spendtracker.BuildConfig
@@ -36,6 +42,7 @@ import androidx.navigation.navArgument
 import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
 import app.openlinks.spendtracker.ui.screens.AppearanceMenu
+import app.openlinks.spendtracker.ui.screens.ConnectionAlertBanner
 import app.openlinks.spendtracker.ui.screens.IntegrationsScreen
 import app.openlinks.spendtracker.ui.screens.SummaryScreen
 import app.openlinks.spendtracker.ui.screens.TransactionDetailScreen
@@ -67,9 +74,19 @@ private object Routes {
 fun SpendTrackerApp(viewModel: SessionViewModel) {
     val navController = rememberNavController()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val connectionsState by viewModel.connectionsState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+        // Loaded app-wide, not just when the Integrations screen opens, because
+        // the navigation badge and the banner have to report a broken account
+        // from anywhere. In mock mode the backend answers 503 and the list stays
+        // empty, so both stay silent there by construction.
+        viewModel.loadConnections()
+    }
+
+    val brokenConnections = brokenGmailConnections(connectionsState.connections)
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -159,7 +176,27 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(icon, contentDescription = label) },
+                            icon = {
+                                // A dot on Integrations whenever an account
+                                // stopped importing, so the state is reachable
+                                // without opening that screen.
+                                if (route == Routes.INTEGRATIONS && brokenConnections.isNotEmpty()) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                modifier = Modifier.semantics {
+                                                    contentDescription =
+                                                        Strings.get(StringKey.ConnectionNeedsAttention)
+                                                },
+                                            )
+                                        },
+                                    ) {
+                                        Icon(icon, contentDescription = label)
+                                    }
+                                } else {
+                                    Icon(icon, contentDescription = label)
+                                }
+                            },
                             label = { Text(label) },
                         )
                     }
@@ -174,11 +211,27 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
             }
         },
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.SUMMARY,
-            modifier = Modifier.padding(innerPadding),
-        ) {
+        Column(modifier = Modifier.padding(innerPadding)) {
+            // Mounted in the shell rather than inside a screen so a broken
+            // account is visible wherever the user happens to be. The
+            // Integrations screen is excluded: it already lists the same
+            // accounts row by row, so the banner would only repeat it.
+            if (currentRoute != Routes.INTEGRATIONS) {
+                ConnectionAlertBanner(
+                    brokenConnections = if (connectionsState.alertDismissed) {
+                        emptyList()
+                    } else {
+                        brokenGmailConnections(connectionsState.connections)
+                    },
+                    onReconnect = { navController.navigate(Routes.INTEGRATIONS) },
+                    onDismiss = viewModel::dismissConnectionAlert,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            NavHost(
+                navController = navController,
+                startDestination = Routes.SUMMARY,
+            ) {
             composable(Routes.SUMMARY) {
                 SummaryScreen(
                     state = state,
@@ -298,6 +351,7 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                         }
                     },
                 )
+            }
             }
         }
     }
