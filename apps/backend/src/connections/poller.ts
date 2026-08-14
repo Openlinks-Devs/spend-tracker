@@ -3,6 +3,13 @@ import type { Queryable } from '../db/pool.js'
 import type { VersionedKey } from './crypto.js'
 import { decryptSecret } from './crypto.js'
 import {
+  clearExpiredEmailMetadata,
+  listRetryableMessageIds,
+  recordImportSource,
+  shouldSkipMessage,
+} from './importSource.js'
+import type { ImportFailure } from './notifyImportFailures.js'
+import {
   listActiveGmailConnections,
   setConnectionCursor,
   setConnectionStatus,
@@ -10,6 +17,31 @@ import {
 } from './queries.js'
 
 const POLL_LOCK_ID = 727401
+
+// GMAIL_POLL_INTERVAL_MS defaults to a minute, and nothing in the data model
+// gates a repeated import-failure alert the way the connection status gates the
+// disconnect alert. Without this cooldown an hour-long provider outage on a busy
+// inbox would send up to sixty messages. Deliberately in memory and so
+// best-effort: it resets on restart, which is cheaper than a schema column for
+// throttling state.
+const FAILURE_ALERT_COOLDOWN_SECONDS = 3600
+const lastFailureAlertAtSeconds = new Map<string, number>()
+
+// Exported for tests: module state would otherwise leak between them.
+export function resetImportFailureAlerts(): void {
+  lastFailureAlertAtSeconds.clear()
+}
+
+function claimFailureAlertSlot(connectionId: string, nowSeconds: number): boolean {
+  const lastSentAt = lastFailureAlertAtSeconds.get(connectionId)
+  if (lastSentAt !== undefined && nowSeconds - lastSentAt < FAILURE_ALERT_COOLDOWN_SECONDS) {
+    return false
+  }
+  // Claimed on the attempt, not on success: the notifier never throws, so
+  // "attempted" is the only thing this side can observe.
+  lastFailureAlertAtSeconds.set(connectionId, nowSeconds)
+  return true
+}
 
 interface PoolClientLike extends Queryable {
   release: () => void
@@ -22,12 +54,24 @@ export interface ConnectionPollerDeps {
   buildGmail: (refreshToken: string) => gmail_v1.Gmail
   listSince: (gmail: gmail_v1.Gmail, afterEpochSeconds: string) => Promise<string[]>
   fetchMessage: (gmail: gmail_v1.Gmail, id: string) => Promise<unknown>
-  parseMessage: (message: unknown) => { subject: string; text: string; internalDateSeconds: string }
+  parseMessage: (message: unknown) => {
+    subject: string
+    text: string
+    sender: string | null
+    internalDateSeconds: string
+  }
   importEmail: (
-    email: { subject: string; text: string; messageId: string },
+    email: {
+      subject: string
+      text: string
+      messageId: string
+      sender: string | null
+      emailDateSeconds: string
+    },
     importContext: { userId: string; connectionId: string },
   ) => Promise<void>
   notifyGmailConnectionLost: (connection: Connection) => Promise<void>
+  notifyImportFailures: (connection: Connection, failures: ImportFailure[]) => Promise<void>
   nowSeconds: () => string
 }
 
@@ -60,6 +104,14 @@ export async function pollConnectionsOnce(deps: ConnectionPollerDeps): Promise<v
     if (!lock.rows[0]?.acquired) return
 
     await deps.db.query(DOWNGRADE_SQL)
+    // Cheap and idempotent, so it rides along with the cycle rather than
+    // needing a scheduler of its own. Housekeeping must never cost the cycle its
+    // imports, so a statement timeout or a lock on it is logged and stepped over.
+    try {
+      await clearExpiredEmailMetadata(deps.db)
+    } catch (error) {
+      console.error('Clearing expired email metadata failed (continuing):', error)
+    }
     const connections = await listActiveGmailConnections(deps.db)
 
     for (const connection of connections) {
@@ -106,22 +158,90 @@ async function pollOneConnection(
     `${connection.user_id}:${connection.external_id}`,
   )
   const gmail = deps.buildGmail(refreshToken)
-  const messageIds = await deps.listSince(gmail, connection.cursor)
+  // Retries work by message id, independent of the cursor, so the two lists
+  // merge into the one loop. Retried messages are older than the cursor and the
+  // "only advance if greater" comparison below keeps them from dragging it back.
+  const listedMessageIds = await deps.listSince(gmail, connection.cursor)
+  const retryableMessageIds = await listRetryableMessageIds(deps.db, connection.id)
+  const messageIds = [...new Set([...listedMessageIds, ...retryableMessageIds])]
 
   let maxInternalDateSeconds = connection.cursor
+  const failures: ImportFailure[] = []
+
   for (const messageId of messageIds) {
-    const rawMessage = await deps.fetchMessage(gmail, messageId)
-    const parsed = deps.parseMessage(rawMessage)
-    await deps.importEmail(
-      { subject: parsed.subject, text: parsed.text, messageId },
-      { userId: connection.user_id, connectionId: connection.id },
-    )
-    if (Number(parsed.internalDateSeconds) > Number(maxInternalDateSeconds)) {
+    // The per-message catch below is what keeps one bad email from aborting the
+    // batch, but an auth error is rethrown from it untouched: a Gmail 401
+    // mid-batch has to keep reaching the isAuthError handler in
+    // pollConnectionsOnce, or the connection never flips to needs_reauth and the
+    // user gets import-failure alerts every cycle instead of the reconnect one.
+    let parsed: { subject: string; text: string; sender: string | null; internalDateSeconds: string }
+    try {
+      // Ask before fetching, not only inside processEmail. Gmail's after: query
+      // is inclusive at the boundary second, so the newest already-imported
+      // message comes back every cycle: a transient fetch error on it would
+      // otherwise record a failure over its imported row and have the retry
+      // import the same email twice. It also stops a permanently unfetchable
+      // message from burning a fetch and an alert on every cycle forever.
+      if (await shouldSkipMessage(deps.db, connection.id, messageId)) continue
+      const rawMessage = await deps.fetchMessage(gmail, messageId)
+      parsed = deps.parseMessage(rawMessage)
+    } catch (error) {
+      if (isAuthError(error)) throw error
+      console.error(`Could not read message ${messageId} of connection ${connection.id}:`, error)
+      // Nothing was parsed, so there is no sender or subject to record. The row
+      // still goes in, so the email appears in the Inbox instead of vanishing.
+      failures.push({ sender: null, subject: null })
+      try {
+        await recordImportSource(deps.db, connection.id, messageId, { verdict: 'failed' })
+      } catch (recordError) {
+        console.error(`Failed to record a failure for message ${messageId}:`, recordError)
+      }
+      // No parsed date, so this message cannot move the cursor either way.
+      continue
+    }
+
+    let rowRecorded = false
+    try {
+      await deps.importEmail(
+        {
+          subject: parsed.subject,
+          text: parsed.text,
+          messageId,
+          sender: parsed.sender,
+          emailDateSeconds: parsed.internalDateSeconds,
+        },
+        { userId: connection.user_id, connectionId: connection.id },
+      )
+      rowRecorded = true
+    } catch (error) {
+      if (isAuthError(error)) throw error
+      console.error(`Import of message ${messageId} failed:`, error)
+      failures.push({ sender: parsed.sender, subject: parsed.subject })
+      // processEmail already wrote its own 'failed' row; writing another here
+      // would spend two of the three attempts on one real attempt. Whether that
+      // write landed is not observable from here, so this message contributes
+      // nothing to the cursor. A newer message in the same batch can still carry
+      // the cursor past it, which is what the row and the retry-by-id list are
+      // for: they, not the cursor, are what keep a failed email reachable.
+    }
+
+    if (rowRecorded && Number(parsed.internalDateSeconds) > Number(maxInternalDateSeconds)) {
       maxInternalDateSeconds = parsed.internalDateSeconds
     }
   }
+
   if (maxInternalDateSeconds !== connection.cursor) {
     await setConnectionCursor(deps.db, connection.id, maxInternalDateSeconds)
+  }
+
+  // One message per connection per cycle, and at most one per hour. State
+  // first, then notify, as with the disconnect alert.
+  if (failures.length > 0 && claimFailureAlertSlot(connection.id, Number(deps.nowSeconds()))) {
+    try {
+      await deps.notifyImportFailures(connection, failures)
+    } catch (error) {
+      console.error(`Failed to alert about failed imports on ${connection.id}:`, error)
+    }
   }
 }
 
