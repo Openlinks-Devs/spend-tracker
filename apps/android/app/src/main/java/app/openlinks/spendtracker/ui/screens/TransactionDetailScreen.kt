@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -24,21 +25,34 @@ import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
 import app.openlinks.spendtracker.ui.Formatting
 import app.openlinks.spendtracker.ui.SpendUiState
+import app.openlinks.spendtracker.ui.TransactionDetailUiState
 import app.openlinks.spendtracker.ui.theme.MoneyColors
 
 @Composable
 fun TransactionDetailScreen(
     transactionId: String,
     state: SpendUiState,
+    detailState: TransactionDetailUiState,
     onEdit: (String) -> Unit,
     onDuplicate: (String) -> Unit,
     onDelete: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val transaction: Transaction? = state.transactionById(transactionId)
+    // The loaded filtered list is only one page, so it holds the transaction for
+    // an ordinary tap but not for a link to an older one. Prefer the list when it
+    // has it (no loading flash, and it stays fresh after an edit), and fall back
+    // to the copy [detailState] fetched by id.
+    val transaction: Transaction? =
+        state.transactionById(transactionId) ?: detailState.transactionFor(transactionId)
     if (transaction == null) {
         Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-            Text(text = Strings.get(StringKey.ErrorGeneric))
+            when {
+                // A snapshot about some other transaction says nothing about this
+                // one: this screen composes before its fetch is even requested.
+                detailState.loading || !detailState.answersFor(transactionId) -> CircularProgressIndicator()
+                detailState.notFound -> Text(text = Strings.get(StringKey.TransactionNotFound))
+                else -> Text(text = detailState.error ?: Strings.get(StringKey.ErrorGeneric))
+            }
         }
         return
     }

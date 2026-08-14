@@ -6,6 +6,8 @@ import app.openlinks.spendtracker.data.ApiException
 import app.openlinks.spendtracker.data.AuthState
 import app.openlinks.spendtracker.data.Category
 import app.openlinks.spendtracker.data.Connection
+import app.openlinks.spendtracker.data.EmailListResponse
+import app.openlinks.spendtracker.data.EmailLogItem
 import app.openlinks.spendtracker.data.InMemoryKeyValueStore
 import app.openlinks.spendtracker.data.NewTransaction
 import app.openlinks.spendtracker.data.SessionStore
@@ -65,7 +67,7 @@ class SessionViewModelTest {
             return transactions.toList()
         }
         override suspend fun getTransaction(id: String): Transaction =
-            transactions.first { it.id == id }
+            transactions.firstOrNull { it.id == id } ?: throw ApiException(404, "not_found")
         override suspend fun createTransaction(transaction: NewTransaction): Transaction {
             created = transaction
             val row = Transaction(
@@ -148,7 +150,35 @@ class SessionViewModelTest {
         }
 
         override suspend fun telegramPairCode(): String = "https://t.me/bot?start=code"
+
+        var emails = listOf<EmailLogItem>()
+        var emailsError: Exception? = null
+        val recordedEmailPages = mutableListOf<Pair<Int, Int>>()
+
+        override suspend fun getEmails(limit: Int, offset: Int): EmailListResponse {
+            emailsError?.let { error -> throw error }
+            recordedEmailPages.add(limit to offset)
+            return EmailListResponse(
+                items = emails.drop(offset).take(limit),
+                total = emails.size,
+                limit = limit,
+                offset = offset,
+            )
+        }
     }
+
+    private fun emailLogItem(messageId: String, verdict: String = "imported") = EmailLogItem(
+        messageId = messageId,
+        connectionId = "conn-1",
+        accountEmail = "me@example.com",
+        sender = "Bank <no-reply@bank.com>",
+        subject = "Your purchase",
+        emailDate = "2026-08-01T10:00:00Z",
+        receivedAt = "2026-08-01T10:01:00Z",
+        verdict = verdict,
+        attempts = 1,
+        transaction = null,
+    )
 
     @Before
     fun setUp() {
@@ -542,5 +572,193 @@ class SessionViewModelTest {
 
         assertEquals("conn-1", api.removedConnectionId)
         assertEquals(0, viewModel.connectionsState.value.connections.size)
+    }
+
+    @Test
+    fun loadInboxPopulatesTheEmailList() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.emails = listOf(emailLogItem("msg-1"), emailLogItem("msg-2", "not_transaction"))
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.inboxState.value.emails.size)
+        assertEquals(2, viewModel.inboxState.value.total)
+        assertFalse(viewModel.inboxState.value.loading)
+        assertNull(viewModel.inboxState.value.error)
+        assertFalse(viewModel.inboxState.value.canLoadMore)
+    }
+
+    @Test
+    fun inboxMockModeRefusalIsAStateNotAnError() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.emailsError = ApiException(503, "connections_require_live_mode")
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.inboxState.value.liveModeRequired)
+        assertNull(viewModel.inboxState.value.error)
+        assertTrue(viewModel.inboxState.value.emails.isEmpty())
+    }
+
+    @Test
+    fun inboxFailureSurfacesAnError() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.emailsError = RuntimeException("boom")
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+
+        assertEquals("boom", viewModel.inboxState.value.error)
+        assertFalse(viewModel.inboxState.value.liveModeRequired)
+    }
+
+    @Test
+    fun loadingMoreEmailsAppendsTheNextPage() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.emails = (1..4).map { index -> emailLogItem("msg-$index") }
+        val viewModel = SessionViewModel(api, dispatcher, pageSize = 2)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+        assertEquals(2, viewModel.inboxState.value.emails.size)
+        assertTrue(viewModel.inboxState.value.canLoadMore)
+
+        viewModel.loadMoreEmails()
+        advanceUntilIdle()
+
+        assertEquals(4, viewModel.inboxState.value.emails.size)
+        assertFalse(viewModel.inboxState.value.canLoadMore)
+        assertEquals(listOf("msg-1", "msg-2", "msg-3", "msg-4"), viewModel.inboxState.value.emails.map { it.messageId })
+        assertEquals(listOf(2 to 0, 2 to 2), api.recordedEmailPages)
+    }
+
+    @Test
+    fun loadingMoreDoesNothingWhenTheListIsComplete() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.emails = listOf(emailLogItem("msg-1"))
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+        api.recordedEmailPages.clear()
+
+        viewModel.loadMoreEmails()
+        advanceUntilIdle()
+
+        assertTrue(api.recordedEmailPages.isEmpty())
+        assertEquals(1, viewModel.inboxState.value.emails.size)
+    }
+
+    @Test
+    fun aRowAlreadyHeldIsNotAppendedTwice() = runTest(dispatcher) {
+        // Offset pagination over a newest-first list skews when the poller inserts
+        // a row between two fetches, so page two can repeat a row from page one.
+        val api = FakeApi()
+        api.emails = listOf(emailLogItem("msg-1"), emailLogItem("msg-2"), emailLogItem("msg-3"))
+        val viewModel = SessionViewModel(api, dispatcher, pageSize = 2)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+        // The list shifts under us: a newer email arrives at the head.
+        api.emails = listOf(emailLogItem("msg-0")) + api.emails
+
+        viewModel.loadMoreEmails()
+        advanceUntilIdle()
+
+        val messageIds = viewModel.inboxState.value.emails.map { email -> email.messageId }
+        assertEquals(messageIds.distinct(), messageIds)
+    }
+
+    @Test
+    fun aFailedLoadMoreKeepsTheRowsAlreadyRead() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.emails = (1..4).map { index -> emailLogItem("msg-$index") }
+        val viewModel = SessionViewModel(api, dispatcher, pageSize = 2)
+
+        viewModel.loadInbox()
+        advanceUntilIdle()
+        api.emailsError = ApiException(503, "connections_require_live_mode")
+
+        viewModel.loadMoreEmails()
+        advanceUntilIdle()
+
+        // Whatever the second page failed with, the page the user is reading stays.
+        assertEquals(2, viewModel.inboxState.value.emails.size)
+        assertFalse(viewModel.inboxState.value.liveModeRequired)
+    }
+
+    @Test
+    fun openingATransactionAlreadyLoadedDoesNotHitTheApi() = runTest(dispatcher) {
+        val api = FakeApi()
+        api.transactions.add(
+            Transaction("t1", "Coffee", -4.5, "USD", "acc-1", "cat-1", emptyList(), "2026-07-02T00:00:00Z", null),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        viewModel.loadTransaction("t1")
+        advanceUntilIdle()
+
+        assertEquals("t1", viewModel.transactionDetailState.value.transaction?.id)
+        assertFalse(viewModel.transactionDetailState.value.loading)
+        assertFalse(viewModel.transactionDetailState.value.notFound)
+    }
+
+    @Test
+    fun openingATransactionOutsideTheLoadedListFetchesIt() = runTest(dispatcher) {
+        // A deep link to an older transaction: it is not in the current filtered
+        // page, so the screen has to ask the backend for it by id.
+        val api = FakeApi()
+        api.transactions.add(
+            Transaction("old-1", "Rent", -900.0, "USD", "acc-1", "cat-1", emptyList(), "2025-01-02T00:00:00Z", null),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadTransaction("old-1")
+        advanceUntilIdle()
+
+        assertEquals("old-1", viewModel.transactionDetailState.value.transaction?.id)
+        assertNull(viewModel.transactionDetailState.value.error)
+    }
+
+    @Test
+    fun aMissingTransactionReportsNotFoundRatherThanAGenericError() = runTest(dispatcher) {
+        val api = FakeApi()
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadTransaction("gone")
+        advanceUntilIdle()
+
+        val detailState = viewModel.transactionDetailState.value
+        assertTrue(detailState.notFound)
+        assertNull(detailState.transaction)
+        assertNull(detailState.error)
+    }
+
+    @Test
+    fun detailStateNeverAnswersForATransactionItWasNotAskedAbout() = runTest(dispatcher) {
+        // The screen composes before its LaunchedEffect runs, so on the first frame
+        // of a second detail screen the state still holds the previous fetch. It
+        // must not answer with it, or the action buttons target the wrong row.
+        val api = FakeApi()
+        api.transactions.add(
+            Transaction("old-1", "Rent", -900.0, "USD", "acc-1", "cat-1", emptyList(), "2025-01-02T00:00:00Z", null),
+        )
+        val viewModel = SessionViewModel(api, dispatcher)
+
+        viewModel.loadTransaction("old-1")
+        advanceUntilIdle()
+
+        val detailState = viewModel.transactionDetailState.value
+        assertEquals("old-1", detailState.transactionFor("old-1")?.id)
+        assertNull(detailState.transactionFor("old-2"))
+        assertFalse(detailState.answersFor("old-2"))
+        assertTrue(detailState.answersFor("old-1"))
     }
 }

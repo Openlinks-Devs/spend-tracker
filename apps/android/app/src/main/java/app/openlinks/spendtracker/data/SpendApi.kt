@@ -19,6 +19,14 @@ interface SpendApi {
     /** Moves money between two accounts, creating both legs atomically. */
     suspend fun createTransfer(transfer: TransferInput): TransferResult
 
+    /**
+     * The emails the importer processed, newest first, with the verdict it
+     * reached for each. Throws [ApiException] with status 503 and message
+     * "connections_require_live_mode" in mock mode, since these rows key off
+     * real connection rows.
+     */
+    suspend fun getEmails(limit: Int = 50, offset: Int = 0): EmailListResponse
+
     /** The signed-in user's linked Gmail/Telegram integrations. */
     suspend fun getConnections(): List<Connection>
 

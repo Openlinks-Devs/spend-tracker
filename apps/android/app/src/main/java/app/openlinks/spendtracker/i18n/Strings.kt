@@ -132,6 +132,23 @@ enum class StringKey {
     ThemeSystem,
     ChartOtherCategories,
     ChartOtherTags,
+    NavInbox,
+    InboxTitle,
+    InboxSubtitle,
+    InboxEmpty,
+    InboxMockMode,
+    InboxSenderUnavailable,
+    InboxSubjectUnavailable,
+    InboxReceivedAt,
+    InboxAttempts,
+    InboxLoadMore,
+    VerdictImported,
+    VerdictNotTransaction,
+    VerdictNotConfigured,
+    VerdictExtractFailed,
+    VerdictFailed,
+    VerdictUnknown,
+    TransactionNotFound,
 }
 
 /** Simple locale-aware lookup. English is the only bundled locale for now. */
@@ -276,6 +293,29 @@ object Strings {
         // categories into one wedge, the tag bar truncates to a final row.
         StringKey.ChartOtherCategories to "Other categories",
         StringKey.ChartOtherTags to "Other tags",
+        // Inbox: what the importer did with each email that arrived.
+        StringKey.NavInbox to "Inbox",
+        StringKey.InboxTitle to "Inbox",
+        StringKey.InboxSubtitle to "What happened to each email the importer read.",
+        StringKey.InboxEmpty to "No emails processed yet.",
+        StringKey.InboxMockMode to
+            "The inbox needs a signed-in account with a linked Gmail, so it is unavailable in this demo build.",
+        // Sender and subject are cleared once a row is 30 days old, and rows that
+        // predate the log never had them. Say so rather than showing a blank line.
+        StringKey.InboxSenderUnavailable to "Sender no longer stored",
+        StringKey.InboxSubjectUnavailable to "Subject no longer stored",
+        StringKey.InboxReceivedAt to "Processed %s",
+        StringKey.InboxAttempts to "%s attempts",
+        StringKey.InboxLoadMore to "Load more",
+        // The verdict vocabulary, worded identically to the web client so the two
+        // surfaces describe the same outcome the same way.
+        StringKey.VerdictImported to "Imported",
+        StringKey.VerdictNotTransaction to "Not a transaction",
+        StringKey.VerdictNotConfigured to "No accounts or categories set up",
+        StringKey.VerdictExtractFailed to "Could not read the details",
+        StringKey.VerdictFailed to "Processing failed",
+        StringKey.VerdictUnknown to "Unknown",
+        StringKey.TransactionNotFound to "This transaction no longer exists.",
     )
 
     private val locales: Map<String, Map<StringKey, String>> = mapOf("en" to english)
