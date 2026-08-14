@@ -141,6 +141,44 @@ export interface AnalyticsPayload {
   byAccount: AccountRow[]
 }
 
+// What the importer decided about one processed email. `unknown` is only ever
+// backfilled onto rows that predate the email log, never written going forward.
+export type EmailVerdict =
+  | 'imported'
+  | 'not_transaction'
+  | 'not_configured'
+  | 'extract_failed'
+  | 'failed'
+  | 'unknown'
+
+export interface EmailLogItem {
+  message_id: string
+  connection_id: string
+  /** The linked Gmail account the email arrived on. */
+  account_email: string
+  /** The raw From header. Cleared once the row is 30 days old. */
+  sender: string | null
+  /** Cleared once the row is 30 days old. */
+  subject: string | null
+  email_date: string | null
+  /** When the importer processed the email. */
+  received_at: string
+  verdict: EmailVerdict
+  attempts: number
+  /**
+   * Null when no transaction was created, and also when an imported
+   * transaction was deleted afterwards: the link column is ON DELETE SET NULL.
+   */
+  transaction: { id: string; description: string; amount: number; currency: string } | null
+}
+
+export interface EmailListResponse {
+  items: EmailLogItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface Connection {
   id: string
   provider: 'gmail' | 'telegram'

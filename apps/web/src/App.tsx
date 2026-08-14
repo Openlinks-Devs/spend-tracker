@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { TransactionsPage } from '@/pages/TransactionsPage'
+import { TransactionDetailPage } from '@/pages/TransactionDetailPage'
+import { InboxPage } from '@/pages/InboxPage'
 import { AccountsPage } from '@/pages/AccountsPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { IntegrationsPage } from '@/pages/IntegrationsPage'
@@ -53,6 +55,8 @@ function MainRoutes() {
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="transactions/:transactionId" element={<TransactionDetailPage />} />
+        <Route path="inbox" element={<InboxPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="integrations" element={<IntegrationsPage />} />
