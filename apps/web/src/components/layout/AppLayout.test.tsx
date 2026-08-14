@@ -62,6 +62,15 @@ describe('AppLayout sign out', () => {
   })
 })
 
+describe('AppLayout navigation', () => {
+  // One navigationItems array drives the desktop sidebar and the mobile tab
+  // row, so a destination missing here is missing at every breakpoint.
+  it('offers the Inbox destination', async () => {
+    await renderLayout(false)
+    expect(screen.getAllByRole('link', { name: /inbox/i }).length).toBeGreaterThan(0)
+  })
+})
+
 describe('AppLayout broken connection signal', () => {
   it('marks the integrations link when an account stopped importing', async () => {
     await renderLayout(false, { brokenConnections: [brokenConnection('misael@gmail.com')] })

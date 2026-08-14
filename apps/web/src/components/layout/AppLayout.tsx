@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 import {
   IconLayoutDashboard,
   IconReceipt,
+  IconInbox,
   IconWallet,
   IconTags,
   IconPlug,
@@ -21,6 +22,7 @@ import { useBrokenConnections } from '@/hooks/useConnections'
 const navigationItems = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard, end: true, preservesFilters: true },
   { to: '/transactions', label: 'Transactions', icon: IconReceipt, end: false, preservesFilters: true },
+  { to: '/inbox', label: 'Inbox', icon: IconInbox, end: false, preservesFilters: false },
   { to: '/accounts', label: 'Accounts', icon: IconWallet, end: false, preservesFilters: false },
   { to: '/categories', label: 'Categories', icon: IconTags, end: false, preservesFilters: false },
   { to: '/integrations', label: 'Integrations', icon: IconPlug, end: false, preservesFilters: false },
@@ -115,7 +117,7 @@ export function AppLayout() {
         )}
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Two rows on small screens. Cramming the wordmark and five links onto
+        {/* Two rows on small screens. Cramming the wordmark and every link onto
             one line clipped the last item ("Integrations" rendered as "I") and
             left no room for the account, so signing out was impossible on a
             phone - the sidebar footer that holds it is desktop-only. */}
@@ -145,7 +147,7 @@ export function AppLayout() {
               )}
             </div>
           </div>
-          {/* Horizontal scroll is the honest answer for five destinations on a
+          {/* Horizontal scroll is the honest answer for six destinations on a
               narrow screen; the edge fade tells you there is more to reach. */}
           <nav className="-mb-px flex gap-1 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {navigationItems.map((navigationItem) => (
