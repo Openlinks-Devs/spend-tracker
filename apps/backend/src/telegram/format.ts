@@ -57,6 +57,27 @@ export function formatError(detail: string): string {
   return `Could not create the transaction in SpendTracker:\n\n${detail}`
 }
 
+export interface ImportFailuresView {
+  // The first failure of the cycle, which stands in for the rest. Both fields
+  // are null when the message could not be parsed at all.
+  sender: string | null
+  subject: string | null
+  count: number
+  inboxUrl: string
+}
+
+export function formatImportFailures(view: ImportFailuresView): string {
+  const noun = view.count === 1 ? 'email' : 'emails'
+  return [
+    `SpendTracker could not process ${view.count} ${noun} from your inbox.`,
+    '',
+    `<strong>${escapeHtml(view.sender ?? 'Unknown sender')}</strong>`,
+    escapeHtml(view.subject ?? 'No subject'),
+    '',
+    `See what happened: ${view.inboxUrl}`,
+  ].join('\n')
+}
+
 export interface GmailConnectionLostView {
   email: string
   integrationsUrl: string
