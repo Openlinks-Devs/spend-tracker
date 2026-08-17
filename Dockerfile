@@ -54,6 +54,13 @@ RUN pnpm install --filter backend --frozen-lockfile --prod
 
 COPY --from=build /repo/apps/backend/dist ./apps/backend/dist
 COPY --from=build /repo/apps/web/dist ./apps/web/dist
+# The .sql files are read at run time by dist/scripts/migrate.js, so they have
+# to exist in the runtime image, not just the build stage.
+COPY apps/backend/migrations ./apps/backend/migrations
 
 EXPOSE 3000
-CMD ["node", "apps/backend/dist/index.js"]
+# Migrate, then serve. Pending migrations apply on every deployment, and a
+# failure here means the container never starts, so Coolify rolls back rather
+# than serving new code against an old schema. `exec` hands PID 1 to node so it
+# still receives SIGTERM on shutdown.
+CMD ["sh", "-c", "node apps/backend/dist/scripts/migrate.js && exec node apps/backend/dist/index.js"]

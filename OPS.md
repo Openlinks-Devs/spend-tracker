@@ -312,6 +312,33 @@ The repository-root `.env` is gitignored and holds `COOLIFY_API_KEY` and
 `COOLIFY_BASE_URL`, which is what the Coolify tooling reads to drive the
 deployment. A fresh clone has to recreate it.
 
+### Migrations run on every deployment
+
+The container's `CMD` is `migrate && exec node ...`, so every pending migration
+applies at startup, before the server accepts a request. Three consequences
+worth knowing:
+
+- **A failed migration means the container never starts.** Coolify sees an
+  unhealthy deployment and rolls back, which is the intended outcome: it is
+  better than serving new code against an old schema.
+- **The run holds a Postgres advisory lock** (`727402`), so if a rolling deploy
+  ever has two containers booting at once, the second waits for the schema
+  instead of racing the first through the check-then-insert.
+- **The runner still applies everything pending, in order, with no target or
+  step argument.** That is exactly what makes the baselining below matter: a
+  production database that is not correctly recorded in `schema_migrations`
+  will now fail a deployment rather than waiting for someone to run migrations
+  by hand.
+
+Before the first deployment on this scheme, confirm the baseline:
+
+```sql
+SELECT name FROM schema_migrations ORDER BY name;
+```
+
+Every migration already applied to that database must be listed. If any are
+missing, record them with the `INSERT` below before deploying.
+
 ### Migrating an existing database
 
 `migrate.ts` skips only the files already recorded in `schema_migrations`
@@ -331,7 +358,7 @@ fine.) Then, for a database that already holds ledger rows, follow this order:
 
 1. Apply `003_user_scoping.sql` (nullable `user_id`) **on its own**. There is no
    command for this: `pnpm --filter backend migrate` takes no target, range or
-   step argument, it loops over every pending file (`scripts/migrate.ts`), so
+   step argument, it loops over every pending file (`src/scripts/migrate.ts`), so
    running it here applies 003 and then immediately attempts 004 on unbackfilled
    rows. Apply the one file and record it the way `migrate.ts` would, in a single
    transaction:
