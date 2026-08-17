@@ -7,6 +7,7 @@ import type {
   Category,
   CategoryUpdate,
   Connection,
+  EmailListResponse,
   NewAccount,
   NewCategory,
   NewTransaction,
@@ -106,6 +107,23 @@ export const connectionsApi = {
   gmailLinkUrl: () => request<{ url: string }>('/connections/gmail/link-url', { method: 'POST' }),
   telegramPairCode: () =>
     request<{ deepLink: string }>('/connections/telegram/pair-code', { method: 'POST' }),
+}
+
+export interface EmailListPage {
+  limit: number
+  offset: number
+}
+
+// The email log is read-only and paginated, so it does not fit the CRUD
+// ResourceApi factory either.
+export const emailsApi = {
+  list(page: EmailListPage) {
+    const params = new URLSearchParams({
+      limit: String(page.limit),
+      offset: String(page.offset),
+    })
+    return request<EmailListResponse>(`/emails?${params.toString()}`)
+  },
 }
 
 export interface TransactionListPage {
