@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Badge
@@ -43,6 +44,7 @@ import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
 import app.openlinks.spendtracker.ui.screens.AppearanceMenu
 import app.openlinks.spendtracker.ui.screens.ConnectionAlertBanner
+import app.openlinks.spendtracker.ui.screens.InboxScreen
 import app.openlinks.spendtracker.ui.screens.IntegrationsScreen
 import app.openlinks.spendtracker.ui.screens.SummaryScreen
 import app.openlinks.spendtracker.ui.screens.TransactionDetailScreen
@@ -54,6 +56,7 @@ import app.openlinks.spendtracker.ui.screens.openExternalUrl
 private object Routes {
     const val SUMMARY = "summary"
     const val TRANSACTIONS = "transactions"
+    const val INBOX = "inbox"
     const val INTEGRATIONS = "integrations"
     const val DETAIL = "transactions/{id}"
     const val CREATE = "create_transaction?from={from}"
@@ -90,11 +93,12 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val topLevelRoutes = listOf(Routes.SUMMARY, Routes.TRANSACTIONS, Routes.INTEGRATIONS)
+    val topLevelRoutes = listOf(Routes.SUMMARY, Routes.TRANSACTIONS, Routes.INBOX, Routes.INTEGRATIONS)
     val showBottomBar = currentRoute in topLevelRoutes
     val topBarTitle = when (currentRoute) {
         Routes.SUMMARY -> Strings.get(StringKey.SummaryTitle)
         Routes.TRANSACTIONS -> Strings.get(StringKey.TransactionsTitle)
+        Routes.INBOX -> Strings.get(StringKey.InboxTitle)
         Routes.INTEGRATIONS -> Strings.get(StringKey.IntegrationsTitle)
         Routes.DETAIL -> Strings.get(StringKey.TransactionDetailTitle)
         Routes.CREATE -> Strings.get(StringKey.FormCreateTitle)
@@ -160,6 +164,11 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                             Strings.get(StringKey.NavTransactions),
                         ),
                         Triple(
+                            Routes.INBOX,
+                            Icons.Filled.Inbox,
+                            Strings.get(StringKey.NavInbox),
+                        ),
+                        Triple(
                             Routes.INTEGRATIONS,
                             Icons.Filled.Link,
                             Strings.get(StringKey.NavIntegrations),
@@ -215,7 +224,9 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
             // Mounted in the shell rather than inside a screen so a broken
             // account is visible wherever the user happens to be. The
             // Integrations screen is excluded: it already lists the same
-            // accounts row by row, so the banner would only repeat it.
+            // accounts row by row, so the banner would only repeat it. The Inbox
+            // deliberately keeps it: a broken account is exactly why emails would
+            // stop showing up there, so the banner explains an empty list.
             if (currentRoute != Routes.INTEGRATIONS) {
                 ConnectionAlertBanner(
                     brokenConnections = if (connectionsState.alertDismissed) {
@@ -305,6 +316,17 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     onCancel = { navController.popBackStack() },
                 )
             }
+            composable(Routes.INBOX) {
+                val inboxState by viewModel.inboxState.collectAsStateWithLifecycle()
+                // Loaded when the screen opens rather than app-wide: nothing else
+                // reads this list, and the poller only changes it every minute.
+                LaunchedEffect(Unit) { viewModel.loadInbox() }
+                InboxScreen(
+                    state = inboxState,
+                    onOpenTransaction = { id -> navController.navigate(Routes.detail(id)) },
+                    onLoadMore = viewModel::loadMoreEmails,
+                )
+            }
             composable(Routes.INTEGRATIONS) {
                 val connectionsState by viewModel.connectionsState.collectAsStateWithLifecycle()
                 // Linking Gmail finishes in a browser, so the only reliable signal
@@ -340,9 +362,14 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
             }
             composable(Routes.DETAIL) { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
+                val detailState by viewModel.transactionDetailState.collectAsStateWithLifecycle()
+                // A link from the Inbox, or any older transaction, is not in the
+                // loaded page, so the screen has to resolve it by id.
+                LaunchedEffect(id) { viewModel.loadTransaction(id) }
                 TransactionDetailScreen(
                     transactionId = id,
                     state = state,
+                    detailState = detailState,
                     onEdit = { transactionId -> navController.navigate(Routes.edit(transactionId)) },
                     onDuplicate = { transactionId -> navController.navigate(Routes.create(transactionId)) },
                     onDelete = { transactionId ->

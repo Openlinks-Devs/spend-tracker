@@ -102,6 +102,58 @@ data class GmailLinkUrl(val url: String)
 @Serializable
 data class TelegramPairing(val deepLink: String)
 
+/**
+ * The transaction an imported email produced, as embedded in an email log row.
+ * Deliberately not a full [Transaction]: the endpoint only carries enough to
+ * label the link, and the detail screen fetches the rest by id.
+ */
+@Serializable
+data class EmailTransactionRef(
+    val id: String,
+    val description: String,
+    val amount: Double,
+    val currency: String,
+)
+
+/**
+ * One processed email, from GET /api/emails. [sender], [subject] and [emailDate]
+ * are nullable twice over: historical rows predate the audit log, and the backend
+ * clears sender and subject once a row is 30 days old, so the UI renders those as
+ * unavailable rather than pretending.
+ *
+ * [verdict] stays a String rather than an enum so a value the backend adds later
+ * renders raw instead of failing to decode.
+ */
+@Serializable
+data class EmailLogItem(
+    @SerialName("message_id") val messageId: String,
+    @SerialName("connection_id") val connectionId: String,
+    @SerialName("account_email") val accountEmail: String,
+    val sender: String? = null,
+    val subject: String? = null,
+    @SerialName("email_date") val emailDate: String? = null,
+    @SerialName("received_at") val receivedAt: String,
+    val verdict: String,
+    val attempts: Int = 0,
+    val transaction: EmailTransactionRef? = null,
+)
+
+/**
+ * A row's stable identity. The backend keys `import_source` on the pair, not on
+ * the message id alone, so two connections that received the same message would
+ * otherwise collide.
+ */
+fun emailRowKey(email: EmailLogItem): String = "${email.connectionId}/${email.messageId}"
+
+/** Paginated list envelope returned by GET /api/emails. */
+@Serializable
+data class EmailListResponse(
+    val items: List<EmailLogItem> = emptyList(),
+    val total: Int = 0,
+    val limit: Int = 0,
+    val offset: Int = 0,
+)
+
 /** Consistent backend error shape: { "error": string }. */
 @Serializable
 data class ApiError(

@@ -13,7 +13,9 @@ import app.openlinks.spendtracker.data.AuthRepository
 import app.openlinks.spendtracker.data.AuthState
 import app.openlinks.spendtracker.data.Category
 import app.openlinks.spendtracker.data.Connection
+import app.openlinks.spendtracker.data.EmailLogItem
 import app.openlinks.spendtracker.data.NewTransaction
+import app.openlinks.spendtracker.data.emailRowKey
 import app.openlinks.spendtracker.data.SessionStore
 import app.openlinks.spendtracker.data.SpendApi
 import app.openlinks.spendtracker.data.Transaction
@@ -103,6 +105,50 @@ data class ConnectionsUiState(
 )
 
 /**
+ * Inbox screen status: the emails the importer processed, newest first.
+ * [liveModeRequired] is the backend's 503 in mock mode, where these rows cannot
+ * exist because they key off real connection rows. [total] is the server's count,
+ * so the screen knows whether another page is worth asking for.
+ */
+data class InboxUiState(
+    val loading: Boolean = false,
+    val loadingMore: Boolean = false,
+    val emails: List<EmailLogItem> = emptyList(),
+    val total: Int = 0,
+    val liveModeRequired: Boolean = false,
+    val error: String? = null,
+) {
+    val canLoadMore: Boolean get() = emails.size < total
+}
+
+/**
+ * The transaction behind the detail screen when it is not in the currently loaded
+ * filtered list, which is what a deep link to an older transaction hits.
+ * [notFound] is the backend's 404, kept apart from [error] so a deleted
+ * transaction says so instead of showing a generic failure.
+ */
+data class TransactionDetailUiState(
+    val loading: Boolean = false,
+    val transaction: Transaction? = null,
+    val notFound: Boolean = false,
+    val error: String? = null,
+    /** Which transaction this snapshot describes. Null before anything is asked for. */
+    val requestedId: String? = null,
+) {
+    /**
+     * Whether this snapshot describes [id] at all. A screen composes before its
+     * effects run, so the first frame of a second detail screen still sees the
+     * previous transaction's result; answering only for the id that was asked
+     * about keeps it from rendering, and acting on, the wrong row.
+     */
+    fun answersFor(id: String): Boolean = requestedId == id
+
+    /** The loaded transaction, but only when it is the one [id] asked for. */
+    fun transactionFor(id: String): Transaction? =
+        transaction?.takeIf { loaded -> loaded.id == id && answersFor(id) }
+}
+
+/**
  * The linked Gmail accounts that lost access and stopped importing. Pure, so the
  * rule is tested in plain JUnit rather than through a screen.
  *
@@ -133,6 +179,9 @@ class SessionViewModel(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val sessionStore: SessionStore? = null,
     private val authRepository: AuthRepository? = null,
+    // How many emails one Inbox page asks for. Injectable so pagination is
+    // exercised without building a hundred fixtures.
+    private val pageSize: Int = 50,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(SpendUiState())
@@ -146,6 +195,110 @@ class SessionViewModel(
 
     private val mutableConnectionsState = MutableStateFlow(ConnectionsUiState())
     val connectionsState: StateFlow<ConnectionsUiState> = mutableConnectionsState.asStateFlow()
+
+    private val mutableInboxState = MutableStateFlow(InboxUiState())
+    val inboxState: StateFlow<InboxUiState> = mutableInboxState.asStateFlow()
+
+    private val mutableTransactionDetailState = MutableStateFlow(TransactionDetailUiState())
+    val transactionDetailState: StateFlow<TransactionDetailUiState> = mutableTransactionDetailState.asStateFlow()
+
+    /** Loads the first page of processed emails, replacing whatever is shown. */
+    fun loadInbox() {
+        viewModelScope.launch {
+            mutableInboxState.value = mutableInboxState.value.copy(loading = true, error = null)
+            try {
+                val page = withContext(dispatcher) { api.getEmails(limit = pageSize, offset = 0) }
+                mutableInboxState.value = InboxUiState(
+                    loading = false,
+                    emails = page.items,
+                    total = page.total,
+                    liveModeRequired = false,
+                    error = null,
+                )
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableInboxState.value = InboxUiState(
+                    loading = false,
+                    emails = emptyList(),
+                    total = 0,
+                    liveModeRequired = isLiveModeRequired(error),
+                    error = if (isLiveModeRequired(error)) null else error.message
+                        ?: Strings.get(StringKey.ErrorGeneric),
+                )
+                refreshAuthState()
+            }
+        }
+    }
+
+    /**
+     * Appends the next page. Offset is the number of rows already held rather
+     * than a page counter, so it stays correct even if a page came back short.
+     */
+    fun loadMoreEmails() {
+        val current = mutableInboxState.value
+        if (!current.canLoadMore || current.loading || current.loadingMore) return
+        viewModelScope.launch {
+            mutableInboxState.value = mutableInboxState.value.copy(loadingMore = true, error = null)
+            try {
+                val offset = mutableInboxState.value.emails.size
+                val page = withContext(dispatcher) { api.getEmails(limit = pageSize, offset = offset) }
+                val alreadyHeld = mutableInboxState.value.emails
+                // Offset pagination over a newest-first list skews whenever the
+                // poller inserts a row mid-read, which repeats a row we already
+                // hold. Duplicated rows would collide on the list's key.
+                val heldKeys = alreadyHeld.map { email -> emailRowKey(email) }.toSet()
+                mutableInboxState.value = mutableInboxState.value.copy(
+                    loadingMore = false,
+                    emails = alreadyHeld + page.items.filterNot { email -> emailRowKey(email) in heldKeys },
+                    total = page.total,
+                    error = null,
+                )
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                // Only an error, never [liveModeRequired]: that flag replaces the
+                // whole screen with a placeholder, which would throw away the page
+                // the user is already reading.
+                mutableInboxState.value = mutableInboxState.value.copy(
+                    loadingMore = false,
+                    error = error.message ?: Strings.get(StringKey.ErrorGeneric),
+                )
+                refreshAuthState()
+            }
+        }
+    }
+
+    /**
+     * Resolves the transaction the detail screen was opened for. The loaded
+     * filtered list is only ever one page, so a link from the Inbox or from an
+     * older date lands on a transaction that is not in it; that case fetches by
+     * id instead of rendering a bare error. A 404 is its own state, since a
+     * deleted transaction is a fact rather than a failure.
+     */
+    fun loadTransaction(id: String) {
+        val alreadyLoaded = mutableState.value.transactionById(id)
+        if (alreadyLoaded != null) {
+            mutableTransactionDetailState.value =
+                TransactionDetailUiState(transaction = alreadyLoaded, requestedId = id)
+            return
+        }
+        viewModelScope.launch {
+            mutableTransactionDetailState.value = TransactionDetailUiState(loading = true, requestedId = id)
+            try {
+                val transaction = withContext(dispatcher) { api.getTransaction(id) }
+                mutableTransactionDetailState.value =
+                    TransactionDetailUiState(transaction = transaction, requestedId = id)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                val notFound = error is ApiException && error.status == 404
+                mutableTransactionDetailState.value = TransactionDetailUiState(
+                    notFound = notFound,
+                    error = if (notFound) null else error.message ?: Strings.get(StringKey.ErrorGeneric),
+                    requestedId = id,
+                )
+                refreshAuthState()
+            }
+        }
+    }
 
     /**
      * Runs the Credential Manager sign-in, then re-reads the session so the gate

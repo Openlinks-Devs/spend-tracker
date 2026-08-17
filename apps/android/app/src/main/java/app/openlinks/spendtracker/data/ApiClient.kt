@@ -160,6 +160,9 @@ class ApiClient(
             http.newCall(request).execute().use { response -> decodeBody<TransferResult>(response) }
         }
 
+    override suspend fun getEmails(limit: Int, offset: Int): EmailListResponse =
+        getJson("/api/emails", listOf("limit" to limit.toString(), "offset" to offset.toString()))
+
     override suspend fun getConnections(): List<Connection> = getJson("/api/connections")
 
     override suspend fun deleteConnection(id: String) {
