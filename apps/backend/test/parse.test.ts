@@ -18,6 +18,31 @@ describe('parseMessage', () => {
     expect(result.text).toBe('Realizaste un consumo de S/ 35.00')
   })
 
+  it('returns the From header verbatim as the sender', () => {
+    const result = parseMessage({
+      payload: {
+        headers: [
+          { name: 'Subject', value: 'Consumo BCP' },
+          { name: 'From', value: 'Banco BCP <notificaciones@bcp.com.pe>' },
+        ],
+        mimeType: 'text/plain',
+        body: { data: encode('body') },
+      },
+    })
+    expect(result.sender).toBe('Banco BCP <notificaciones@bcp.com.pe>')
+  })
+
+  it('returns a null sender when the message has no From header', () => {
+    const result = parseMessage({
+      payload: {
+        headers: [{ name: 'Subject', value: 'No sender' }],
+        mimeType: 'text/plain',
+        body: { data: encode('body') },
+      },
+    })
+    expect(result.sender).toBeNull()
+  })
+
   it('finds the text/plain part in a multipart message', () => {
     const result = parseMessage({
       payload: {

@@ -6,6 +6,7 @@ import { getPool } from './db/pool.js'
 import { parseEncryptionKeys } from './connections/crypto.js'
 import { startConnectionPolling } from './connections/poller.js'
 import { notifyGmailConnectionLost } from './connections/notifyConnectionLost.js'
+import { notifyImportFailures } from './connections/notifyImportFailures.js'
 import { createGmailClientForToken, fetchMessage, listMessageIdsSince } from './gmail/client.js'
 import { parseMessage, type GmailMessage } from './gmail/parse.js'
 import { processEmail, defaultProcessDeps } from './pipeline/processEmail.js'
@@ -33,6 +34,9 @@ if (env.APP_MODE === 'live') {
       // The poller types the raw message as unknown; fetchMessage returns a
       // GmailMessage, so narrow it back for the real parser.
       parseMessage: (message) => parseMessage(message as GmailMessage),
+      // No .catch here on purpose: a rejection has to reach the poller so it can
+      // hold the cursor back, keep the email retryable and alert the user. It
+      // used to be swallowed, which dropped the email with no row and no trace.
       importEmail: (email, importContext) =>
         processEmail(email, importContext, {
           ...defaultProcessDeps,
@@ -42,11 +46,17 @@ if (env.APP_MODE === 'live') {
             const telegram = await getTelegramConnectionForUser(db, importContext.userId)
             if (telegram) await sendMessage(telegram.external_id, text)
           },
-        }).catch((error) => console.error('processEmail failed:', error)),
+        }),
       notifyGmailConnectionLost: (connection) =>
         notifyGmailConnectionLost(
           { db, sendMessage, integrationsUrl: `${env.APP_BASE_URL}/integrations` },
           connection,
+        ),
+      notifyImportFailures: (connection, failures) =>
+        notifyImportFailures(
+          { db, sendMessage, inboxUrl: `${env.APP_BASE_URL}/inbox` },
+          connection.user_id,
+          failures,
         ),
       nowSeconds: () => String(Math.floor(Date.now() / 1000)),
     },

@@ -19,7 +19,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
     categories: [{ id: 'c1', name: 'Food', type: 'expense' }],
     accounts: [{ id: 'a1', name: 'Debito BCP', type: 'DEBIT', currency: 'PEN' }],
     tags: [{ tag: 'food' }],
-    // When non-empty, the message is already imported and must short-circuit.
+    // When non-empty, the message already has a row and must short-circuit.
     importSource: [],
   }
   const db = {
@@ -48,67 +48,118 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
   }
 }
 
-const sampleEmail = { subject: 'Consumo', text: 'S/ 35.00', messageId: 'msg-1' }
+const sampleEmail = {
+  subject: 'Consumo',
+  text: 'S/ 35.00',
+  messageId: 'msg-1',
+  sender: 'Banco BCP <no-reply@bcp.com.pe>',
+  emailDateSeconds: '1690000100',
+}
+
+// The recorded row: [connectionId, messageId, transactionId, sender, subject,
+// emailDateSeconds, verdict].
+function recordedParams(queryMock: { mock: { calls: unknown[][] } }): unknown[] | undefined {
+  const call = queryMock.mock.calls.find((candidate) =>
+    /insert into import_source/i.test(candidate[0] as string))
+  return call?.[1] as unknown[] | undefined
+}
 
 describe('processEmail', () => {
-  it('short-circuits before any AI call when the message is already imported', async () => {
+  it('short-circuits before any AI call when the message already has a row', async () => {
     const deps = baseDeps()
-    deps.queryRows.importSource = [{ exists: 1 }]
+    deps.queryRows.importSource = [{ verdict: 'imported', attempts: 1 }]
     await processEmail(sampleEmail, importContext, deps as never)
     expect(deps.detect).not.toHaveBeenCalled()
     expect(deps.extract).not.toHaveBeenCalled()
     expect(deps.pool.connect).not.toHaveBeenCalled()
     expect(deps.notify).not.toHaveBeenCalled()
+    expect(recordedParams(deps.db.query)).toBeUndefined()
   })
 
-  it('records the message and skips a non-transaction email', async () => {
+  it('retries a failed row that still has attempts left', async () => {
+    const deps = baseDeps()
+    deps.queryRows.importSource = [{ verdict: 'failed', attempts: 1 }]
+    await processEmail(sampleEmail, importContext, deps as never)
+    expect(deps.detect).toHaveBeenCalledOnce()
+  })
+
+  it('records verdict not_transaction for an email the detector rejects', async () => {
     const deps = baseDeps({ detect: vi.fn().mockResolvedValue(false) })
-    await processEmail({ subject: 'Oferta', text: 'descuento', messageId: 'msg-2' }, importContext, deps as never)
+    await processEmail(
+      { ...sampleEmail, subject: 'Oferta', text: 'descuento', messageId: 'msg-2' },
+      importContext,
+      deps as never,
+    )
     expect(deps.extract).not.toHaveBeenCalled()
     expect(deps.notify).not.toHaveBeenCalled()
-    const recordCall = deps.db.query.mock.calls.find((call: unknown[]) =>
-      /insert into import_source/i.test(call[0] as string))
-    expect(recordCall?.[1]).toEqual(['conn-1', 'msg-2', null])
+    expect(recordedParams(deps.db.query)).toEqual([
+      'conn-1', 'msg-2', null, 'Banco BCP <no-reply@bcp.com.pe>', 'Oferta', '1690000100', 'not_transaction',
+    ])
   })
 
-  it('records the message and skips when the user has no accounts', async () => {
+  it('records verdict not_configured when the user has no accounts', async () => {
     const deps = baseDeps()
     deps.queryRows.accounts = []
     await processEmail(sampleEmail, importContext, deps as never)
     expect(deps.extract).not.toHaveBeenCalled()
     expect(deps.pool.connect).not.toHaveBeenCalled()
-    const recordCall = deps.db.query.mock.calls.find((call: unknown[]) =>
-      /insert into import_source/i.test(call[0] as string))
-    expect(recordCall?.[1]).toEqual(['conn-1', 'msg-1', null])
+    expect(recordedParams(deps.db.query)?.at(-1)).toBe('not_configured')
   })
 
-  it('inserts scoped to the passed user and records the import atomically', async () => {
+  it('records verdict not_configured when the user has no categories', async () => {
+    const deps = baseDeps()
+    deps.queryRows.categories = []
+    await processEmail(sampleEmail, importContext, deps as never)
+    expect(recordedParams(deps.db.query)?.at(-1)).toBe('not_configured')
+  })
+
+  it('records verdict extract_failed when extraction yields nothing', async () => {
+    const deps = baseDeps({ extract: vi.fn().mockResolvedValue(null) })
+    await processEmail(sampleEmail, importContext, deps as never)
+    expect(deps.pool.connect).not.toHaveBeenCalled()
+    expect(deps.notify).not.toHaveBeenCalled()
+    expect(recordedParams(deps.db.query)?.at(-1)).toBe('extract_failed')
+  })
+
+  it('records verdict imported atomically with the transaction insert', async () => {
     const deps = baseDeps()
     await processEmail(sampleEmail, importContext, deps as never)
     const insertCall = deps.pool.client.query.mock.calls.find((call: unknown[]) =>
       /insert into transactions/i.test(call[0] as string))
     expect(insertCall).toBeTruthy()
     expect(insertCall?.[1]).toContain('user-1')
-    // The dedupe row is written on the same client, inside the transaction.
+    // The log row is written on the same client, inside the transaction.
     const beginCall = deps.pool.client.query.mock.calls.find((call: unknown[]) => call[0] === 'BEGIN')
     const commitCall = deps.pool.client.query.mock.calls.find((call: unknown[]) => call[0] === 'COMMIT')
     expect(beginCall).toBeTruthy()
     expect(commitCall).toBeTruthy()
-    const recordCall = deps.pool.client.query.mock.calls.find((call: unknown[]) =>
-      /insert into import_source/i.test(call[0] as string))
-    expect(recordCall?.[1]).toEqual(['conn-1', 'msg-1', 'tx1'])
+    expect(recordedParams(deps.pool.client.query)).toEqual([
+      'conn-1', 'msg-1', 'tx1', 'Banco BCP <no-reply@bcp.com.pe>', 'Consumo', '1690000100', 'imported',
+    ])
     expect(deps.notify).toHaveBeenCalledOnce()
     expect(deps.notify.mock.calls[0][0] as string).toContain('ID: tx1')
   })
 
-  it('records the message and skips when extraction yields nothing', async () => {
-    const deps = baseDeps({ extract: vi.fn().mockResolvedValue(null) })
-    await processEmail(sampleEmail, importContext, deps as never)
-    expect(deps.pool.connect).not.toHaveBeenCalled()
-    expect(deps.notify).not.toHaveBeenCalled()
-    const recordCall = deps.db.query.mock.calls.find((call: unknown[]) =>
-      /insert into import_source/i.test(call[0] as string))
-    expect(recordCall?.[1]).toEqual(['conn-1', 'msg-1', null])
+  it('records verdict failed and rethrows when processing throws', async () => {
+    const deps = baseDeps({ extract: vi.fn().mockRejectedValue(new Error('provider is down')) })
+    await expect(processEmail(sampleEmail, importContext, deps as never)).rejects.toThrow(
+      'provider is down',
+    )
+    expect(recordedParams(deps.db.query)?.at(-1)).toBe('failed')
+  })
+
+  it('rethrows the original error even when recording the failure also fails', async () => {
+    const deps = baseDeps({ extract: vi.fn().mockRejectedValue(new Error('provider is down')) })
+    deps.db.query = vi.fn(async (sql: string) => {
+      if (/insert into import_source/i.test(sql)) throw new Error('database is down')
+      if (/from import_source/i.test(sql)) return { rows: [] }
+      if (/from categories/i.test(sql)) return { rows: [{ id: 'c1', name: 'Food', type: 'expense' }] }
+      if (/from accounts/i.test(sql)) return { rows: [{ id: 'a1', name: 'BCP', type: 'DEBIT', currency: 'PEN' }] }
+      return { rows: [] }
+    })
+    await expect(processEmail(sampleEmail, importContext, deps as never)).rejects.toThrow(
+      'provider is down',
+    )
   })
 
   it('keeps the import when the notify call rejects', async () => {

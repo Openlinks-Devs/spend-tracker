@@ -13,6 +13,7 @@ import { createAccountsRoute } from './routes/accounts.js'
 import { createCategoriesRoute } from './routes/categories.js'
 import { createTagsRoute } from './routes/tags.js'
 import { createConnectionsRoute } from './routes/connections.js'
+import { createEmailsRoute } from './routes/emails.js'
 
 export function buildApp(
   resolveSession: (headers: Headers) => Promise<unknown> = resolveSessionFromRequest,
@@ -60,5 +61,6 @@ export function buildApp(
   app.route('/', createCategoriesRoute())
   app.route('/', createTagsRoute())
   app.route('/', createConnectionsRoute())
+  app.route('/', createEmailsRoute())
   return app
 }

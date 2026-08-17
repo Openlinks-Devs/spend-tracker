@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { formatNewTransaction, formatDeleted, formatGmailConnectionLost } from '../src/telegram/format.js'
+import {
+  formatNewTransaction,
+  formatDeleted,
+  formatGmailConnectionLost,
+  formatImportFailures,
+} from '../src/telegram/format.js'
 
 describe('telegram format', () => {
   it('includes the id and amount in a new-transaction message', () => {
@@ -38,6 +43,43 @@ describe('telegram format', () => {
     expect(message).toContain('misaelabanto@gmail.com')
     expect(message).toContain('https://spendtracker.openlinks.app/integrations')
     expect(message).toContain('lost access')
+  })
+
+  it('names the first failure and the total, and links to the inbox', () => {
+    const message = formatImportFailures({
+      sender: 'Banco BCP <no-reply@bcp.com.pe>',
+      subject: 'Consumo',
+      count: 3,
+      inboxUrl: 'https://spendtracker.openlinks.app/inbox',
+    })
+    expect(message).toContain('3 emails')
+    expect(message).toContain('Banco BCP')
+    expect(message).toContain('Consumo')
+    expect(message).toContain('https://spendtracker.openlinks.app/inbox')
+  })
+
+  it('uses the singular and an unknown placeholder for a lone undescribed failure', () => {
+    const message = formatImportFailures({
+      sender: null,
+      subject: null,
+      count: 1,
+      inboxUrl: 'https://example.test/inbox',
+    })
+    expect(message).toContain('1 email')
+    expect(message).not.toContain('1 emails')
+    expect(message).toContain('Unknown sender')
+  })
+
+  it('escapes HTML special characters in a failing sender and subject', () => {
+    const message = formatImportFailures({
+      sender: 'a<b>&c@gmail.com',
+      subject: 'Pago <urgente>',
+      count: 1,
+      inboxUrl: 'https://example.test/inbox',
+    })
+    expect(message).toContain('a&lt;b&gt;&amp;c@gmail.com')
+    expect(message).toContain('Pago &lt;urgente&gt;')
+    expect(message).not.toContain('<b>')
   })
 
   it('escapes HTML special characters in the account address', () => {
