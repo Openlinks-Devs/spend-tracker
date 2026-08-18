@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Queryable } from '../db/pool.js'
 import { getPool } from '../db/pool.js'
+import { wouldCreateCycle } from '../db/categoryTree.js'
 import {
   deleteCategory,
   getCategories,
@@ -16,12 +17,38 @@ import { parseJsonBody } from './validation.js'
 const newCategorySchema = z.object({
   name: z.string().min(1),
   type: z.string().min(1),
+  parent_id: z.string().min(1).nullable().optional(),
+  emoji: z.string().min(1).nullable().optional(),
 })
 
 const categoryUpdateSchema = z.object({
   name: z.string().min(1).optional(),
   type: z.string().min(1).optional(),
+  parent_id: z.string().min(1).nullable().optional(),
+  emoji: z.string().min(1).nullable().optional(),
 })
+
+/**
+ * A parent has to be one of the caller's own categories, and cannot be the
+ * category itself or anything below it. Returns the message to answer with, or
+ * null when the parent is usable. categoryId is undefined on create, where
+ * there is no row yet to close a cycle through.
+ */
+async function findParentError(
+  db: Queryable,
+  userId: string,
+  parentId: string,
+  categoryId?: string,
+): Promise<string | null> {
+  const parent = await getCategoryById(db, userId, parentId)
+  if (!parent) return 'Parent category not found'
+  if (!categoryId) return null
+  const categories = await getCategories(db, userId)
+  if (wouldCreateCycle(categories, categoryId, parentId)) {
+    return 'A category cannot be nested under itself'
+  }
+  return null
+}
 
 export function createCategoriesRoute(
   resolveDb: () => Queryable = getPool,
@@ -59,6 +86,10 @@ export function createCategoriesRoute(
     try {
       const userId = getUserId(context)
       const db = resolveDb()
+      if (parsed.data.parent_id) {
+        const parentError = await findParentError(db, userId, parsed.data.parent_id)
+        if (parentError) return context.json({ error: parentError }, 400)
+      }
       const { id } = await insertCategory(db, userId, parsed.data)
       const category = await getCategoryById(db, userId, id)
       return context.json(category, 201)
@@ -79,10 +110,20 @@ export function createCategoriesRoute(
       const db = resolveDb()
       const existing = await getCategoryById(db, userId, id)
       if (!existing) return context.json({ error: 'Category not found' }, 404)
+      // undefined means "leave as is", null means "make this a root", so the
+      // two cannot collapse into one nullish fallback.
+      const parentId =
+        parsed.data.parent_id === undefined ? existing.parent_id : parsed.data.parent_id
+      if (parentId) {
+        const parentError = await findParentError(db, userId, parentId, id)
+        if (parentError) return context.json({ error: parentError }, 400)
+      }
       await updateCategory(db, userId, {
         id,
         name: parsed.data.name ?? existing.name,
         type: parsed.data.type ?? existing.type,
+        parent_id: parentId,
+        emoji: parsed.data.emoji === undefined ? existing.emoji : parsed.data.emoji,
       })
       const category = await getCategoryById(db, userId, id)
       return context.json(category)
