@@ -54,6 +54,18 @@ export function CategoryPieChart({
           // 2px surface gap between segments, so adjacent slices stay separable
           // even when two hues are close.
           itemStyle: { borderColor: theme.surface, borderWidth: 2 },
+          // ECharts strokes pie labels with a white halo by default, which on
+          // the dark surface reads as a smeared outline around white text.
+          // Drop the stroke and paint the label in the theme's ink instead.
+          label: {
+            color: theme.tooltipText,
+            textBorderWidth: 0,
+            fontSize: 12,
+          },
+          labelLine: { lineStyle: { color: theme.axisLabel } },
+          // Small tail slices sit within a few degrees of each other, so their
+          // labels collide. Keep them apart, and hide the ones that still would.
+          labelLayout: { hideOverlap: true, moveOverlap: 'shiftY' as const },
           data: slices.map((slice) => ({
             value: slice.value,
             name: slice.name,
