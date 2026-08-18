@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { IconPlus, IconPencil, IconTrash } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,6 +21,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  categoryLabel,
+  collectDescendantIds,
+  flattenCategoryTree,
+} from '@/lib/categoryTree'
+import {
   useCategories,
   useCreateCategory,
   useDeleteCategory,
@@ -32,11 +37,29 @@ import type { Category } from '@/types'
 interface CategoryFormState {
   name: string
   type: string
+  emoji: string
+  parentId: string
 }
 
-const categoryTypeOptions = ['expense', 'income']
+// 'out' and 'in' are the values the column actually stores; the labels are what
+// the user reads.
+const categoryTypeOptions = [
+  { value: 'out', label: 'Expense' },
+  { value: 'in', label: 'Income' },
+]
 
-const emptyFormState: CategoryFormState = { name: '', type: 'expense' }
+const typeLabels: Record<string, string> = { out: 'Expense', in: 'Income' }
+
+// Select cannot carry an empty string as a value, so "no parent" needs a
+// sentinel that no category id can collide with.
+const NO_PARENT_VALUE = 'none'
+
+const emptyFormState: CategoryFormState = {
+  name: '',
+  type: 'out',
+  emoji: '',
+  parentId: NO_PARENT_VALUE,
+}
 
 export function CategoriesPage() {
   const categoriesQuery = useCategories()
@@ -53,11 +76,25 @@ export function CategoriesPage() {
 
   const categories = categoriesQuery.data ?? []
   const isEditing = editingCategory !== null
+  const flatCategories = useMemo(() => flattenCategoryTree(categories), [categories])
+
+  // A category cannot be nested under itself or under one of its own children,
+  // so those are left out of the parent picker rather than rejected on save.
+  const parentOptions = useMemo(() => {
+    if (!editingCategory) return flatCategories
+    const excluded = collectDescendantIds(categories, editingCategory.id)
+    return flatCategories.filter((entry) => !excluded.has(entry.category.id))
+  }, [flatCategories, categories, editingCategory])
 
   useEffect(() => {
     if (!isDialogOpen) return
     if (editingCategory) {
-      setFormState({ name: editingCategory.name, type: editingCategory.type })
+      setFormState({
+        name: editingCategory.name,
+        type: editingCategory.type,
+        emoji: editingCategory.emoji ?? '',
+        parentId: editingCategory.parent_id ?? NO_PARENT_VALUE,
+      })
     } else {
       setFormState(emptyFormState)
     }
@@ -78,9 +115,15 @@ export function CategoriesPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setFormError(null)
+    const payload = {
+      name: formState.name,
+      type: formState.type,
+      emoji: formState.emoji.trim() === '' ? null : formState.emoji.trim(),
+      parent_id: formState.parentId === NO_PARENT_VALUE ? null : formState.parentId,
+    }
     if (isEditing && editingCategory) {
       updateCategory.mutate(
-        { id: editingCategory.id, payload: formState },
+        { id: editingCategory.id, payload },
         {
           onSuccess: () => setIsDialogOpen(false),
           onError: (error) => setFormError(toErrorMessage(error)),
@@ -88,7 +131,7 @@ export function CategoriesPage() {
       )
       return
     }
-    createCategory.mutate(formState, {
+    createCategory.mutate(payload, {
       onSuccess: () => setIsDialogOpen(false),
       onError: (error) => setFormError(toErrorMessage(error)),
     })
@@ -131,11 +174,22 @@ export function CategoriesPage() {
             <p className="p-6 text-sm text-muted-foreground">No categories yet.</p>
           ) : (
             <ul className="divide-y">
-              {categories.map((category) => (
+              {flatCategories.map(({ category, depth }) => (
                 <li key={category.id} className="flex items-center justify-between gap-4 px-6 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{category.name}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{category.type}</p>
+                  {/* Indent by nesting depth so a child reads as belonging to
+                      the category above it. */}
+                  <div className="min-w-0" style={{ paddingLeft: depth * 20 }}>
+                    <p className="truncate text-sm font-medium">
+                      {depth > 0 ? (
+                        <span aria-hidden className="mr-1.5 text-muted-foreground">
+                          &#8627;
+                        </span>
+                      ) : null}
+                      {categoryLabel(category)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {typeLabels[category.type] ?? category.type}
+                    </p>
                   </div>
                   <div className="-mr-2 flex shrink-0 gap-0.5">
                     <Button
@@ -212,8 +266,42 @@ export function CategoriesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {categoryTypeOptions.map((typeOption) => (
-                    <SelectItem key={typeOption} value={typeOption}>
-                      {typeOption}
+                    <SelectItem key={typeOption.value} value={typeOption.value}>
+                      {typeOption.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category-emoji">Emoji</Label>
+              <Input
+                id="category-emoji"
+                value={formState.emoji}
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, emoji: event.target.value }))
+                }
+                placeholder="Optional"
+                className="w-20 text-center"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category-parent">Parent category</Label>
+              <Select
+                value={formState.parentId}
+                onValueChange={(value) =>
+                  setFormState((current) => ({ ...current, parentId: value }))
+                }
+              >
+                <SelectTrigger id="category-parent">
+                  <SelectValue placeholder="No parent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PARENT_VALUE}>No parent</SelectItem>
+                  {parentOptions.map(({ category, depth }) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {'\u00a0'.repeat(depth * 2)}
+                      {categoryLabel(category)}
                     </SelectItem>
                   ))}
                 </SelectContent>
