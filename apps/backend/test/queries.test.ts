@@ -104,10 +104,21 @@ describe('queries', () => {
 
   it('insertCategory passes params and returns id', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'c-new' }] }) }
-    const result = await insertCategory(db, 'user-1', { name: 'Transport', type: 'expense' })
+    const result = await insertCategory(db, 'user-1', {
+      name: 'Transport',
+      type: 'out',
+      parent_id: 'c-parent',
+      emoji: '🚙',
+    })
     expect(result.id).toBe('c-new')
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toMatch(/insert into categories/i)
-    expect(params).toEqual(['Transport', 'expense', 'user-1'])
+    expect(params).toEqual(['Transport', 'out', 'c-parent', '🚙', 'user-1'])
+  })
+
+  it('insertCategory defaults an omitted parent and emoji to null', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'c-new' }] }) }
+    await insertCategory(db, 'user-1', { name: 'Transport', type: 'out' })
+    expect(db.query.mock.calls[0][1]).toEqual(['Transport', 'out', null, null, 'user-1'])
   })
 })
