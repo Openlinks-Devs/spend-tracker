@@ -2,16 +2,23 @@ export interface Category {
   id: string
   name: string
   type: string
+  /** Null for a root category. Categories nest to any depth. */
+  parent_id: string | null
+  emoji: string | null
 }
 
 export interface NewCategory {
   name: string
   type: string
+  parent_id?: string | null
+  emoji?: string | null
 }
 
 export interface CategoryUpdate {
   name?: string
   type?: string
+  parent_id?: string | null
+  emoji?: string | null
 }
 
 export interface Account {
