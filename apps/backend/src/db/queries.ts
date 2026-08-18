@@ -63,7 +63,7 @@ export interface AnalyticsPayload {
 
 export async function getCategories(db: Queryable, userId: string): Promise<Category[]> {
   const result = await db.query(
-    'SELECT id, name, type FROM categories WHERE user_id = $1 ORDER BY name',
+    'SELECT id, name, type, parent_id, emoji FROM categories WHERE user_id = $1 ORDER BY name',
     [userId],
   )
   return result.rows as Category[]
@@ -75,7 +75,7 @@ export async function getCategoryById(
   id: string,
 ): Promise<Category | null> {
   const result = await db.query(
-    'SELECT id, name, type FROM categories WHERE id = $1 AND user_id = $2',
+    'SELECT id, name, type, parent_id, emoji FROM categories WHERE id = $1 AND user_id = $2',
     [id, userId],
   )
   return result.rows.length ? (result.rows[0] as Category) : null
@@ -87,8 +87,9 @@ export async function insertCategory(
   category: NewCategory,
 ): Promise<{ id: string }> {
   const result = await db.query(
-    'INSERT INTO categories (name, type, user_id) VALUES ($1, $2, $3) RETURNING id',
-    [category.name, category.type, userId],
+    `INSERT INTO categories (name, type, parent_id, emoji, user_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [category.name, category.type, category.parent_id ?? null, category.emoji ?? null, userId],
   )
   return { id: result.rows[0].id as string }
 }
@@ -98,12 +99,11 @@ export async function updateCategory(
   userId: string,
   update: CategoryUpdate,
 ): Promise<void> {
-  await db.query('UPDATE categories SET name = $2, type = $3 WHERE id = $1 AND user_id = $4', [
-    update.id,
-    update.name,
-    update.type,
-    userId,
-  ])
+  await db.query(
+    `UPDATE categories SET name = $2, type = $3, parent_id = $4, emoji = $5
+     WHERE id = $1 AND user_id = $6`,
+    [update.id, update.name, update.type, update.parent_id, update.emoji, userId],
+  )
 }
 
 export async function deleteCategory(db: Queryable, userId: string, id: string): Promise<void> {
