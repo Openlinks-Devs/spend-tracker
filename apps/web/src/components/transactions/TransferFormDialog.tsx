@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toDatetimeLocalValue } from '@/lib/utils'
+import { categoryLabel, flattenCategoryTree } from '@/lib/categoryTree'
 import type { Account, Category, TransferInput } from '@/types'
 
 // A transfer defaults its two legs to the "Balance" categories: money leaves the
@@ -76,6 +77,7 @@ export function TransferFormDialog({
   errorMessage,
   onSubmit,
 }: TransferFormDialogProps) {
+  const categoryOptions = useMemo(() => flattenCategoryTree(categories), [categories])
   const categoryIdByName = useMemo(() => {
     const map = new Map<string, string>()
     for (const category of categories) map.set(category.name, category.id)
@@ -257,9 +259,12 @@ export function TransferFormDialog({
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
+                  {categoryOptions.map(({ category, depth }) => (
                     <SelectItem key={category.id} value={category.id}>
-                      {category.name}
+                      {/* Non-breaking spaces, because the option label is plain
+                          text: a child has to read as sitting under its parent. */}
+                      {'\u00a0'.repeat(depth * 2)}
+                      {categoryLabel(category)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -277,9 +282,12 @@ export function TransferFormDialog({
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((category) => (
+                  {categoryOptions.map(({ category, depth }) => (
                     <SelectItem key={category.id} value={category.id}>
-                      {category.name}
+                      {/* Non-breaking spaces, because the option label is plain
+                          text: a child has to read as sitting under its parent. */}
+                      {'\u00a0'.repeat(depth * 2)}
+                      {categoryLabel(category)}
                     </SelectItem>
                   ))}
                 </SelectContent>

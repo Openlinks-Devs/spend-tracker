@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { categoryLabel, flattenCategoryTree } from '@/lib/categoryTree'
 import { toDatetimeLocalValue } from '@/lib/utils'
 import type { Account, Category, NewTransaction, Transaction, TransactionUpdate } from '@/types'
 
@@ -221,9 +222,12 @@ export function TransactionFormDialog({
                 <SelectValue placeholder="Select a category" />
               </SelectTrigger>
               <SelectContent>
-                {categories.map((category) => (
+                {flattenCategoryTree(categories).map(({ category, depth }) => (
                   <SelectItem key={category.id} value={category.id}>
-                    {category.name}
+                    {/* Non-breaking spaces, because the option label is plain
+                        text: a child has to read as sitting under its parent. */}
+                    {'\u00a0'.repeat(depth * 2)}
+                    {categoryLabel(category)}
                   </SelectItem>
                 ))}
               </SelectContent>

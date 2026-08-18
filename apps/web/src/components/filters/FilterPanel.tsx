@@ -16,6 +16,7 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useCategories } from '@/hooks/useCategories'
 import { useTags } from '@/hooks/useTags'
 import { useTransactionFilters } from '@/hooks/useTransactionFilters'
+import { categoryLabel, flattenCategoryTree } from '@/lib/categoryTree'
 import { toDatetimeLocalValue } from '@/lib/utils'
 import type { TransactionFilterState } from '@/lib/filterParams'
 
@@ -209,14 +210,18 @@ export function FilterPanel() {
                   <p className="text-sm text-muted-foreground">No categories yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {categories.map((category) => (
-                      <label key={category.id} className="flex items-center gap-2 text-sm">
+                    {flattenCategoryTree(categories).map(({ category, depth }) => (
+                      <label
+                        key={category.id}
+                        className="flex items-center gap-2 text-sm"
+                        style={{ paddingLeft: depth * 14 }}
+                      >
                         <input
                           type="checkbox"
                           checked={filters.categories.includes(category.id)}
                           onChange={() => toggleCategory(category.id)}
                         />
-                        <span>{category.name}</span>
+                        <span>{categoryLabel(category)}</span>
                       </label>
                     ))}
                   </div>
