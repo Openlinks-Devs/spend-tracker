@@ -40,6 +40,8 @@ import app.openlinks.spendtracker.data.TransactionFilters
 import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
 import app.openlinks.spendtracker.ui.SpendUiState
+import app.openlinks.spendtracker.ui.categoryChipLabel
+import app.openlinks.spendtracker.ui.flattenCategories
 import kotlinx.coroutines.delay
 
 /** The removable active-filter chip model and its kind. Pure data, unit tested. */
@@ -350,7 +352,8 @@ private fun CategoriesSection(
     Column {
         SectionLabel(Strings.get(StringKey.FilterCategories))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.categories.forEach { category ->
+            flattenCategories(state.categories).forEach { flatCategory ->
+                val category = flatCategory.category
                 val selected = category.id in selectedCategoryIds
                 FilterChip(
                     selected = selected,
@@ -362,7 +365,7 @@ private fun CategoriesSection(
                             filters.copy(categoryIds = nextCategoryIds)
                         }
                     },
-                    label = { Text(category.name) },
+                    label = { Text(categoryChipLabel(flatCategory)) },
                 )
             }
         }

@@ -53,6 +53,9 @@ data class Category(
     val id: String,
     val name: String,
     val type: String,
+    /** Null for a root category. Categories nest to any depth. */
+    @SerialName("parent_id") val parentId: String? = null,
+    val emoji: String? = null,
 )
 
 /**

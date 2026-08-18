@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import app.openlinks.spendtracker.data.Account
 import app.openlinks.spendtracker.data.Category
+import app.openlinks.spendtracker.ui.categoryPickerOptions
 import app.openlinks.spendtracker.data.NewTransaction
 import app.openlinks.spendtracker.data.Transaction
 import app.openlinks.spendtracker.data.TransactionUpdate
@@ -234,7 +235,7 @@ private fun CategoryPicker(
     LabeledDropdown(
         label = Strings.get(StringKey.FieldCategory),
         selectedId = selectedId,
-        options = categories.map { category -> category.id to category.name },
+        options = categoryPickerOptions(categories),
         onSelect = onSelect,
     )
 }

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.openlinks.spendtracker.data.Category
+import app.openlinks.spendtracker.ui.categoryPickerOptions
 import app.openlinks.spendtracker.data.TransferInput
 import app.openlinks.spendtracker.i18n.StringKey
 import app.openlinks.spendtracker.i18n.Strings
@@ -140,7 +141,7 @@ fun TransferFormScreen(
         // The currency is part of the label: it is what tells the user whether the
         // two amount fields are an exchange or a plain same-currency move.
         val accountOptions = accounts.map { account -> account.id to "${account.name} (${account.currency})" }
-        val categoryOptions = categories.map { category -> category.id to category.name }
+        val categoryOptions = categoryPickerOptions(categories)
 
         // Grouped as the two legs of the move rather than as eight loose fields,
         // so "what leaves" and "what lands" read as a pair.
