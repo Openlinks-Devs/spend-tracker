@@ -8,6 +8,7 @@ import type {
   CategoryUpdate,
   Connection,
   EmailListResponse,
+  EmailLogItem,
   NewAccount,
   NewCategory,
   NewTransaction,
@@ -123,6 +124,16 @@ export const emailsApi = {
       offset: String(page.offset),
     })
     return request<EmailListResponse>(`/emails?${params.toString()}`)
+  },
+  /**
+   * Re-fetch one already-processed email and run it through the importer again.
+   * Answers the refreshed log row, whatever verdict the retry reached.
+   */
+  retry(connectionId: string, messageId: string) {
+    return request<{ email: EmailLogItem }>(
+      `/emails/${encodeURIComponent(connectionId)}/${encodeURIComponent(messageId)}/retry`,
+      { method: 'POST' },
+    )
   },
 }
 
