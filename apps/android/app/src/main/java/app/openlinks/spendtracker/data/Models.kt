@@ -157,6 +157,12 @@ data class EmailListResponse(
     val offset: Int = 0,
 )
 
+/** Envelope returned by POST /api/emails/{connectionId}/{messageId}/retry. */
+@Serializable
+data class EmailRetryResponse(
+    val email: EmailLogItem,
+)
+
 /** Consistent backend error shape: { "error": string }. */
 @Serializable
 data class ApiError(

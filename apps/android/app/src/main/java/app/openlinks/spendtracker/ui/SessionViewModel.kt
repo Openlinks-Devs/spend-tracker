@@ -117,6 +117,19 @@ data class InboxUiState(
     val total: Int = 0,
     val liveModeRequired: Boolean = false,
     val error: String? = null,
+    /**
+     * The rows with a retry in flight, by [emailRowKey]. A set rather than a
+     * single flag because the list is long enough that a user can start a second
+     * retry while the first is still running, and only the row they pressed
+     * should show as busy.
+     */
+    val retryingRowKeys: Set<String> = emptySet(),
+    /**
+     * Why the last retry did not work, by row key. Kept per row so the message
+     * sits under the button that produced it rather than at the top of a screen
+     * the user may have scrolled away from.
+     */
+    val retryErrors: Map<String, String> = emptyMap(),
 ) {
     val canLoadMore: Boolean get() = emails.size < total
 }
@@ -164,6 +177,19 @@ private const val LIVE_MODE_REQUIRED_ERROR = "connections_require_live_mode"
 
 private fun isLiveModeRequired(error: Exception): Boolean =
     error is ApiException && error.message == LIVE_MODE_REQUIRED_ERROR
+
+/**
+ * Turns a retry failure into a sentence the user can act on. The backend's
+ * reasons arrive as the [ApiException] message; anything unrecognised keeps the
+ * raw message rather than being flattened into a generic failure.
+ */
+internal fun retryErrorMessage(error: Exception): String = when ((error as? ApiException)?.message) {
+    "connection_needs_reauth" -> Strings.get(StringKey.InboxRetryNeedsReauth)
+    "verdict_not_retryable" -> Strings.get(StringKey.InboxRetryNotRetryable)
+    "email_not_found" -> Strings.get(StringKey.InboxRetryNotFound)
+    "retry_failed" -> Strings.get(StringKey.InboxRetryFailed)
+    else -> error.message ?: Strings.get(StringKey.ErrorGeneric)
+}
 
 /**
  * Owns the [SpendApi] and app state. Constructor-injectable ([api], [dispatcher])
@@ -261,6 +287,48 @@ class SessionViewModel(
                 mutableInboxState.value = mutableInboxState.value.copy(
                     loadingMore = false,
                     error = error.message ?: Strings.get(StringKey.ErrorGeneric),
+                )
+                refreshAuthState()
+            }
+        }
+    }
+
+    /**
+     * Re-runs the importer over one email the user asked to retry.
+     *
+     * The refreshed row replaces the old one in place instead of reloading the
+     * list: the Inbox is newest-first and the user is usually deep in it, so a
+     * reload would move the row they are looking at. A retry that imports the
+     * email writes a transaction, so that case also refreshes the transaction
+     * screens, which would otherwise not show it until the next load.
+     */
+    fun retryEmail(email: EmailLogItem) {
+        val rowKey = emailRowKey(email)
+        if (rowKey in mutableInboxState.value.retryingRowKeys) return
+        // Claimed before the coroutine starts, not inside it: the launched body
+        // does not run until the dispatcher gets to it, so a double tap would
+        // otherwise pass this guard twice and fire two retries.
+        mutableInboxState.value = mutableInboxState.value.copy(
+            retryingRowKeys = mutableInboxState.value.retryingRowKeys + rowKey,
+            retryErrors = mutableInboxState.value.retryErrors - rowKey,
+        )
+        viewModelScope.launch {
+            try {
+                val updated = withContext(dispatcher) {
+                    api.retryEmail(email.connectionId, email.messageId)
+                }
+                mutableInboxState.value = mutableInboxState.value.copy(
+                    emails = mutableInboxState.value.emails.map { held ->
+                        if (emailRowKey(held) == rowKey) updated else held
+                    },
+                    retryingRowKeys = mutableInboxState.value.retryingRowKeys - rowKey,
+                )
+                if (updated.verdict == "imported") refresh()
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableInboxState.value = mutableInboxState.value.copy(
+                    retryingRowKeys = mutableInboxState.value.retryingRowKeys - rowKey,
+                    retryErrors = mutableInboxState.value.retryErrors + (rowKey to retryErrorMessage(error)),
                 )
                 refreshAuthState()
             }

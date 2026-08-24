@@ -142,6 +142,12 @@ enum class StringKey {
     InboxReceivedAt,
     InboxAttempts,
     InboxLoadMore,
+    InboxRetry,
+    InboxRetrying,
+    InboxRetryNeedsReauth,
+    InboxRetryNotRetryable,
+    InboxRetryNotFound,
+    InboxRetryFailed,
     VerdictImported,
     VerdictNotTransaction,
     VerdictNotConfigured,
@@ -307,6 +313,14 @@ object Strings {
         StringKey.InboxReceivedAt to "Processed %s",
         StringKey.InboxAttempts to "%s attempts",
         StringKey.InboxLoadMore to "Load more",
+        StringKey.InboxRetry to "Retry",
+        StringKey.InboxRetrying to "Retrying...",
+        // The backend's retry failure reasons, turned into something the user can
+        // act on. Worded as the web client words them.
+        StringKey.InboxRetryNeedsReauth to "Reconnect the Gmail account first.",
+        StringKey.InboxRetryNotRetryable to "This email can no longer be retried.",
+        StringKey.InboxRetryNotFound to "This email is no longer available.",
+        StringKey.InboxRetryFailed to "The retry did not go through. Try again in a moment.",
         // The verdict vocabulary, worded identically to the web client so the two
         // surfaces describe the same outcome the same way.
         StringKey.VerdictImported to "Imported",

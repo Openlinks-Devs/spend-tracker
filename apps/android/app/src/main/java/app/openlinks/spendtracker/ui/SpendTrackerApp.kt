@@ -325,6 +325,7 @@ fun SpendTrackerApp(viewModel: SessionViewModel) {
                     state = inboxState,
                     onOpenTransaction = { id -> navController.navigate(Routes.detail(id)) },
                     onLoadMore = viewModel::loadMoreEmails,
+                    onRetry = viewModel::retryEmail,
                 )
             }
             composable(Routes.INTEGRATIONS) {

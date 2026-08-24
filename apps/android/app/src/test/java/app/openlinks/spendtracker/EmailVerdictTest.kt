@@ -2,6 +2,7 @@ package app.openlinks.spendtracker
 
 import app.openlinks.spendtracker.data.EmailLogItem
 import app.openlinks.spendtracker.data.EmailTransactionRef
+import app.openlinks.spendtracker.ui.screens.emailCanRetry
 import app.openlinks.spendtracker.ui.screens.emailVerdictIsError
 import app.openlinks.spendtracker.ui.screens.emailVerdictLabel
 import app.openlinks.spendtracker.ui.screens.openableTransactionId
@@ -58,6 +59,18 @@ class EmailVerdictTest {
     @Test
     fun aRowWithoutATransactionIsNotOpenable() {
         assertNull(openableTransactionId(emailLogItem(verdict = "not_transaction", transaction = null)))
+    }
+
+    @Test
+    fun onlyTheVerdictsTheBackendAcceptsOfferARetry() {
+        assertTrue(emailCanRetry("failed"))
+        assertTrue(emailCanRetry("extract_failed"))
+        // Retrying an imported email would create its transaction a second time.
+        assertFalse(emailCanRetry("imported"))
+        // These would reach the same answer from the same email.
+        assertFalse(emailCanRetry("not_transaction"))
+        assertFalse(emailCanRetry("not_configured"))
+        assertFalse(emailCanRetry("unknown"))
     }
 
     private fun emailLogItem(verdict: String, transaction: EmailTransactionRef?) = EmailLogItem(

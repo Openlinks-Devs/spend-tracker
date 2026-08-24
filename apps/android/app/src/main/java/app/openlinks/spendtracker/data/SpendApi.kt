@@ -27,6 +27,14 @@ interface SpendApi {
      */
     suspend fun getEmails(limit: Int = 50, offset: Int = 0): EmailListResponse
 
+    /**
+     * Re-fetches one already-processed email and runs it through the importer
+     * again, answering the row as it stands afterwards. Only a `failed` or
+     * `extract_failed` row can be retried; anything else throws [ApiException]
+     * with status 409.
+     */
+    suspend fun retryEmail(connectionId: String, messageId: String): EmailLogItem
+
     /** The signed-in user's linked Gmail/Telegram integrations. */
     suspend fun getConnections(): List<Connection>
 

@@ -61,6 +61,14 @@ fun emailVerdictLabel(verdict: String): String = when (verdict) {
 fun emailVerdictIsError(verdict: String): Boolean = verdict == "failed" || verdict == "extract_failed"
 
 /**
+ * Whether the user can ask the importer to try this email again. The same two
+ * verdicts the backend accepts (RETRYABLE_VERDICTS in retryEmail.ts): an
+ * imported row would create the transaction twice, and the routine verdicts
+ * would reach the same answer from the same email.
+ */
+fun emailCanRetry(verdict: String): Boolean = emailVerdictIsError(verdict)
+
+/**
  * The transaction an inbox row can open, if any. An `imported` row can still
  * carry no transaction, because deleting a transaction nulls the link; that row
  * stays imported and simply offers nothing to tap, rather than a dead link.
@@ -72,6 +80,7 @@ fun InboxScreen(
     state: InboxUiState,
     onOpenTransaction: (String) -> Unit,
     onLoadMore: () -> Unit,
+    onRetry: (EmailLogItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -115,6 +124,9 @@ fun InboxScreen(
                         EmailRow(
                             email = email,
                             onOpenTransaction = onOpenTransaction,
+                            onRetry = onRetry,
+                            retrying = emailRowKey(email) in state.retryingRowKeys,
+                            retryError = state.retryErrors[emailRowKey(email)],
                         )
                     }
                     if (state.canLoadMore) {
@@ -159,7 +171,13 @@ private fun InboxPlaceholder(icon: ImageVector, message: String, modifier: Modif
 }
 
 @Composable
-private fun EmailRow(email: EmailLogItem, onOpenTransaction: (String) -> Unit) {
+private fun EmailRow(
+    email: EmailLogItem,
+    onOpenTransaction: (String) -> Unit,
+    onRetry: (EmailLogItem) -> Unit,
+    retrying: Boolean,
+    retryError: String?,
+) {
     val transactionId = openableTransactionId(email)
     val rowModifier = Modifier.fillMaxWidth().let { base ->
         if (transactionId == null) base else base.clickable { onOpenTransaction(transactionId) }
@@ -237,6 +255,29 @@ private fun EmailRow(email: EmailLogItem, onOpenTransaction: (String) -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
+            }
+            if (emailCanRetry(email.verdict)) {
+                OutlinedButton(
+                    onClick = { onRetry(email) },
+                    enabled = !retrying,
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    Text(
+                        if (retrying) {
+                            Strings.get(StringKey.InboxRetrying)
+                        } else {
+                            Strings.get(StringKey.InboxRetry)
+                        },
+                    )
+                }
+                retryError?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
         }
     }

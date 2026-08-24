@@ -155,6 +155,16 @@ class SessionViewModelTest {
         var emailsError: Exception? = null
         val recordedEmailPages = mutableListOf<Pair<Int, Int>>()
 
+        var retryResult: EmailLogItem? = null
+        var retryError: Exception? = null
+        val recordedRetries = mutableListOf<Pair<String, String>>()
+
+        override suspend fun retryEmail(connectionId: String, messageId: String): EmailLogItem {
+            recordedRetries.add(connectionId to messageId)
+            retryError?.let { error -> throw error }
+            return retryResult ?: error("no retry result configured")
+        }
+
         override suspend fun getEmails(limit: Int, offset: Int): EmailListResponse {
             emailsError?.let { error -> throw error }
             recordedEmailPages.add(limit to offset)
@@ -760,5 +770,67 @@ class SessionViewModelTest {
         assertNull(detailState.transactionFor("old-2"))
         assertFalse(detailState.answersFor("old-2"))
         assertTrue(detailState.answersFor("old-1"))
+    }
+
+    @Test
+    fun retryReplacesTheRowInPlaceWithTheVerdictTheRetryReached() = runTest(dispatcher) {
+        val api = FakeApi()
+        val failedEmail = emailLogItem("msg-1", "failed")
+        api.emails = listOf(failedEmail, emailLogItem("msg-2", "not_transaction"))
+        api.retryResult = emailLogItem("msg-1", "extract_failed")
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.loadInbox()
+        advanceUntilIdle()
+
+        viewModel.retryEmail(failedEmail)
+        advanceUntilIdle()
+
+        assertEquals(listOf("conn-1" to "msg-1"), api.recordedRetries)
+        // Replaced in place: the row keeps its position and the list its length,
+        // so the user is not scrolled away from what they just pressed.
+        assertEquals(listOf("msg-1", "msg-2"), viewModel.inboxState.value.emails.map { it.messageId })
+        assertEquals("extract_failed", viewModel.inboxState.value.emails.first().verdict)
+        assertTrue(viewModel.inboxState.value.retryingRowKeys.isEmpty())
+    }
+
+    @Test
+    fun aFailedRetryExplainsItselfOnThatRowAlone() = runTest(dispatcher) {
+        val api = FakeApi()
+        val failedEmail = emailLogItem("msg-1", "failed")
+        api.emails = listOf(failedEmail)
+        api.retryError = ApiException(409, "connection_needs_reauth")
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.loadInbox()
+        advanceUntilIdle()
+
+        viewModel.retryEmail(failedEmail)
+        advanceUntilIdle()
+
+        assertEquals(
+            "Reconnect the Gmail account first.",
+            viewModel.inboxState.value.retryErrors["conn-1/msg-1"],
+        )
+        // The row itself is untouched, and the screen-wide error stays clear: a
+        // retry that did not work must not read as the list failing to load.
+        assertEquals("failed", viewModel.inboxState.value.emails.first().verdict)
+        assertNull(viewModel.inboxState.value.error)
+        assertTrue(viewModel.inboxState.value.retryingRowKeys.isEmpty())
+    }
+
+    @Test
+    fun retryIgnoresASecondPressWhileTheFirstIsStillRunning() = runTest(dispatcher) {
+        val api = FakeApi()
+        val failedEmail = emailLogItem("msg-1", "failed")
+        api.emails = listOf(failedEmail)
+        api.retryResult = emailLogItem("msg-1", "imported")
+        val viewModel = SessionViewModel(api, dispatcher)
+        viewModel.loadInbox()
+        advanceUntilIdle()
+
+        viewModel.retryEmail(failedEmail)
+        viewModel.retryEmail(failedEmail)
+        advanceUntilIdle()
+
+        assertEquals(1, api.recordedRetries.size)
     }
 }
