@@ -170,3 +170,30 @@ describe('processEmail', () => {
     expect(insertCall).toBeTruthy()
   })
 })
+
+describe('processEmail force', () => {
+  it('skips a message that already has a terminal row when not forced', async () => {
+    const deps = baseDeps()
+    deps.queryRows.importSource = [{ verdict: 'extract_failed', attempts: 1 }]
+    await processEmail(sampleEmail, importContext, deps as never)
+
+    expect(deps.detect).not.toHaveBeenCalled()
+  })
+
+  it('processes that same message when the user forces a retry', async () => {
+    const deps = baseDeps()
+    deps.queryRows.importSource = [{ verdict: 'extract_failed', attempts: 1 }]
+    await processEmail(sampleEmail, { ...importContext, force: true }, deps as never)
+
+    expect(deps.detect).toHaveBeenCalled()
+    expect(deps.extract).toHaveBeenCalled()
+  })
+
+  it('forces past a failed row that already spent its automatic attempts', async () => {
+    const deps = baseDeps()
+    deps.queryRows.importSource = [{ verdict: 'failed', attempts: 3 }]
+    await processEmail(sampleEmail, { ...importContext, force: true }, deps as never)
+
+    expect(deps.detect).toHaveBeenCalled()
+  })
+})

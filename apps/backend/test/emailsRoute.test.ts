@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Hono } from 'hono'
 import { createEmailsRoute } from '../src/routes/emails.js'
+import type { RetryEmailDeps } from '../src/connections/retryEmail.js'
 import type { AppVariables } from '../src/http/context.js'
 
 // Route tests inject the userId the session guard would set in production.
@@ -124,5 +125,163 @@ describe('emails route', () => {
     const app = appWithUser(() => createEmailsRoute(() => db))
     const response = await app.request('/api/emails')
     expect(response.status).toBe(500)
+  })
+})
+
+// The retry endpoint's dependencies are injected whole, so these tests drive
+// the route's status mapping without reaching for Gmail or the AI pipeline.
+function retryDeps(rows: Record<string, unknown>[]): RetryEmailDeps {
+  const emailLogRow = {
+    message_id: 'msg-1',
+    connection_id: 'conn-1',
+    account_email: 'a@gmail.com',
+    sender: 'Bank <no-reply@bank.com>',
+    subject: 'Consumo',
+    email_date: '2026-08-01T10:00:00.000Z',
+    received_at: '2026-08-01T10:00:05.000Z',
+    verdict: 'imported',
+    attempts: 2,
+    transaction_id: 'tx-1',
+    transaction_description: 'PLIN',
+    transaction_amount: -35,
+    transaction_currency: 'PEN',
+  }
+  return {
+    db: {
+      query: vi.fn(async (sql: string) =>
+        /connection.secret_encrypted/.test(sql) ? { rows } : { rows: [emailLogRow] },
+      ),
+    } as unknown as RetryEmailDeps['db'],
+    keys: [{ version: 1, key: Buffer.alloc(32) }],
+    buildGmail: vi.fn(() => ({}) as never),
+    fetchMessage: vi.fn(async () => ({ id: 'msg-1' })),
+    parseMessage: vi.fn(() => ({
+      subject: 'Consumo',
+      text: 'Consumo de S/ 35.00',
+      sender: null,
+      internalDateSeconds: '1787000000',
+    })),
+    importEmail: vi.fn(async () => {}),
+  }
+}
+
+describe('emails retry route', () => {
+  const retryPath = '/api/emails/conn-1/msg-1/retry'
+
+  it('answers the refreshed row on a successful retry', async () => {
+    const deps = retryDeps([
+      {
+        verdict: 'failed',
+        connection_provider: 'gmail',
+        connection_status: 'active',
+        connection_external_id: 'a@gmail.com',
+        connection_key_version: 1,
+        connection_secret: Buffer.alloc(40),
+      },
+    ])
+    // The real decrypt would reject the placeholder ciphertext, so the whole
+    // retry is stubbed here: this test is about the route's success envelope.
+    const app = appWithUser(() =>
+      createEmailsRoute(
+        () => ({ query: vi.fn() }),
+        () => deps,
+      ),
+    )
+    vi.spyOn(await import('../src/connections/retryEmail.js'), 'retryEmail').mockResolvedValue({
+      ok: true,
+      email: {
+        message_id: 'msg-1',
+        connection_id: 'conn-1',
+        account_email: 'a@gmail.com',
+        sender: null,
+        subject: 'Consumo',
+        email_date: null,
+        received_at: '2026-08-01T10:00:05.000Z',
+        verdict: 'imported',
+        attempts: 3,
+        transaction: { id: 'tx-1', description: 'PLIN', amount: -35, currency: 'PEN' },
+      },
+    })
+
+    const response = await app.request(retryPath, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect((await response.json()).email).toMatchObject({ message_id: 'msg-1', verdict: 'imported' })
+    vi.restoreAllMocks()
+  })
+
+  it('answers 404 when the message does not belong to the session user', async () => {
+    const deps = retryDeps([])
+    const app = appWithUser(() => createEmailsRoute(() => ({ query: vi.fn() }), () => deps))
+    const response = await app.request(retryPath, { method: 'POST' })
+
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'email_not_found' })
+  })
+
+  it('answers 409 for a verdict that must not be retried', async () => {
+    const deps = retryDeps([
+      {
+        verdict: 'imported',
+        connection_provider: 'gmail',
+        connection_status: 'active',
+        connection_external_id: 'a@gmail.com',
+        connection_key_version: 1,
+        connection_secret: Buffer.alloc(40),
+      },
+    ])
+    const app = appWithUser(() => createEmailsRoute(() => ({ query: vi.fn() }), () => deps))
+    const response = await app.request(retryPath, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ error: 'verdict_not_retryable' })
+  })
+
+  it('answers 409 connection_needs_reauth when the connection is parked', async () => {
+    const deps = retryDeps([
+      {
+        verdict: 'failed',
+        connection_provider: 'gmail',
+        connection_status: 'needs_reauth',
+        connection_external_id: 'a@gmail.com',
+        connection_key_version: 1,
+        connection_secret: null,
+      },
+    ])
+    const app = appWithUser(() => createEmailsRoute(() => ({ query: vi.fn() }), () => deps))
+    const response = await app.request(retryPath, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({ error: 'connection_needs_reauth' })
+  })
+
+  it('returns 503 in mock mode without touching the pipeline', async () => {
+    process.env.APP_MODE = 'mock'
+    const deps = retryDeps([])
+    const app = appWithUser(() => createEmailsRoute(() => ({ query: vi.fn() }), () => deps))
+    const response = await app.request(retryPath, { method: 'POST' })
+
+    expect(response.status).toBe(503)
+    expect(deps.fetchMessage).not.toHaveBeenCalled()
+  })
+
+  it('answers 500 when the pipeline throws', async () => {
+    const deps = retryDeps([
+      {
+        verdict: 'failed',
+        connection_provider: 'gmail',
+        connection_status: 'active',
+        connection_external_id: 'a@gmail.com',
+        connection_key_version: 1,
+        connection_secret: Buffer.alloc(40),
+      },
+    ])
+    const app = appWithUser(() => createEmailsRoute(() => ({ query: vi.fn() }), () => deps))
+    const response = await app.request(retryPath, { method: 'POST' })
+
+    // Buffer.alloc(40) is not a real ciphertext, so decryptSecret throws: the
+    // route has to turn that into a 500 rather than an unhandled rejection.
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'retry_failed' })
   })
 })
