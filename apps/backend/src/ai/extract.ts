@@ -3,14 +3,21 @@ import { z } from 'zod'
 import { getModel } from './provider.js'
 import type { Account, Category } from '../db/types.js'
 
-const schema = z.object({
-  description: z.string(),
-  amount: z.number(),
-  currency: z.string(),
+// Every field is nullable because the system prompt tells the model to answer
+// null when the email does not carry enough information. A non-nullable field
+// here made the two contradict each other: on an unextractable email the model
+// obeyed the prompt, generateObject rejected the response and threw
+// NoObjectGeneratedError, and processEmail recorded a 'failed' verdict with a
+// Telegram alert and three wasted retries instead of the quiet 'extract_failed'
+// this case deserves.
+export const extractSchema = z.object({
+  description: z.string().nullable(),
+  amount: z.number().nullable(),
+  currency: z.string().nullable(),
   account_id: z.string().nullable(),
   category_id: z.string().nullable(),
   tags: z.array(z.string()),
-  created_at: z.string(),
+  created_at: z.string().nullable(),
 })
 
 export interface ExtractedTransaction {
@@ -57,7 +64,7 @@ function buildSystemPrompt(input: ExtractInput): string {
 export async function extractTransaction(input: ExtractInput): Promise<ExtractedTransaction | null> {
   const { object } = await generateObject({
     model: getModel(),
-    schema,
+    schema: extractSchema,
     maxRetries: 2,
     system: buildSystemPrompt(input),
     prompt: `body:\n${input.text}`,
@@ -66,6 +73,18 @@ export async function extractTransaction(input: ExtractInput): Promise<Extracted
   const account = input.accounts.find((candidate) => candidate.id === object.account_id)
   const category = input.categories.find((candidate) => candidate.id === object.category_id)
   if (!account || !category) {
+    return null
+  }
+
+  // A transaction with no amount, currency, description or date is not a
+  // transaction. Returning null routes it to the extract_failed verdict, the
+  // same exit an unknown account or category takes.
+  if (
+    object.description === null ||
+    object.amount === null ||
+    object.currency === null ||
+    object.created_at === null
+  ) {
     return null
   }
 
