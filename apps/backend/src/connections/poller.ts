@@ -8,6 +8,7 @@ import {
   recordImportSource,
   shouldSkipMessage,
 } from './importSource.js'
+import { isAuthError } from './authError.js'
 import type { ImportFailure } from './notifyImportFailures.js'
 import {
   listActiveGmailConnections,
@@ -73,14 +74,6 @@ export interface ConnectionPollerDeps {
   notifyGmailConnectionLost: (connection: Connection) => Promise<void>
   notifyImportFailures: (connection: Connection, failures: ImportFailure[]) => Promise<void>
   nowSeconds: () => string
-}
-
-function isAuthError(error: unknown): boolean {
-  const status =
-    (error as { status?: number; code?: number }).status ??
-    (error as { code?: number }).code
-  const message = error instanceof Error ? error.message : String(error)
-  return status === 401 || /invalid_grant/i.test(message)
 }
 
 // Keep the oldest connections within each user's tier cap active; billing is

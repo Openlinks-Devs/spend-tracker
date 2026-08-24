@@ -108,26 +108,41 @@ export async function clearExpiredEmailMetadata(db: Queryable): Promise<void> {
   )
 }
 
-const EMAIL_LOG_SELECT = `
-  SELECT import_source.message_id,
-         import_source.connection_id,
-         connection.external_id AS account_email,
-         import_source.sender,
-         import_source.subject,
-         import_source.email_date,
-         import_source.created_at AS received_at,
-         import_source.verdict,
-         import_source.attempts,
-         transactions.id AS transaction_id,
-         transactions.description AS transaction_description,
-         transactions.amount::float8 AS transaction_amount,
-         transactions.currency AS transaction_currency
+const EMAIL_LOG_COLUMNS = `
+  import_source.message_id,
+  import_source.connection_id,
+  connection.external_id AS account_email,
+  import_source.sender,
+  import_source.subject,
+  import_source.email_date,
+  import_source.created_at AS received_at,
+  import_source.verdict,
+  import_source.attempts,
+  transactions.id AS transaction_id,
+  transactions.description AS transaction_description,
+  transactions.amount::float8 AS transaction_amount,
+  transactions.currency AS transaction_currency`
+
+const EMAIL_LOG_FROM = `
     FROM import_source
     JOIN connection ON connection.id = import_source.connection_id
-    LEFT JOIN transactions ON transactions.id = import_source.transaction_id
+    LEFT JOIN transactions ON transactions.id = import_source.transaction_id`
+
+const EMAIL_LOG_SELECT = `
+  SELECT ${EMAIL_LOG_COLUMNS}
+  ${EMAIL_LOG_FROM}
    WHERE connection.user_id = $1
    ORDER BY import_source.created_at DESC
    LIMIT $2 OFFSET $3`
+
+// The same projection for one row, so the retry endpoint can answer with an
+// item shaped exactly like the ones the list returned.
+const EMAIL_LOG_ONE_SELECT = `
+  SELECT ${EMAIL_LOG_COLUMNS}
+  ${EMAIL_LOG_FROM}
+   WHERE connection.user_id = $1
+     AND import_source.connection_id = $2
+     AND import_source.message_id = $3`
 
 function toEmailLogItem(row: Record<string, unknown>): EmailLogItem {
   return {
@@ -171,4 +186,14 @@ export async function countEmailLog(db: Queryable, userId: string): Promise<numb
     [userId],
   )
   return Number(result.rows[0]?.count ?? 0)
+}
+
+export async function getEmailLogItem(
+  db: Queryable,
+  userId: string,
+  connectionId: string,
+  messageId: string,
+): Promise<EmailLogItem | null> {
+  const result = await db.query(EMAIL_LOG_ONE_SELECT, [userId, connectionId, messageId])
+  return result.rows.length ? toEmailLogItem(result.rows[0]) : null
 }
