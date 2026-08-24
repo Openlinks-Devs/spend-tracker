@@ -48,10 +48,10 @@ export const defaultProcessDeps: Pick<ProcessDeps, 'now' | 'detect' | 'extract'>
 // docs/superpowers/specs/2026-07-17-per-user-connections-design.md).
 export async function processEmail(
   email: ImportedEmail,
-  importContext: { userId: string; connectionId: string },
+  importContext: { userId: string; connectionId: string; force?: boolean },
   deps: ProcessDeps,
 ): Promise<void> {
-  const { userId, connectionId } = importContext
+  const { userId, connectionId, force = false } = importContext
   // Every exit path names its verdict, so the Inbox can say what happened
   // instead of showing the same shapeless row for every unsuccessful outcome.
   const describedEmail = {
@@ -63,7 +63,13 @@ export async function processEmail(
   // Dedupe before any AI work: a crash-replay must cost no tokens and send no
   // duplicate notification. A failed row with attempts left is not a skip: it
   // is this cycle's retry.
-  if (await shouldSkipMessage(deps.db, connectionId, email.messageId)) return
+  //
+  // force is the user pressing Retry in the Inbox. Every row that button
+  // appears on is one this check would skip (an extract_failed row, or a failed
+  // row that already spent its attempts), so honouring it would make the button
+  // a silent no-op. The caller is responsible for never forcing an already
+  // imported message, which recordImportSource refuses to overwrite anyway.
+  if (!force && (await shouldSkipMessage(deps.db, connectionId, email.messageId))) return
 
   try {
     const isTransaction = await deps.detect({ subject: email.subject, text: email.text })
