@@ -9,8 +9,7 @@ import { notifyGmailConnectionLost } from './connections/notifyConnectionLost.js
 import { notifyImportFailures } from './connections/notifyImportFailures.js'
 import { createGmailClientForToken, fetchMessage, listMessageIdsSince } from './gmail/client.js'
 import { parseMessage, type GmailMessage } from './gmail/parse.js'
-import { processEmail, defaultProcessDeps } from './pipeline/processEmail.js'
-import { getTelegramConnectionForUser } from './connections/queries.js'
+import { createImportEmail } from './pipeline/importEmail.js'
 import { sendMessage } from './telegram/client.js'
 
 const env = loadEnv()
@@ -37,16 +36,7 @@ if (env.APP_MODE === 'live') {
       // No .catch here on purpose: a rejection has to reach the poller so it can
       // hold the cursor back, keep the email retryable and alert the user. It
       // used to be swallowed, which dropped the email with no row and no trace.
-      importEmail: (email, importContext) =>
-        processEmail(email, importContext, {
-          ...defaultProcessDeps,
-          db,
-          pool: db,
-          notify: async (text) => {
-            const telegram = await getTelegramConnectionForUser(db, importContext.userId)
-            if (telegram) await sendMessage(telegram.external_id, text)
-          },
-        }),
+      importEmail: createImportEmail(db, db),
       notifyGmailConnectionLost: (connection) =>
         notifyGmailConnectionLost(
           { db, sendMessage, integrationsUrl: `${env.APP_BASE_URL}/integrations` },
