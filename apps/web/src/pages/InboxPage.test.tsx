@@ -22,6 +22,7 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     emailsApi: {
       list: vi.fn(),
+      retry: vi.fn(),
     },
   }
 })
@@ -198,5 +199,62 @@ describe('InboxPage', () => {
 
     await waitFor(() => expect(screen.getByText(/could not load more emails/i)).toBeInTheDocument())
     expect(screen.getByText('Your card was charged')).toBeInTheDocument()
+  })
+})
+
+describe('InboxPage retry', () => {
+  it('offers Retry on a failed email and re-imports it on click', async () => {
+    const failedEmail = emailLogItem({ verdict: 'failed', transaction: null, attempts: 3 })
+    vi.mocked(emailsApi.list).mockResolvedValue(emailListResponse([failedEmail]))
+    vi.mocked(emailsApi.retry).mockResolvedValue({
+      email: { ...failedEmail, verdict: 'imported' },
+    })
+    renderPage()
+
+    const retryButton = await screen.findByRole('button', { name: 'Retry' })
+    fireEvent.click(retryButton)
+
+    await waitFor(() =>
+      expect(emailsApi.retry).toHaveBeenCalledWith('connection-1', 'message-1'),
+    )
+  })
+
+  it('offers Retry on an extract_failed email', async () => {
+    vi.mocked(emailsApi.list).mockResolvedValue(
+      emailListResponse([emailLogItem({ verdict: 'extract_failed', transaction: null })]),
+    )
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('does not offer Retry on an imported or routine email', async () => {
+    vi.mocked(emailsApi.list).mockResolvedValue(
+      emailListResponse([
+        emailLogItem({ verdict: 'imported' }),
+        emailLogItem({
+          message_id: 'message-2',
+          subject: 'Weekly newsletter',
+          verdict: 'not_transaction',
+          transaction: null,
+        }),
+      ]),
+    )
+    renderPage()
+
+    await screen.findByText('Weekly newsletter')
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+  })
+
+  it('explains a parked connection instead of showing the raw error', async () => {
+    vi.mocked(emailsApi.list).mockResolvedValue(
+      emailListResponse([emailLogItem({ verdict: 'failed', transaction: null })]),
+    )
+    vi.mocked(emailsApi.retry).mockRejectedValue(new ApiError('connection_needs_reauth', 409))
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByText('Reconnect the Gmail account first.')).toBeInTheDocument()
   })
 })

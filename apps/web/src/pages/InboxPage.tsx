@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { useEmails } from '@/hooks/useEmails'
+import { useEmails, useRetryEmail } from '@/hooks/useEmails'
 import { isMockMode } from '@/lib/appMode'
 import { ApiError, toErrorMessage } from '@/lib/api'
 import { cn, formatCurrency, formatDate, formatTime } from '@/lib/utils'
@@ -26,10 +26,28 @@ const VERDICT_LABELS: Record<EmailVerdict, string> = {
 // Only a real processing failure is a problem the user can act on.
 // `not_transaction` is the overwhelmingly common outcome, since the poller runs
 // every arriving email through the detector, so it must read as routine.
+//
+// The same two verdicts are the retryable ones the backend accepts
+// (RETRYABLE_VERDICTS in connections/retryEmail.ts), so a row that reads as a
+// problem is exactly a row that offers the Retry button.
 const PROBLEM_VERDICTS: ReadonlySet<EmailVerdict> = new Set<EmailVerdict>([
   'failed',
   'extract_failed',
 ])
+
+// Backend reasons, turned into something the user can act on. Anything else
+// falls back to the raw message from the API.
+const RETRY_ERROR_MESSAGES: Record<string, string> = {
+  connection_needs_reauth: 'Reconnect the Gmail account first.',
+  verdict_not_retryable: 'This email can no longer be retried.',
+  email_not_found: 'This email is no longer available.',
+  retry_failed: 'The retry did not go through. Try again in a moment.',
+}
+
+function toRetryErrorMessage(error: unknown): string {
+  const message = toErrorMessage(error)
+  return RETRY_ERROR_MESSAGES[message] ?? message
+}
 
 function formatTimestamp(value: string): string {
   return `${formatDate(value)} at ${formatTime(value)}`
@@ -37,6 +55,7 @@ function formatTimestamp(value: string): string {
 
 function EmailRow({ email }: { email: EmailLogItem }) {
   const isProblem = PROBLEM_VERDICTS.has(email.verdict)
+  const retry = useRetryEmail()
   return (
     <li className="flex flex-col gap-2 px-6 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0 space-y-0.5">
@@ -76,6 +95,23 @@ function EmailRow({ email }: { email: EmailLogItem }) {
         ) : null}
         {email.verdict === 'failed' && email.attempts > 1 ? (
           <p className="text-xs text-muted-foreground">Tried {email.attempts} times</p>
+        ) : null}
+        {isProblem ? (
+          <div className="space-y-1 sm:flex sm:flex-col sm:items-end">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={retry.isPending}
+              onClick={() =>
+                retry.mutate({ connectionId: email.connection_id, messageId: email.message_id })
+              }
+            >
+              {retry.isPending ? 'Retrying...' : 'Retry'}
+            </Button>
+            {retry.error ? (
+              <p className="text-xs text-destructive">{toRetryErrorMessage(retry.error)}</p>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </li>
