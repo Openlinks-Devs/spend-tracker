@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { randomBytes } from 'node:crypto'
-import { pollConnectionsOnce, resetImportFailureAlerts } from '../src/connections/poller.js'
+import {
+  pollConnectionsOnce,
+  resetHousekeepingSchedule,
+  resetImportFailureAlerts,
+} from '../src/connections/poller.js'
 import { parseEncryptionKeys, encryptSecret } from '../src/connections/crypto.js'
 
 const keys = parseEncryptionKeys(`1:${randomBytes(32).toString('base64')}`)
@@ -44,13 +48,27 @@ function fakeDb(
   }
 }
 
+// The poller runs the tick's own queries on the client it checked out for the
+// advisory lock, so the lock client delegates everything but the lock itself to
+// the db mock. That keeps one queryable to assert against.
+function delegatingLockClient(db: { query: (sql: string, params?: unknown[]) => unknown }) {
+  return {
+    query: vi.fn(async (sql: string, params?: unknown[]) =>
+      /advisory_(un)?lock/.test(sql) ? { rows: [{ acquired: true }] } : db.query(sql, params)),
+    release: vi.fn(),
+  }
+}
+
 function baseDeps(overrides: Record<string, unknown> = {}) {
-  const lockClient = fakeLockClient(true)
+  const db = (overrides.db as { query: (sql: string, params?: unknown[]) => unknown }) ?? {
+    query: vi.fn().mockResolvedValue({ rows: [] }),
+  }
+  const lockClient = delegatingLockClient(db)
   return {
     lockClient,
     deps: {
       pool: { connect: vi.fn().mockResolvedValue(lockClient) },
-      db: { query: vi.fn().mockResolvedValue({ rows: [] }) },
+      db,
       keys,
       buildGmail: vi.fn().mockReturnValue({}),
       listSince: vi.fn().mockResolvedValue([]),
@@ -73,6 +91,15 @@ function cursorParams(db: { query: { mock: { calls: unknown[][] } } }): unknown 
   return db.query.mock.calls.find(([sql]) => /SET cursor/.test(sql as string))?.[1]
 }
 
+// The two housekeeping statements, in the order the tick issued them.
+function housekeepingCalls(db: { query: { mock: { calls: unknown[][] } } }): string[] {
+  return db.query.mock.calls
+    .map(([sql]) => sql as string)
+    .filter((sql) => /UPDATE connection SET updated_at = now\(\), status = 'disabled'/.test(sql) ||
+      /SET sender = NULL, subject = NULL/.test(sql))
+    .map((sql) => (/SET sender = NULL/.test(sql) ? 'retention' : 'downgrade'))
+}
+
 function recordedFailures(db: { query: { mock: { calls: unknown[][] } } }): unknown[][] {
   return db.query.mock.calls
     .filter(([sql]) => /INSERT INTO import_source/i.test(sql as string))
@@ -81,6 +108,7 @@ function recordedFailures(db: { query: { mock: { calls: unknown[][] } } }): unkn
 
 beforeEach(() => {
   resetImportFailureAlerts()
+  resetHousekeepingSchedule()
 })
 
 describe('connection poller', () => {
@@ -100,12 +128,46 @@ describe('connection poller', () => {
     expect(cursorParams(deps.db)).toEqual(['conn-1', '1700000000'])
   })
 
-  it('clears expired email metadata once per cycle', async () => {
+  it('runs housekeeping on the first cycle after boot', async () => {
     const { deps } = baseDeps({ db: fakeDb([]) })
     await pollConnectionsOnce(deps as never)
-    const retentionCalls = deps.db.query.mock.calls.filter(([sql]: [string]) =>
-      /SET sender = NULL, subject = NULL/.test(sql))
-    expect(retentionCalls).toHaveLength(1)
+    expect(housekeepingCalls(deps.db)).toEqual(['downgrade', 'retention'])
+  })
+
+  it('skips housekeeping on a cycle inside the hour', async () => {
+    const db = fakeDb([])
+    let nowSeconds = 1700000000
+    const { deps } = baseDeps({ db, nowSeconds: () => String(nowSeconds) })
+    await pollConnectionsOnce(deps as never)
+    nowSeconds += 3599
+    await pollConnectionsOnce(deps as never)
+    // Still only the first cycle's pair, so the minute-by-minute ticks in
+    // between cost the database no writes at all.
+    expect(housekeepingCalls(deps.db)).toEqual(['downgrade', 'retention'])
+  })
+
+  it('runs housekeeping again once the hour has passed', async () => {
+    const db = fakeDb([])
+    let nowSeconds = 1700000000
+    const { deps } = baseDeps({ db, nowSeconds: () => String(nowSeconds) })
+    await pollConnectionsOnce(deps as never)
+    nowSeconds += 3600
+    await pollConnectionsOnce(deps as never)
+    expect(housekeepingCalls(deps.db)).toEqual([
+      'downgrade',
+      'retention',
+      'downgrade',
+      'retention',
+    ])
+  })
+
+  it('keeps a quiet cycle on a single connection', async () => {
+    const { lockClient, deps } = baseDeps({ db: fakeDb([]) })
+    await pollConnectionsOnce(deps as never)
+    expect(deps.pool.connect).toHaveBeenCalledTimes(1)
+    // Every query in the tick went through the client already checked out for
+    // the advisory lock, so the pool was never asked for a second one.
+    expect(lockClient.release).toHaveBeenCalledTimes(1)
   })
 
   it('still imports when the retention statement fails', async () => {
