@@ -97,7 +97,8 @@ export async function listRetryableMessageIds(
  * Stop holding a readable record of who emails the user and about what once the
  * row is old. The row, its verdict and its dedupe value survive, so the audit
  * trail and the duplicate protection stay intact. Cheap and idempotent, so the
- * poller runs it once per cycle.
+ * poller rides it along with a cycle rather than giving it a scheduler, but only
+ * about once an hour rather than on every tick.
  */
 export async function clearExpiredEmailMetadata(db: Queryable): Promise<void> {
   await db.query(

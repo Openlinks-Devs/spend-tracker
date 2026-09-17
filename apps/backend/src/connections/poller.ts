@@ -44,6 +44,32 @@ function claimFailureAlertSlot(connectionId: string, nowSeconds: number): boolea
   return true
 }
 
+// The Gmail cursor has to be checked every cycle, but neither housekeeping
+// statement below needs minute-level freshness. Running them on every tick cost
+// roughly 2,880 writes a day, and on a compute-metered host that traffic was
+// enough on its own to keep the database from ever going idle. They still ride
+// along with the cycle rather than needing a scheduler of their own; only the
+// cadence changed. In memory and so best-effort, like the alert cooldown: a
+// restart just means one extra run.
+const HOUSEKEEPING_INTERVAL_SECONDS = 3600
+let lastHousekeepingAtSeconds: number | null = null
+
+// Exported for tests: module state would otherwise leak between them.
+export function resetHousekeepingSchedule(): void {
+  lastHousekeepingAtSeconds = null
+}
+
+function claimHousekeepingSlot(nowSeconds: number): boolean {
+  if (
+    lastHousekeepingAtSeconds !== null &&
+    nowSeconds - lastHousekeepingAtSeconds < HOUSEKEEPING_INTERVAL_SECONDS
+  ) {
+    return false
+  }
+  lastHousekeepingAtSeconds = nowSeconds
+  return true
+}
+
 interface PoolClientLike extends Queryable {
   release: () => void
 }
@@ -96,16 +122,19 @@ export async function pollConnectionsOnce(deps: ConnectionPollerDeps): Promise<v
     const lock = await lockClient.query('SELECT pg_try_advisory_lock($1) AS acquired', [POLL_LOCK_ID])
     if (!lock.rows[0]?.acquired) return
 
-    await deps.db.query(DOWNGRADE_SQL)
-    // Cheap and idempotent, so it rides along with the cycle rather than
-    // needing a scheduler of its own. Housekeeping must never cost the cycle its
-    // imports, so a statement timeout or a lock on it is logged and stepped over.
-    try {
-      await clearExpiredEmailMetadata(deps.db)
-    } catch (error) {
-      console.error('Clearing expired email metadata failed (continuing):', error)
+    // lockClient, not deps.db: this client is already checked out for the whole
+    // tick, so reusing it keeps a quiet cycle down to a single connection.
+    if (claimHousekeepingSlot(Number(deps.nowSeconds()))) {
+      await lockClient.query(DOWNGRADE_SQL)
+      // Housekeeping must never cost the cycle its imports, so a statement
+      // timeout or a lock on it is logged and stepped over.
+      try {
+        await clearExpiredEmailMetadata(lockClient)
+      } catch (error) {
+        console.error('Clearing expired email metadata failed (continuing):', error)
+      }
     }
-    const connections = await listActiveGmailConnections(deps.db)
+    const connections = await listActiveGmailConnections(lockClient)
 
     for (const connection of connections) {
       try {
