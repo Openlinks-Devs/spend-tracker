@@ -291,6 +291,65 @@ directory). Coolify supplies the rest: every variable from section 2, plus
   origin, and `GOOGLE_REDIRECT_URI=https://spendtracker.openlinks.app/connections/gmail/callback`
   registered on the Web OAuth client.
 
+### The production database
+
+Postgres runs **on the same Coolify server as the app**, as a Coolify database
+resource named `spendtracker-postgres` (`postgres:17-alpine`, in the
+`SpendTracker Landing` project, `production` environment). It was on Neon until
+September 2026; see "Why it moved off Neon" below.
+
+`DATABASE_URL` is the resource's **internal** URL, which Coolify shows on the
+resource page:
+
+```
+postgres://spendtracker:<password>@<database-uuid>:5432/spendtracker
+```
+
+Two things about that URL matter:
+
+- **No TLS parameters.** The app and the database share the `coolify` Docker
+  network, so the connection is plain TCP. `pg` with no `ssl` option and no
+  `sslmode` in the URL connects without TLS, which is what we want. The old Neon
+  URL carried `?sslmode=require&channel_binding=require`; carrying those over
+  makes the container fail to connect.
+- **The host is the database's UUID**, not a hostname you can resolve from your
+  laptop. The resource is not published to the internet, so `psql` from a
+  developer machine cannot reach it at all. To get a shell against production
+  data, either temporarily flip the resource's public port on in Coolify (and
+  flip it back off, which needs a database restart to actually unpublish), or go
+  in over SSH and `docker exec` into the container.
+
+The app also has a **second `DATABASE_URL` entry** for preview deployments
+(`is_preview: true`). Change both together, or a preview deploy quietly writes
+somewhere else.
+
+### Database backups
+
+Coolify runs a scheduled `pg_dump` on `spendtracker-postgres` daily at 03:00,
+stored **locally on the server** (`save_s3: false`). Neon gave point-in-time
+recovery for free and self-hosting does not, so this schedule is the only thing
+standing between a bad day and total data loss.
+
+Two gaps to be aware of:
+
+- **Local-only.** If the server's disk dies, the backups die with it. Moving
+  them to an S3-compatible bucket is a setting on the same backup config.
+- **Retention is UI-only.** The API rejects `number_of_backups_locally`, so the
+  retention count has to be set on the backup config in the Coolify UI.
+
+### Why it moved off Neon
+
+Neon's free tier meters **compute uptime**, not queries, and bills 100 CU-hours a
+month. The Gmail poller ticks every 60 seconds (`GMAIL_POLL_INTERVAL_MS`), while
+Neon only autosuspends after **5 minutes** of no activity, so the compute never
+slept: a steady 0.25 CU around the clock is roughly 180 CU-hours a month against
+a 100 CU-hour allowance. The database itself was only 10 MB.
+
+The load was never the problem (about 13 queries a minute), so the fix was to
+stop paying for uptime rather than to poll less often and make expense capture
+half an hour slow. The poller was separately tightened at the same time: see
+`HOUSEKEEPING_INTERVAL_SECONDS` in `apps/backend/src/connections/poller.ts`.
+
 ### Healthcheck
 
 Coolify's container healthcheck shells out to `curl` (or `wget`) against

@@ -41,6 +41,8 @@ The product is live at <https://spendtracker.openlinks.app>, deployed on a self-
 
 Production runs as **one container**: the Hono server serves the API and the built SPA from the same origin. Same-origin is a hard requirement, not a convenience, because the Better Auth browser client derives its base URL from `window.location.origin` and ignores `VITE_API_URL`; splitting the origins breaks sign-in. It also means no reverse proxy needs to know about `/api`, `/connections` and `/telegram`.
 
+Postgres is **self-hosted on the same Coolify server** as the app (the `spendtracker-postgres` resource, `postgres:17-alpine`), reached over the internal Docker network. It moved off Neon in September 2026 because Neon's free tier meters compute uptime and the 60-second Gmail poller kept the compute from ever autosuspending. The internal `DATABASE_URL` carries **no TLS parameters**, and the app has a second `DATABASE_URL` entry for preview deployments that has to be changed alongside the production one.
+
 The production runbook (required env, migration baselining and ordering, Telegram webhook registration, Android release signing) is in `OPS.md`.
 
 ## Conventions
